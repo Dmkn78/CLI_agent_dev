@@ -5,7 +5,8 @@ const actions = {
   'usage-group': (el) => { usageGrouping = el.dataset.group; render(); },
   'terminal-omp': () => terminalModal('omp'),
   'terminal': () => terminalModal(),
-  'new-chat': () => newAgent('classic','chat'),
+  'new-chat': () => route('webchat'),
+  'new-cli-chat': () => newAgent('classic','chat'),
   'open-chat': async (el) => { selectedChatId = el.dataset.id; agentLayout = 'chat'; route('agents'); await loadChatFiles(el.dataset.id); },
   'session-context': (el) => sessionContextModal(el.dataset.id),
   'toggle-work': async (el) => { await api('sessions/work',{id:el.dataset.id,enabled:el.dataset.enabled === 'true'}); await refresh(true); },
@@ -60,6 +61,7 @@ const actions = {
   },
   "unpin-agent": (el) => {
     selectedAgents = selectedAgents.filter((id) => id !== el.dataset.id);
+    if (selectedChatId === el.dataset.id) selectedChatId = null;
     render();
   },
   "choose-agent": () =>
@@ -268,6 +270,12 @@ const actions = {
     projectId = el.dataset.id;
     localStorage.setItem("atelier-project", projectId);
     selectedAgents = [];
+    selectedChatId = null;
+    browserResources = null;
+    browserResourceContent = null;
+    browserResourcePath = '';
+    designDraft = null;
+    designId = null;
     selectedMemory = null;
     selectedGraphNode = null;
     graphWorkflowId = '';
@@ -331,6 +339,8 @@ function updateAgentMode(form) {
   form.elements.sandbox.disabled = chat;
   form.elements.startWork.checked = !chat;
   form.elements.startWork.disabled = chat;
+  form.elements.planMode.checked = !chat;
+  form.elements.planMode.disabled = chat;
   if (chat && !form.elements.name.value) form.elements.name.value = 'Nouvelle conversation';
 }
 document.addEventListener("click", async (event) => {
@@ -366,6 +376,8 @@ document.addEventListener("submit", async (event) => {
           memory: fd.has("memory"),
           skills: fd.getAll("skills"),
           startWork: fd.has('startWork'),
+          planMode: fd.has('planMode'),
+          sendInitialMission: fd.has('sendInitialMission'),
           sandbox: value.executionMode === 'chat' ? 'read-only' : value.sandbox,
         };
         if (value.mode !== 'classic') {
@@ -608,7 +620,7 @@ $("#project-switch").addEventListener("click", () =>
 $("#add-project").addEventListener("click", () =>
   modal(
     "Ajouter un projet",
-    "Sélectionnez explicitement un dossier existant sur votre Mac.",
+    "Choisis un dossier existant sur cet ordinateur.",
     `<form data-form="project"><div class="modal-body">${field("Nom du projet", "name", "", "text", "required")}${field("Chemin absolu du dossier", "path", "", "text", 'required placeholder="/Users/vous/Projets/mon-projet"')}<p class="muted small">Ce dossier devient le périmètre des agents et de l’explorateur pour ce projet.</p></div>${formFooter("Ajouter le projet")}</form>`,
   ),
 );
@@ -628,5 +640,8 @@ window.addEventListener("hashchange", () => route(location.hash.slice(1)));
 view = nav.some((n) => n[0] === location.hash.slice(1))
   ? location.hash.slice(1)
   : "overview";
+installWorkbenchActions();
+installDesignActions();
+installWebChatActions();
 refresh(true);
 setInterval(() => refresh(), 1800);

@@ -25,12 +25,12 @@ app.omp_provider.update(installed=True,connected=True,models=[{'model':'fixture/
 app.discover = lambda: app.provider
 patcher = patch('server.app.CodexClient',FakeCodex)
 patcher.start()
-for kind in ('session','task','request','workflow','approval'):
+for kind in ('session','task','request','workflow','approval','design','notification','tariff'):
     for value in app.store.all(kind): app.store.delete(kind,value['id'])
 task = app.upsert('task',{'title':'Recette navigateur avec fournisseur fictif','description':'Vérification UI sans inférence','status':'review'})
 workflow = app.workflow({'name':'Équipe de recette fictive','mode':'orchestration','model':'fixture-code','mission':'Réponds ok pour la recette UI.','taskId':task['id'],
-                         'agents':{'planner':{'model':'fixture-review'},'reviewer':{'model':'fixture-review'},'workers':[{'model':'fixture-code'}],'synthesizer':{'model':'fixture-code'}}})
-session = app.new_session({'name':'Session de recette fictive','model':'fixture-code','mission':'Recette uniquement','taskId':task['id']},start=False)
+                         'planMode':False, 'agents':{'planner':{'model':'fixture-review'},'reviewer':{'model':'fixture-review'},'workers':[{'model':'fixture-code'}],'synthesizer':{'model':'fixture-code'}}})
+session = app.new_session({'name':'Session de recette fictive','model':'fixture-code','mission':'Recette uniquement','taskId':task['id'],'planMode':False},start=False)
 app.start_session(session['id'])
 app.prompt(session['id'],'Réponds ok.')
 server = ThreadingHTTPServer(('127.0.0.1',args.port),make_handler(app,'browser-fixture-nonce'))

@@ -1,5 +1,6 @@
 """Newline-delimited JSON-RPC adapter to the official local Codex app-server."""
 import json
+import os
 import queue
 import shutil
 import subprocess
@@ -19,7 +20,7 @@ class CodexClient:
         self.counter = 0
         self.closing = False
         self.stderr = []
-        executable = executable or shutil.which('codex')
+        executable = executable or os.environ.get('ATELIER_CODEX_EXECUTABLE') or shutil.which('codex')
         if not executable:
             raise CodexError('Codex CLI est absent. Installe-le puis connecte ton compte avec « codex login ».')
         command = (executable if isinstance(executable, list) else [executable]) + ['app-server', '--listen', 'stdio://', '-c', 'features.multi_agent=false']

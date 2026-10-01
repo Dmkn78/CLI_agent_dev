@@ -10,6 +10,8 @@
 | Cockpit, consommation, modèles indépendants et Oh My Pi | [../audit/2026-10-01-cockpit-providers.md](../audit/2026-10-01-cockpit-providers.md) |
 | Retours navigateur, chat, sous-agents et modèles manquants | [../references/2026-10-01-browser-feedback.md](../references/2026-10-01-browser-feedback.md) |
 | Livraison chat/contexte, composition d'équipe et file TODO | [../audit/2026-10-01-chat-teams-todo.md](../audit/2026-10-01-chat-teams-todo.md) |
+| Vrai ChatGPT, canvas, notifications, rapports compacts et diagnostic TLS | [../audit/2026-10-01-workbench.md](../audit/2026-10-01-workbench.md) |
+| Les quatorze nouveaux retours et leurs onze captures | [../references/2026-10-01-workbench-feedback.md](../references/2026-10-01-workbench-feedback.md) |
 | Orchestration, logs, handoffs, memory | [../references/multi-agent-audit.txt](../references/multi-agent-audit.txt) |
 | Coûts, benchmark, onboarding | [../references/ingenierie_agentique_cout_benchmark_onboarding.md](../references/ingenierie_agentique_cout_benchmark_onboarding.md) |
 | Recette, sécurité, ressources, transfert | [../references/ingenierie_systemes_agentiques_avances_volume2.md](../references/ingenierie_systemes_agentiques_avances_volume2.md) |

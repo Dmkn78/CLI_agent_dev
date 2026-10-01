@@ -59,12 +59,18 @@ async function main() {
     assert.equal(saved.agents.workers.length,4);
     assert.equal(saved.agents.workers[1].name,'Designer choisi');
     assert.equal(saved.agents.reviewer,null);
+    await page.locator(`[data-action="approve-team-plan"][data-id="${saved.id}"]`).waitFor();
+    await page.locator(`[data-action="approve-team-plan"][data-id="${saved.id}"]`).click();
+    await page.waitForFunction(async id => {
+      const state=await fetch('/api/state',{headers:{'X-Atelier-Token':document.querySelector('meta[name="atelier-token"]').content}}).then(response => response.json());
+      return state.workflows.find(item => item.id === id)?.status === 'completed';
+    },saved.id);
     await page.locator(`[data-action="configure-team"][data-id="${saved.id}"]`).click();
     assert.equal(await page.locator('[data-worker-index]').count(),4);
     await page.locator('[data-worker-index="0"] [data-action="remove-worker"]').click();
     assert.equal(await page.locator('[data-worker-index]').count(),3);
     await page.getByRole('button',{name:'Fermer la fenêtre'}).click();
-    await page.locator('[data-action="new-chat"]').first().click();
+    await page.locator('[data-action="new-cli-chat"]').first().click();
     await page.locator('[name="name"]').fill('Chat de recette fictive');
     assert.equal(await page.locator('[name="startWork"]').isChecked(),false);
     await page.getByRole('button',{name:'Créer & ouvrir'}).click();

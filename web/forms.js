@@ -96,7 +96,10 @@ async function newAgent(mode = "classic", executionMode = 'code', template = nul
     true,
   );
   const form = $('#modal form');
-  form.querySelector('.mode-picker').insertAdjacentHTML('beforebegin', `<div class="session-mode-picker">${select('Expérience','executionMode',[['code','Agent de travail'],['chat','Chat avec contexte']],executionMode)}</div>`);
+  const formProjectId=projectId;
+  form.querySelector('.modal-body').insertAdjacentHTML('afterbegin',select('Projet','agentProject',state.projects.map(p => [p.id,p.name]),projectId));
+  form.querySelector('.advanced-settings').insertAdjacentHTML('beforebegin','<label class="check-option"><input type="checkbox" name="planMode" checked><span>Diagnostic et plan avant implémentation · validation requise</span></label>');
+  form.querySelector('.mode-picker').insertAdjacentHTML('beforebegin', `<div class="session-mode-picker">${select('Expérience','executionMode',[['code','Code · tâches du projet'],['chat','Conversation CLI · lecture seule']],executionMode)}</div>`);
   form.querySelector('.advanced-settings').insertAdjacentHTML('beforebegin', '<label class="check-option"><input type="checkbox" name="startWork" checked><span>Prendre les tâches À faire au lancement</span></label>');
   updateAgentMode(form);
   if (template) {
@@ -132,8 +135,9 @@ async function newAgent(mode = "classic", executionMode = 'code', template = nul
   }
   try {
     const trees = await api(
-      "worktrees?project=" + encodeURIComponent(projectId),
+      "worktrees?project=" + encodeURIComponent(formProjectId),
     );
+    if ($('#modal form') !== form || projectId !== formProjectId) return;
     if ($("#worktree-settings"))
       $("#worktree-settings").innerHTML = trees.length
         ? `${select(
@@ -152,7 +156,8 @@ async function newAgent(mode = "classic", executionMode = 'code', template = nul
             trees[0].path,
           )}${field("Nouvelle branche (si nouveau worktree)", "branch", "", "text", 'placeholder="Nom auto si vide"')}</div><p class="muted small">Les worktrees sont conservés après clôture. Un workflow utilise le même worktree pour toutes ses étapes.</p>`
         : `<input type="hidden" name="worktreeMode" value="repository"><p class="muted small">${esc(project().path)} · Initialisez Git pour activer les worktrees.</p>`;
-    const skills = await api("skills?project=" + encodeURIComponent(projectId));
+    const skills = await api("skills?project=" + encodeURIComponent(formProjectId));
+    if ($('#modal form') !== form || projectId !== formProjectId) return;
     if ($("#skills-list"))
       $("#skills-list").innerHTML = skills.length
         ? skills

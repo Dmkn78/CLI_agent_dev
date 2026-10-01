@@ -96,11 +96,14 @@ class TaskQueue:
                             self.app.store.update('session', session_id, preferredTaskId=mission_task['id'])
                     active_task = self.claim(session['projectId'], session_id, session.get('preferredTaskId'))
                     if active_task:
-                        self.app.store.update('session', session_id, taskId=active_task['id'], preferredTaskId=None, initialMissionSent=True)
+                        self.app.store.update('session', session_id, taskId=active_task['id'], preferredTaskId=None, initialMissionSent=True, planningStage='diagnosis')
                         self.app.prompt(session_id, self.prompt(active_task))
                 if active_task or self.app.store.get('session', session_id)['status'] != 'ready':
-                    while not self.closed and self.app.store.get('session', session_id)['status'] in ('running', 'waiting'):
+                    while not self.closed and self.app.store.get('session', session_id)['status'] in ('running', 'waiting', 'waiting_plan'):
                         self.app.done[session_id].wait(0.5)
+                        if self.app.done[session_id].is_set():
+                            self.wake.wait(0.5)
+                            self.wake.clear()
                     current = self.app.store.get('session', session_id)
                     if active_task:
                         successful = current['status'] == 'ready' and current.get('lastTurnStatus') == 'completed'

@@ -3,6 +3,8 @@
 ```mermaid
 flowchart LR
   UI[Interface navigateur] -->|HTTP local + nonce| HTTP[run.py]
+  DESK[Shell Electron optionnel] --> UI
+  DESK -->|WebContentsView isolé| CHAT[ChatGPT.com]
   HTTP --> APP[Application]
   APP --> SQLITE[Projections SQLite]
   APP --> LOGS[Logs JSONL par agent]
@@ -27,17 +29,22 @@ flowchart LR
 - `server/terminal.py` : validation et préparation des terminaux natifs Codex/OMP ; commande littérale sans interpolation d’entrée utilisateur.
 - `server/task_queue.py` : réservation exclusive des TODO et du dossier pour le travail automatique, affectations et reprise manuelle après interruption.
 - `server/context.py` : fichiers de contexte explicitement choisis, bornes et aperçu distinct de l'historique natif.
+- `server/canvas.py` : documents de conception JSON bornés, références projet et contrôle de révision ; aucune exécution.
+- `server/session_report.py` : métadonnées factuelles JSON et résumé Markdown/YAML avec références aux preuves.
+- `server/tariffs.py` et `server/processes.py` : tarifs saisis/sourcés et inventaire Windows d'exécutables, sans attribution fictive d'activité.
 - `server/store.py` : objets SQLite, journal JSONL ajouté sans réécriture, masquage de motifs connus, hashes d’artefacts.
 - `server/memory_mcp.py` : `memory_search` et `memory_read`, lecture uniquement et filtre projet/utilisateur.
 - `web/core.js` : état partagé, navigation, API et rendu central avec préservation des champs/scroll.
 - `web/views.js` : vues qui projettent cet état ; pas de données d’activité fictives.
 - `web/cockpit.js` : graphe, inspecteur, connexions et consommation par fournisseur/consommateur/tâche/modèle/requête.
 - `web/chat.js` : conversations, panneau de contexte, configuration des skills/fichiers et estimation du brouillon.
+- `web/workbench.js`, `web/design.js`, `web/webchat.js` : plans/notifications/quotas/coûts, canvas LogicFlow et ressources autour du navigateur réel.
+- `desktop/main.cjs` et `desktop/preload.cjs` : shell local et IPC minimal ; aucun preload distant. Profil de navigateur privé.
 - `web/forms.js` : formulaires, catalogue, skills et sélection du dossier/worktree.
 - `web/app.js` : actions, soumission, raccourcis et rafraîchissement toutes les 1,8 secondes.
 - `web/style.css` : variables de design, layouts, états, responsive, réduction du mouvement.
 
-Les fichiers JS se chargent dans cet ordre avec `defer`. Le petit frontend fonctionne sans build ni dépendance. Il partage des variables lexicales dans la page ; une migration en modules ES pourra accompagner l’extension des adaptateurs.
+Les fichiers JS se chargent avec `defer` dans l'ordre de `web/index.html`. La logique frontend reste en JS natif ; le canvas utilise un bundle ESM LogicFlow produit par `npm run vendor`. Le shell optionnel nécessite Electron. Les scripts frontend partagent des variables lexicales ; une migration en modules ES pourra accompagner l'extension des adaptateurs.
 
 ## Sessions et permissions
 
@@ -51,6 +58,8 @@ Le profil Codex reste l’autorité de sandbox, avec les politiques éventuellem
 
 ## Orchestration
 
+Par défaut, code et équipes exécutent d'abord un diagnostic/plan en lecture seule. Un tour code terminé mène à `waiting_plan`, sans implémentation. Le clic explicite d'approbation crée un nouveau tour avec le sandbox choisi ; refus/interruption libère la TODO. Les équipes attendent la validation de leur plan avant le premier spécialiste. Les tours de diagnostic ne disposent pas de l'écriture OMP et les tours Codex portent un `sandboxPolicy` explicite. Le mode sans plan est une option humaine visible, pas un fallback automatique.
+
 Duo : implémentation puis review facultative en lecture seule. Orchestration : plan JSON contraint, 1 à 20 tâches au maximum configuré, implémentation séquentielle, review et synthèse facultatives. Même worktree partagé pour le workflow. Chaque enfant a sa session, son output et son handoff ; le parent reçoit des extraits bornés et des références de fichiers.
 
 Chaque rôle possède son moteur (`codex` ou `omp`), son modèle et son effort validés contre le catalogue découvert. Ajouter/retirer de 1 à 8 workers avec nom, rôle et consignes. Les tâches utilisent cycliquement ces configurations ; tous les rôles configurés ne sont donc pas forcément lancés. Le worker ne peut pas dépasser la permission du workflow ; planification, review et synthèse restent en lecture seule. Reconfigurer prépare un nouveau lancement, sans modifier l'exécution historique. Le graphe adapte sa hauteur à l'équipe et distingue rôles prévus et sessions actives.
@@ -58,6 +67,8 @@ Chaque rôle possède son moteur (`codex` ou `omp`), son modèle et son effort v
 Les lancements automatiques (`startWork=true`) prennent un bail de tâche et de dossier. Un workflow prend une TODO compatible puis termine ; un agent indépendant peut continuer la file. Les lancements manuels hors file et les benchmarks n'utilisent pas ce bail : des worktrees distincts restent nécessaires pour des travaux concurrents. Aucun scheduler par sous-tâche, graphe de dépendances ni cleanup automatique.
 
 ## Chat Et File TODO
+
+Cette section décrit la conversation **CLI**, désormais distincte du mode **ChatGPT**. Le vrai site n'est pas un moteur `executionMode=chat` : il est ouvert dans WebContentsView ou une fenêtre externe, sans injection de mémoire automatique, lecture de credentials, récupération des tokens internes ou contrôle DOM du site. Les ressources sont copiées/déposées volontairement par l'utilisateur. Les résultats asynchrones d'exploration portent une génération et un projet ; une réponse périmée ne remplace pas la plus récente.
 
 `executionMode=chat` impose lecture seule et désactive le backlog ; `code` autorise l'activation explicite de la file. L'UI de création coche la file par défaut pour le travail, jamais pour le chat. L'API sans `startWork` n'envoie pas de mission automatiquement. Les agents déjà prêts peuvent activer la file via une tâche affectée ou l'action de session.
 
@@ -89,6 +100,8 @@ Le terminal d’agent est distinct des sessions suivies. Son rôle, son modèle,
 
 ## Consommation
 
+Les quotas du compte viennent de `account/rateLimits/read` et de ses notifications : buckets primary/secondary, pourcentages utilisés et dates de réinitialisation, partagés par compte. Ils ne sont pas additionnés aux tokens des requêtes. La durée `turn.durationMs` native inclut les attentes et reste distincte du temps écoulé depuis création. Les tarifs manuels sourcés/datés permettent un équivalent USD par million de tokens ; absence de cache/mesure/tarif requis ou cache écrit non tarifé signifie coût inconnu. Jamais une facture déduite de ChatGPT.
+
 Le terminal Codex est également proposé : modèle/effort découverts, `--sandbox` explicite, `--ask-for-approval on-request`, délégation native désactivée, rôle transmis comme instructions. Les deux terminaux externes restent non suivis, sans prompt automatique. Une préparation ou ouverture ne prouve ni travail ni consommation.
 
 Chaque prompt crée une projection `request` avec session/consommateur, tâche, workflow, fournisseur et modèle. Les événements d’usage cumulé sont comparés au baseline avant tour : répéter un événement ne double pas les tokens. Un compteur absent ou réinitialisé reste inconnu. Les anciennes mesures de session apparaissent séparément, après soustraction des mesures déjà attribuées ; aucune attribution historique n’est inventée.
@@ -102,6 +115,8 @@ Dataset JSON : `title`, `prompt`, `expected`, hash SHA-256, modèle, effort, ré
 Oracle exact : compare les chaînes après `strip()`. Juge modèle : session distincte, verdict JSON `passed`, `reason`, `evidence`; un avis de modèle, pas une validation de runtime. Générateur de cas : résultat proposé à l’utilisateur, aucune campagne déclenchée sans son lancement explicite. Budget de campagne : 50 candidats maximum, les reviews et la génération s’ajoutent.
 
 ## Audit et récupération
+
+`report.json` est le format canonique compact des faits ; `report.md` contient un frontmatter YAML et des liens/hash vers sorties et logs. Le résumé n'est pas une nouvelle transcription et sa génération ne consomme pas d'inférence. Les notifications sont des projections persistantes liées à la session, distinctes du journal. Le launcher Windows peut transmettre les racines publiques Windows par `CODEX_CA_CERTIFICATE` à Codex sans désactiver TLS ni copier des secrets.
 
 Événements privés de raisonnement exclus ; appels/résultats observables conservés. Les tokens sont enregistrés tels que rapportés, avec cache lu inclus dans l’entrée. Les sorties et handoffs sont des instantanés de session ; le journal reste la trace complète. Les rapports indiquent `UNVERIFIED` et distinguent déclarations et résultats d’outils.
 

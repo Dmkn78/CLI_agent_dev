@@ -1,6 +1,6 @@
 # Atelier
 
-Un cockpit local pour piloter des agents Codex et Oh My Pi, suivre le travail et conserver des preuves. Interface en français, sombre, utilisable dans un navigateur. Aucun framework, service cloud ou clé API supplémentaire requis pour l’intégration Codex.
+Un cockpit local pour piloter des agents Codex et Oh My Pi, suivre le travail et conserver des preuves. Interface en français, sombre, utilisable dans un navigateur ; shell desktop optionnel pour le vrai ChatGPT. Le backend utilise Python standard et ne nécessite pas de clé API supplémentaire pour Codex.
 
 ## Démarrer
 
@@ -10,7 +10,16 @@ Depuis ce dossier :
 python3 run.py
 ```
 
-Sous Windows : `python -B run.py`. Oh My Pi (`omp`) est facultatif ; ses comptes et clés API se configurent dans son terminal natif, également accessible depuis la vue Connexions.
+Sous Windows : `powershell -ExecutionPolicy Bypass -File scripts/start-atelier.ps1`. Ce lanceur démarre Python en arrière-plan, sélectionne le Codex de l'application installé s'il existe et réutilise les racines TLS publiques approuvées par Windows. Il ne désactive pas la validation TLS ; une variable CA explicite conserve la priorité. `python -B run.py` reste possible avec un environnement déjà configuré. Oh My Pi (`omp`) est facultatif ; ses comptes et clés API se configurent dans son terminal natif, également accessible depuis la vue Connexions.
+
+L'éditeur de diagrammes requiert Node/npm et ses assets locaux :
+
+```sh
+npm ci
+npm run vendor
+```
+
+Après démarrage du service, `npm run desktop` ouvre le shell **Atelier** avec ChatGPT.com intégré et les ressources autour. `ATELIER_URL` permet de choisir un autre port local. Ce navigateur est Chromium, pas Firefox ; dans un navigateur web ordinaire, ChatGPT s'ouvre dans une fenêtre séparée. Aucune iframe ni automatisation de compte. La connexion et l'envoi d'un fichier sont à vérifier manuellement. Le profil de connexion desktop reste privé dans `.atelier/desktop-profile/`.
 
 Sur macOS, vous pouvez aussi ouvrir **Lancer Atelier.command**. Le service écoute exclusivement sur [127.0.0.1:4317](http://127.0.0.1:4317). Fermez-le avec `Ctrl+C` dans son terminal.
 
@@ -32,14 +41,16 @@ Une seule instance doit utiliser le même dossier de données. `--data /chemin/v
 - Équipes de 1 à 8 sous-agents ajoutables/supprimables, noms/rôles/consignes ; jusqu'à 20 tâches planifiées, vérification et synthèse facultatives. Les étapes sont séquentielles.
 - Moteur, modèle et effort indépendants par rôle ; graphe des configurations et étapes réelles avec inspecteur de session.
 - Tableau des tâches, priorités, sprints, affectation et file TODO activée au lancement des agents de travail ; réservation exclusive par tâche et dossier. Fin technique → En revue, Terminé reste humain.
-- Mode chat en lecture seule avec conversations et panneau contexte : mémoire, skills, fichiers explicitement choisis, instructions transmises, entrée/réponse/cache observés et estimation du brouillon.
+- Vrai ChatGPT dans le shell optionnel : onglets fermables, ressources du projet, copie des consignes/fichiers et drag natif. Conversation CLI distincte avec mémoire, skills, fichiers, tokens observés et estimation du brouillon.
+- Pages d'architecture avec blocs déplaçables, liens, ressources, agents existants, explication et import/export JSON ; un diagramme ne lance jamais un workflow implicitement.
+- Diagnostic/plan en lecture seule par défaut ; validation explicite avant implémentation. Notifications vers la session, durées natives et preuve de processus vivant.
 - Mémoire projet / utilisateur, noyau de 4 000 caractères maximum, réserve et recherche lexicale en lecture via MCP.
 - Sélection de skills `SKILL.md` présents dans les dossiers du projet.
 - Explorateur en lecture seule, aperçu d’images, état Git et lecture des PR si `gh` est installé et connecté.
-- Tokens observés, cache lu, ventilation par fournisseur, consommateur, tâche, modèle et requête, export CSV ; aucune facturation déduite de l’abonnement.
+- Tokens observés, cache lu, ventilation par fournisseur, consommateur, tâche, modèle et requête, export CSV ; quotas natifs du compte Codex distincts, estimation de coût sur tarifs saisis et sourcés, aucune facturation déduite de l’abonnement.
 - Préparation d'un terminal Codex ou Oh My Pi avec rôle, modèle, effort, permissions et variantes OMP plan/slow/smol ; lancement après confirmation, aucun prompt automatique.
 - Campagnes de 1 à 50 tests, contexte Atelier neuf, oracle exact ou review par un modèle distinct. Générateur de cas avec examen humain avant lancement, export JSON et hash du dataset.
-- Journaux JSONL par agent, rapports Markdown, sorties, handoffs JSON et hash SHA-256 des sorties.
+- Journaux JSONL par agent, rapports JSON et résumés Markdown avec frontmatter YAML, sorties, handoffs JSON et hash SHA-256 des sorties.
 
 ## Périmètre de cette version
 
@@ -49,7 +60,7 @@ Les sessions OMP intégrées ne disposent que de la lecture locale et, si autori
 
 Claude Code et Ollama sont détectés ; leurs adaptateurs de session ne sont pas encore implémentés. Les benchmarks évaluent des réponses textuelles. Une review par modèle est un avis, pas une preuve de compilation ni une certification de sécurité. Les oracles de code et les recettes visuelles sont à ajouter.
 
-GitHub est optionnel, en lecture. Création/merge de PR, scheduler par sous-tâche, worktrees par sous-tâche en parallèle et distribution desktop native restent à développer. Le chat Atelier utilise Codex/OMP ; il n'importe pas les conversations ChatGPT ni `/mnt/data`. Le contexte natif et sa compaction ne sont pas entièrement exposés. La jauge concerne le dernier appel, l'estimation caractères/4 ne vaut pas token facturé.
+GitHub est optionnel, en lecture. Création/merge de PR, scheduler par sous-tâche, worktrees parallèles et packaging d'installation desktop restent à développer. Le shell desktop de développement est disponible ; il n'importe pas les conversations ChatGPT ni `/mnt/data`. Les ressources locales ne sont transmises au site que par une action de l'utilisateur. Le contexte natif et sa compaction ne sont pas entièrement exposés. La jauge CLI concerne le dernier appel, l'estimation caractères/4 ne vaut pas token facturé. L'inventaire des processus externes ne démontre pas une activité du modèle. Voir les [limites et TODO](docs/audit/2026-10-01-workbench.md).
 
 ## Données et reprise
 
@@ -63,13 +74,15 @@ Après redémarrage, les sessions passent en état arrêté et se reprennent via
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ```
 
-Les tests utilisent un fournisseur fictif et un dépôt Git temporaire. Ils ne consomment pas votre quota. La recette avec le compte réel vérifie uniquement le protocole et le catalogue, sans inférence.
+Les tests utilisent un fournisseur fictif et un dépôt Git temporaire. Ils ne consomment pas votre quota. Le contrôle fournisseur normal reste limité au protocole/catalogue. Une inférence réelle exige une autorisation explicite et un modèle exact, sans fallback ; le test autorisé du 1 octobre avec GPT-6-Luna est documenté dans le rapport courant.
 
 Sous Windows : `$env:PYTHONDONTWRITEBYTECODE='1'; python -m unittest discover -s tests -v`. Vérifier aussi `node --check` sur chaque fichier `web/*.js`.
 
 `node tests/test_cockpit.cjs` vérifie les calculs de consommation, le CSV et l’inspecteur sans navigateur ni fournisseur.
 
 Recette navigateur isolée : lancer `python -B tests/browser_fixture.py`, puis `node tests/browser_acceptance.cjs` avec Playwright disponible. `ATELIER_BROWSER_CHANNEL=chrome` utilise Chrome installé. Le serveur fictif utilise le port 4320 et ses données/evidences privées sous `.atelier/`, sans modifier les sessions réelles. `python -B scripts/check_omp.py` vérifie seulement les métadonnées et les outils hôtes OMP, sans prompt.
+
+`node tests/workbench_acceptance.cjs` vérifie les nouvelles vues ; `node tests/desktop_acceptance.cjs` vérifie le shell avec une page distante fictive, sans login ni upload réel. Le script `scripts/probe-provider.py` ne fait que lire les métadonnées par défaut. Ne pas lui passer `--model` sans autorisation de consommer du quota.
 
 La carte du projet et les références visuelles sont dans [docs/memory/INDEX.md](docs/memory/INDEX.md). Le contrat de cette version est dans [docs/memory/IMPLEMENTATION.md](docs/memory/IMPLEMENTATION.md).
 

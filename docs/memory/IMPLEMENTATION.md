@@ -1,6 +1,6 @@
-# État de l’implémentation — chat, équipes et TODO, 1 octobre 2026
+# État de l’implémentation — workbench, 1 octobre 2026
 
-La plateforme intègre Codex app-server et Oh My Pi RPC. Le cockpit charbon/cyan suit sessions, workflows et consommation observée. Les retours suivants ajoutent un chat avec contexte, des équipes composables, la file TODO et le choix de terminal. Les parcours sont testés avec des fournisseurs fictifs ; qualité et accès effectif restent à vérifier lors de lancements explicites de l'utilisateur. Voir le [rapport courant](../audit/2026-10-01-chat-teams-todo.md) et le [rapport cockpit précédent](../audit/2026-10-01-cockpit-providers.md).
+La plateforme intègre Codex app-server et Oh My Pi RPC. Le cockpit charbon/cyan suit sessions, workflows et consommation observée. Le workbench ajoute vrai navigateur ChatGPT optionnel, canvas de conception, notifications, quotas natifs, durées de tours, rapports compacts et plan soumis à validation. Voir le [rapport courant](../audit/2026-10-01-workbench.md), le [rapport chat/équipes précédent](../audit/2026-10-01-chat-teams-todo.md) et les [retours utilisateur](../references/2026-10-01-workbench-feedback.md). Le test synthétique autorisé GPT-6-Luna a réussi ; cela ne prouve pas l'accès à tous les modèles ni la qualité d'une implémentation.
 
 ## Couverture de la demande
 
@@ -13,20 +13,23 @@ La plateforme intègre Codex app-server et Oh My Pi RPC. Le cockpit charbon/cyan
 | Pull requests | Lecture avec `gh`, état de review/checks et lien vers GitHub ; dépôt CLI_agent_dev identifié | Création/merge dans le produit à ajouter |
 | Second cerveau | Souvenirs projet/utilisateur, budget combiné 4 000 caractères, recherche lexicale MCP à la demande, provenance | Promotion assistée de logs et embeddings à ajouter si utiles |
 | Bibliothèque de skills | Bibliothèque du projet, sélection de `SKILL.md`, validation des chemins | Pas de chargement automatique de tous les skills personnels |
-| Tokens et graphes | Mesures par fournisseur/consommateur/tâche/modèle/requête, cache lu, historique distinct, CSV ; Codex visible sans mesure | Coûts facturés, tarifs datés, devises et comptes multiples par fournisseur non importés |
+| Tokens et graphes | Mesures par fournisseur/consommateur/tâche/modèle/requête, CSV ; quotas du compte Codex, tarifs saisis/sourcés et estimation USD | Factures, tarifs publics automatiques, devises et comptes multiples non importés |
 | Connexions | Codex/ChatGPT ; fournisseurs OAuth/API découverts par OMP et login dans son terminal natif | Aucun secret dans le formulaire web ; succès d’inférence non vérifié |
 | Terminaux | Choix Codex/OMP, rôle/modèle/effort, sandbox Codex explicite, variantes OMP, aperçu et confirmation | Externe non suivi ; OMP lecture seule ; aucun prompt automatique, pas de PTY intégré |
-| Chat/contexte | Conversations Codex/OMP en lecture seule, noyau/skills/fichiers, instructions transmises, tokens entrée/réponse/cache, fenêtre si reçue | Historique natif/compaction incomplets ; estimation locale non facturée ; pas d'import ChatGPT ni `/mnt/data` |
+| Chat/contexte | Vrai ChatGPT dans shell desktop optionnel, ressources/consignes/copie/drag ; conversations CLI distinctes avec contexte observé | Login/upload ChatGPT à valider humainement ; Chromium, pas Firefox ; profils SQL/CIW à ajouter ; pas de tokens/historique du site importés |
 | Fichiers | Navigation, source numérotée, images, lecture seule, contrôle des chemins | Écriture/édition et diff IDE à ajouter |
 | Multi-agent | 1 à 8 sous-agents ajoutables/supprimables, noms/rôles/consignes/modèles indépendants, review/synthèse facultatives ; max 20 tâches, graphe et handoffs | Séquentiel ; reconfiguration pour nouveau lancement ; worktrees par sous-tâche/parallélisme/budgets à ajouter |
 | Modèles Codex/ChatGPT | Catalogue paginé `includeHidden=true`, entrées étendues identifiées ; TODO réelle prioritaire ajoutée | TODO ouverte : écart offre ChatGPT/catalogue Codex et accès effectif non vérifié |
-| Rapports et audit | JSONL par agent, projections SQLite, rapports, outputs, handoffs, hash, UNVERIFIED explicite | Attestations de tests/runtime indépendants à ajouter |
+| Rapports et audit | JSONL par agent, JSON canonique, résumé MD/YAML, durées natives, hash et UNVERIFIED | Attestations de tests/runtime indépendants à ajouter |
+| Architecture éditable | Pages, diagramme LogicFlow, déplacement/liens, ressources, agents existants, explication et JSON proposé/importé | Pas encore un scheduler n8n ; liens inertes, pas de déclenchement ou injection de ressource implicite |
+| Plan et notifications | Diagnostic en lecture seule par défaut, validation humaine avant implémentation ; cloche liée à la session | Le modèle peut échouer à reproduire : inconnue conservée ; preuve de test rouge/vert requise, jamais présumée |
+| Processus et connexion | PID du fournisseur Atelier, erreurs de retry visibles, inventaire Windows partiel, CA Windows scoped | Tous les CLI externes et leur activité non attribuables ; nouvel OAuth à vérifier humainement |
 | Benchmarks | 1 à 50 candidats, jeu JSON hashé, répétitions, générateur proposant des cas, oracle exact ou juge modèle distinct, exports | Oracles exécutables de code, navigateur, sécurité/alignement et recette humaine structurée à ajouter |
 | Maintenabilité | Sources archivées, quinze captures utilisateur dont trois identiques, hashes, annotations navigateur, demande canonique, architecture, design, audits et tests | Captures marquées inline sans chemin : texte conservé, aucun binaire prétendu archivé |
 
 ## Points techniques à connaître
 
-- L’application n’a pas de dépendance d’exécution hors Python standard et les CLI explicitement installés.
+- Backend Python standard et CLI ; canvas LogicFlow bundlé via Node/esbuild, shell Electron optionnel. Versions épinglées dans package-lock ; `npm ci` puis `npm run vendor` nécessaires au canvas.
 - Le serveur n’écoute que sur `127.0.0.1`. Les API exigent un nonce par lancement ; Host et Origin sont vérifiés. Les données privées sont dans `.atelier/`, ignorées par Git.
 - `codex app-server`, MCP mémoire et `omp --mode rpc` sont les interfaces réelles. Le frontend n’automatise pas ChatGPT et ne copie pas les credentials. Les comptes OMP sont indépendants des comptes Codex.
 - OMP n’active que les outils hôtes de fichiers ; l’écriture est confirmée dans Atelier et revalidée avant application. Les outils shell/MCP/délégation sont absents. Le protocole v1 est supporté ; les frames fragmentées non prises en charge échouent explicitement. Les fichiers de session OMP restent privés dans `.atelier/`.
@@ -41,7 +44,13 @@ La plateforme intègre Codex app-server et Oh My Pi RPC. Le cockpit charbon/cyan
 - Les coûts facturés et les équivalents API ne sont pas inventés. Les graphes n’utilisent que les mesures reçues.
 - Le rapport de clôture est déterministe et ne consomme pas d’inférence supplémentaire. Il montre les preuves d’outils et les déclarations de l’agent comme des objets distincts.
 
-## Vérifications
+## Vérifications Actuelles
+
+52 tests backend exécutés : 51 réussis, 1 saut symlink Windows. Syntaxe JS/CJS et calculs vérifiés. Recettes navigateur précédente et workbench réussies ; recette desktop fictive réussie avec isolation du navigateur, bounds, masque de modal et fermeture. Aucun login ChatGPT ou upload réel automatisé. Audit npm : aucune vulnérabilité signalée au contrôle. Voir le rapport courant pour la matrice et les limites.
+
+Le dernier test réel autorisé GPT-6-Luna a terminé en 3 725 ms avec réponse et mesures natives de tokens, après configuration du CA Windows. Connexion et quotas réellement lus, aucun secret copié. Le test n'établit pas la recette humaine du nouvel OAuth ni l'accès aux autres modèles. Le catalogue courant contient dix entrées à cette vérification (Codex 0.159.2) ; les nombres des livraisons précédentes sont historiques.
+
+## Vérifications Précédentes
 
 43 tests automatisés exécutés, 42 réussis et 1 saut de symlink Windows faute de privilège dédié. La traversée et les fichiers sensibles sont vérifiés avant ce saut. Couverture supplémentaire : catalogue étendu paginé, chat/contexte borné et reconfigurable, reprise du contexte après redémarrage, bail tâche/dossier et affectation, TODO existantes/futures, échec sans retry, sous-agents dynamiques et rôles facultatifs, terminal Codex sans bypass. Couverture précédente préservée. Vérification syntaxique de tous les fichiers JS.
 
@@ -69,7 +78,7 @@ Après redémarrage de cette livraison : 11 entrées Codex, dont 6 masquées, co
 
 Ces unités correspondent aux demandes initiales encore ouvertes. Aucune permission de publication, de merge ou d’action externe irréversible n’est déduite de cette roadmap.
 
-## Test réel en attente
+## Historique : Test Réel Précédemment En Attente
 
 Un test unique de streaming et de recherche mémoire avec GPT‑5.6‑Sol a été préparé. La revue automatique a rejeté l’envoi, car il transmettrait à OpenAI le noyau et un extrait de mémoire du projet sans autorisation explicite pour ces données et cette destination. Aucun tour réel n’a été envoyé. Une demande d’autorisation a été présentée à Damien ; tant qu’il ne répond pas, le test reste non vérifié.
 

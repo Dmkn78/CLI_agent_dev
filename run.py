@@ -13,6 +13,9 @@ from urllib.parse import parse_qs, urlparse
 
 from server.app import Application
 from server.store import redact
+from server.canvas import save_canvas
+from server.tariffs import save_tariff
+from server.processes import process_inventory
 
 ROOT = Path(__file__).resolve().parent
 
@@ -61,8 +64,15 @@ def make_handler(app, token):
                     state = app.state()
                     state['approvals'] = app.store.all('approval')
                     self.reply(redact(state))
+                elif route == '/api/processes':
+                    self.reply(process_inventory())
                 elif route == '/api/files':
                     self.reply(app.files(query.get('project', 'atelier'), query.get('path', '')))
+                elif route == '/api/desktop-file':
+                    path = app.file_path(query.get('project', 'atelier'), query.get('path', ''))
+                    if not path.is_file() or path.stat().st_size > 20 * 1024 * 1024:
+                        raise ValueError('Dépôt limité aux fichiers de projet de 20 Mo maximum.')
+                    self.reply({'path': str(path)})
                 elif route == '/api/git':
                     self.reply(app.git(query.get('project', 'atelier')))
                 elif route == '/api/worktrees':
@@ -93,7 +103,7 @@ def make_handler(app, token):
                 elif route in ('/', '/index.html'):
                     content = (ROOT / 'web/index.html').read_text().replace('__ATELIER_TOKEN__', token)
                     self.reply(content.encode(), mime='text/html; charset=utf-8')
-                elif route in ('/app.js', '/core.js', '/views.js', '/cockpit.js', '/chat.js', '/forms.js', '/style.css', '/icon.svg'):
+                elif route in ('/app.js', '/core.js', '/views.js', '/cockpit.js', '/chat.js', '/forms.js', '/workbench.js', '/design.js', '/webchat.js', '/style.css', '/icon.svg', '/vendor/logicflow.js', '/vendor/logicflow.css'):
                     path = ROOT / 'web' / route[1:]
                     self.reply(path.read_bytes(), mime=mimetypes.guess_type(path.name)[0] or 'text/plain')
                 elif route == '/favicon.ico':
@@ -120,6 +130,8 @@ def make_handler(app, token):
                     result = app.discover()
                 elif route == '/api/providers/login':
                     result = app.login()
+                elif route == '/api/providers/limits':
+                    result = app.refresh_limits()
                 elif route == '/api/terminal/prepare':
                     result = app.terminal_plan(data)
                 elif route == '/api/terminal/open':
@@ -130,6 +142,10 @@ def make_handler(app, token):
                     result = app.prompt(data['id'], data['text'])
                 elif route == '/api/sessions/interrupt':
                     result = app.interrupt(data['id'])
+                elif route == '/api/sessions/plan':
+                    result = app.approve_plan(data['id'], data.get('accepted') is True)
+                elif route == '/api/notifications/read':
+                    result = app.store.update('notification', data['id'], read=True)
                 elif route == '/api/sessions/resume':
                     result = app.resume(data['id'])
                 elif route == '/api/sessions/context':
@@ -142,6 +158,10 @@ def make_handler(app, token):
                     result = app.approve(data['id'], data.get('decision'), data.get('answers'))
                 elif route == '/api/save':
                     result = app.upsert(data['kind'], data['value'])
+                elif route == '/api/designs':
+                    result = save_canvas(app, data)
+                elif route == '/api/tariffs':
+                    result = save_tariff(app, data)
                 elif route == '/api/memory/search':
                     from server.memory_mcp import search_memories
                     result = search_memories(app.store.all('memory'), data['query'], project=data.get('projectId', 'atelier'))
@@ -151,6 +171,8 @@ def make_handler(app, token):
                     result = app.generate_cases(data)
                 elif route == '/api/workflows':
                     result = app.workflow(data)
+                elif route == '/api/workflows/plan':
+                    result = app.approve_workflow_plan(data['id'], data.get('accepted') is True)
                 elif route == '/api/cancel':
                     if data['kind'] not in ('benchmark', 'workflow'):
                         raise ValueError('Type invalide.')

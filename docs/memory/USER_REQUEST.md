@@ -40,6 +40,12 @@ Dernier complément : « Il nous manque pleins de modeles sur codex chat gpt aus
 
 ## Capacités demandées
 
+Le [complément workbench](../references/2026-10-01-workbench-feedback.md) fait foi pour les quatorze retours suivants. Le mode **Chat** signifie désormais ouvrir **ChatGPT.com dans un vrai navigateur** entouré de dossiers, fichiers, consignes et profils de travail ; la conversation Codex/OMP est une expérience CLI distincte. Firefox/DuckDuckGo est cité ; une fenêtre desktop intégrée constitue une proposition technique, pas une préférence utilisateur déjà validée.
+
+Les autres priorités sont : fermeture des onglets/panneaux, canvas éditable avec agents et ressources, bibliothèques de skills facultatives, sélection de projet et navigation repliable, page d'architecture avec dessin et explication, notifications liées aux sessions, coût estimatif sourcé, activité native démontrable, métadonnées JSON et résumé Markdown/YAML compact, quotas réels du compte, durée native des tours, diagnostic/plan par défaut avant validation, mémoire propre au projet et réparation de l'erreur OAuth. Les schémas ne déclenchent jamais une exécution implicitement.
+
+L'utilisateur autorise à présent des tests réels uniquement avec **GPT-6-Luna**. Ne pas tester avec un autre modèle, importer la mémoire du projet dans un test synthétique, lancer une campagne ou remplir artificiellement l'interface. Le diagnostic doit reproduire un bug quand possible, reconnaître les inconnues, proposer un test rouge puis vérifier le vert après correction ; aucun de ces résultats n'est présumé à partir d'une déclaration.
+
 1. **Créer un agent.** Choisir outil/fournisseur, modèle, effort de raisonnement, rôle, restrictions, dossier et accès MCP. Les noms de modèles cités sont des exemples ; l’interface doit proposer le catalogue réellement accessible.
 2. **Sessions multiples.** Ouvrir des agents préconfigurés dans des consoles et afficher plusieurs sessions côte à côte. Idéal souhaité : un véritable terminal Codex TUI, pas seulement un formulaire de chat.
 3. **Travail de projet.** Tâches, sprints, état Git, worktrees et PR. Le tableau local doit rester utile indépendamment d’une connexion GitHub. L’automatisation des PR devra exposer les preuves et les permissions.

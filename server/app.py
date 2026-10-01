@@ -17,6 +17,7 @@ from .omp_session import OmpSession, workspace_file
 from .terminal import prepare_omp, prepare_codex, launch_terminal
 from .task_queue import TaskQueue
 from .context import read_context_files, context_prompt, session_context
+from .session_report import build_report
 
 IGNORED = {'.git', '.atelier', '.env', '.aws', '.ssh', '.codex', 'node_modules', '__pycache__', '.DS_Store'}
 MAX_WORKFLOW_WORKERS = 8
@@ -27,6 +28,7 @@ class Application:
         self.root = Path(root).resolve()
         self.store = Store(data or self.root / '.atelier')
         self.clients = {}
+        self.workflow_threads = set()
         self.done = {}
         self.session_locks = {}
         self.lock = threading.RLock()
@@ -56,7 +58,7 @@ class Application:
             if b['status'] in ('running', 'queued'):
                 self.store.update('benchmark', b['id'], status='interrupted')
         for w in self.store.all('workflow'):
-            if w['status'] in ('running', 'queued'):
+            if w['status'] in ('running', 'queued', 'waiting_plan'):
                 self.store.update('workflow', w['id'], status='interrupted')
         for request in self.store.all('request'):
             if request.get('status') == 'running':
@@ -75,7 +77,7 @@ class Application:
         with self.lock:
             try:
                 if not self.discovery or self.discovery.process.poll() is not None:
-                    self.discovery = CodexClient()
+                    self.discovery = CodexClient(self.on_provider_event)
                 account = self.discovery.rpc('account/read', {'refreshToken': False})
                 models = []
                 cursor = None
@@ -90,8 +92,10 @@ class Application:
                                      authType=acct.get('type'), plan=acct.get('planType'), error=None)
                 try:
                     self.provider['limits'] = self.discovery.rpc('account/rateLimits/read', {}, timeout=8)
-                except CodexError:
+                    self.provider.update(limitsUpdatedAt=now(), limitsError=None)
+                except CodexError as exc:
                     self.provider['limits'] = None
+                    self.provider['limitsError'] = str(exc)
             except Exception as exc:
                 self.provider.update(connected=False, status='error', error=str(exc))
         self.omp_provider.update(discover_models(self.root))
@@ -110,6 +114,28 @@ class Application:
         self.omp_provider.update(connected=bool(self.omp_provider['models']), status='ready' if self.omp_provider['models'] else 'unchecked')
         return self.provider
 
+    def notify(self, key, title, session_id=None, project_id=None, detail=None):
+        self.store.put('notification', {'id': key, 'title': title, 'detail': redact(detail),
+                       'sessionId': session_id, 'projectId': project_id, 'createdAt': now(), 'read': False})
+
+    def on_provider_event(self, message):
+        method, params = message.get('method'), message.get('params', {})
+        if method == 'account/rateLimits/updated':
+            limits = dict(self.provider.get('limits') or {})
+            if params.get('rateLimits'):
+                bucket = params['rateLimits']
+                buckets = dict(limits.get('rateLimitsByLimitId') or {})
+                buckets[bucket.get('limitId') or 'codex'] = bucket
+                limits.update(rateLimits=bucket, rateLimitsByLimitId=buckets)
+            if params.get('rateLimitsByLimitId'):
+                limits['rateLimitsByLimitId'] = params['rateLimitsByLimitId']
+            self.provider.update(limits=limits, limitsUpdatedAt=now(), limitsError=None)
+        elif method == 'account/login/completed':
+            self.provider['loginError'] = None if params.get('success') else redact(params.get('error') or 'Connexion interrompue.')
+            self.notify('codex-login', 'Connexion Codex réussie' if params.get('success') else 'Connexion Codex échouée', detail=self.provider['loginError'])
+        elif method == 'account/updated':
+            self.provider.update(connected=bool(params.get('authMode')), authType=params.get('authMode'), plan=params.get('planType'))
+
     def login(self):
         if not self.discovery:
             self.discover()
@@ -117,13 +143,30 @@ class Application:
             raise ValueError('Codex ne peut pas démarrer. Vérifie son installation.')
         return self.discovery.rpc('account/login/start', {'type': 'chatgpt'})
 
+    def refresh_limits(self):
+        if not self.discovery:
+            self.discover()
+        if not self.discovery:
+            raise ValueError('Codex indisponible.')
+        try:
+            self.provider.update(limits=self.discovery.rpc('account/rateLimits/read', {}, timeout=12), limitsUpdatedAt=now(), limitsError=None)
+        except CodexError as exc:
+            self.provider['limitsError'] = str(exc)
+        return {'limits': self.provider.get('limits'), 'error': self.provider.get('limitsError')}
+
     def state(self):
-        return {('memories' if kind == 'memory' else kind + 's'): self.store.all(kind) for kind in ('project', 'session', 'task', 'memory', 'sprint', 'benchmark', 'workflow', 'request')} | {
+        state = {('memories' if kind == 'memory' else kind + 's'): self.store.all(kind) for kind in ('project', 'session', 'task', 'memory', 'sprint', 'benchmark', 'workflow', 'request', 'notification', 'design', 'tariff')} | {
             'providers': [self.provider,
                           self.omp_provider,
                           {'id': 'claude', 'name': 'Claude Code', 'installed': bool(shutil.which('claude')), 'supported': False},
                           {'id': 'local', 'name': 'Modèles locaux', 'installed': bool(shutil.which('ollama')), 'supported': False}],
             'events': self.store.latest_events(), 'root': str(self.root)}
+        for session in state['sessions']:
+            client = self.clients.get(session['id'])
+            process = getattr(client, 'process', None)
+            session['processAlive'] = bool(client and (process is None or process.poll() is None))
+            session['processId'] = getattr(process, 'pid', None)
+        return state
 
     def terminal_plan(self, data):
         project = self.project(data.get('projectId', 'atelier'))
@@ -210,7 +253,10 @@ class Application:
                        workingPath=working_path, worktreeMode=data.get('worktreeMode', 'repository'), taskId=data.get('taskId'),
                        consumer=data.get('consumer') or 'session', workflowRole=data.get('workflowRole'), executionMode=execution_mode,
                        contextFiles=data.get('contextFiles', []), workEnabled=bool(data.get('startWork')) and execution_mode == 'code' and not data.get('parentId'),
-                       preferredTaskId=data.get('taskId'), initialMissionSent=False)
+                       preferredTaskId=data.get('taskId'), initialMissionSent=False,
+                       planMode=execution_mode == 'code' and bool(data.get('planMode', not data.get('parentId'))),
+                       sendInitialMission=bool(data.get('sendInitialMission')),
+                       planningStage='diagnosis', totalTurnDurationMs=None)
         read_context_files(self, session, session['contextFiles'])
         self.store.put('session', session)
         self.done[session['id']] = threading.Event()
@@ -237,7 +283,7 @@ class Application:
                 client = CodexClient(lambda m: self.on_event(id, m), config=configuration)
             self.clients[id] = client
             params = {'cwd': s.get('workingPath', self.project(s['projectId'])['path']), 'model': s['model'],
-                      'approvalPolicy': 'on-request', 'sandbox': s['sandbox'],
+                      'approvalPolicy': 'on-request', 'sandbox': 'read-only' if s.get('planMode') and s.get('planningStage') != 'implementation' else s['sandbox'],
                       'developerInstructions': instructions}
             if s.get('threadId') and any(m.get('role') == 'user' for m in s['messages']):
                 response = client.rpc('thread/resume', dict(params, threadId=s['threadId']))
@@ -253,12 +299,16 @@ class Application:
             self.store.event('session.ready', {'threadId': response['thread']['id']}, id, s['projectId'])
             if self.store.get('session', id).get('workEnabled'):
                 self.task_queue.start(id)
+            elif s.get('sendInitialMission') and s.get('mission', '').strip() and not s.get('initialMissionSent'):
+                self.store.update('session', id, initialMissionSent=True)
+                self.prompt(id, s['mission'])
         except Exception as exc:
             client = self.clients.pop(id, None)
             if client:
                 client.close()
             self.store.update('session', id, status='failed', error=str(exc))
             self.store.event('session.error', {'message': str(exc)}, id, s['projectId'])
+            self.notify(id + ':startup', 'Échec du démarrage', id, s['projectId'], str(exc))
             self.done[id].set()
 
     def instructions(self, s):
@@ -286,6 +336,8 @@ class Application:
     def on_event(self, id, message):
         method = message.get('method', '')
         params = message.get('params', {})
+        if method.startswith('account/'):
+            self.on_provider_event(message)
         try:
             session = self.store.get('session', id)
         except ValueError:
@@ -295,6 +347,7 @@ class Application:
                 self.store.put('approval', {'id': id + ':' + str(message['id']), 'sessionId': id, 'requestId': message['id'], 'method': method, 'params': redact(params)})
                 self.store.update('session', id, status='waiting')
                 self.store.event('permission.requested', {'method': method, 'params': params}, id, session['projectId'])
+                self.notify(id + ':permission:' + str(message['id']), 'Accord requis · ' + session['name'], id, session['projectId'])
             else:
                 client = self.clients.get(id)
                 if client:
@@ -319,10 +372,15 @@ class Application:
                     found['text'] += redact(params.get('delta', ''))
                 else:
                     messages.append({'id': item_id, 'role': 'assistant', 'text': redact(params.get('delta', '')), 'ts': now()})
-                self.store.update('session', id, messages=messages)
+                self.store.update('session', id, messages=messages, retrying=False, transportError=None)
             return
         if method == 'turn/started':
-            self.store.update('session', id, status='running', turnId=params.get('turn', {}).get('id'))
+            self.store.update('session', id, status='running', turnId=params.get('turn', {}).get('id'), turnStartedAt=now(), retrying=False, transportError=None)
+        elif method == 'error':
+            error = params.get('error') or {}
+            detail = (error.get('message', '') + '\n' + str(error.get('additionalDetails') or '')).strip() if isinstance(error, dict) else str(error)
+            self.store.update('session', id, transportError=redact(detail), retrying=bool(params.get('willRetry')))
+            self.notify(id + ':transport', 'Connexion du moteur interrompue · ' + session['name'], id, session['projectId'], detail)
         elif method == 'thread/tokenUsage/updated':
             self.store.update('session', id, usage=params.get('tokenUsage'))
             if session.get('currentRequestId'):
@@ -330,16 +388,22 @@ class Application:
         elif method == 'turn/completed':
             turn = params.get('turn', {})
             status = turn.get('status', 'failed')
-            self.store.update('session', id, status='ready' if status == 'completed' else 'failed' if status == 'failed' else 'stopped',
-                              turnId=None, lastTurnStatus=status, lastTurnError=redact(turn.get('error')), lastCompletedAt=now())
+            planning = status == 'completed' and session.get('planMode') and session.get('planningStage') == 'diagnosis'
+            duration = turn.get('durationMs')
+            self.store.update('session', id, status='waiting_plan' if planning else 'ready' if status == 'completed' else 'failed' if status == 'failed' else 'stopped',
+                              turnId=None, lastTurnStatus=status, lastTurnError=redact(turn.get('error')), lastCompletedAt=now(),
+                              lastTurnDurationMs=duration, retrying=False,
+                              totalTurnDurationMs=(session.get('totalTurnDurationMs') or 0) + duration if isinstance(duration, (int, float)) else session.get('totalTurnDurationMs'),
+                              planningStage='awaiting_approval' if planning else session.get('planningStage'))
+            self.notify(id + ':turn:' + str(turn.get('id')), ('Plan à valider' if planning else 'Tour terminé' if status == 'completed' else 'Tour ' + status) + ' · ' + session['name'], id, session['projectId'], turn.get('error'))
             self.write_handoff(id)
             if session.get('currentRequestId'):
                 self.store.update('request', session['currentRequestId'], status=status, completedAt=now(),
-                                  turnId=turn.get('id'), error=redact(turn.get('error')))
+                                  turnId=turn.get('id'), durationMs=duration, error=redact(turn.get('error')))
             for approval in self.store.all('approval'):
                 if approval['sessionId'] == id:
                     self.store.delete('approval', approval['id'])
-        elif method == 'item/completed' and params.get('item', {}).get('type') == 'agentMessage':
+        elif method == 'item/completed' and params.get('item', {}).get('type') in ('agentMessage', 'plan'):
             item = params['item']
             with self.store.lock:
                 current = self.store.get('session', id)
@@ -382,6 +446,13 @@ class Application:
                 raise ValueError('Attends que l’agent soit prêt.')
             sections = read_context_files(self, s, s.get('contextFiles', []))
             submitted_text = context_prompt(text, sections)
+            planning = s.get('planMode') and s.get('planningStage') == 'diagnosis'
+            if isinstance(client, OmpSession):
+                client.planning = planning
+            if planning:
+                submitted_text = ('DIAGNOSTIC ET PLAN UNIQUEMENT. Ne modifie aucun fichier. Reproduis le problème si possible en lecture seule, '
+                                  'inspecte les preuves et distingue les hypothèses. Propose un test de régression (ne le déclare pas rouge sans exécution), '
+                                  'un plan court et ses vérifications. Attends la validation humaine avant toute implémentation.\n\n' + submitted_text)
             messages = s['messages'] + [{'id': uid('msg'), 'role': 'user', 'text': redact(text), 'ts': now()}]
             self.done[id].clear()
             request_id = uid('request')
@@ -391,9 +462,14 @@ class Application:
                                           status='running', createdAt=now(), usage=None, baseline=(s.get('usage') or {}).get('total', {}),
                                           title=redact(text[:160]), inputCharacters=len(submitted_text),
                                           contextFiles=[section['path'] for section in sections]))
-            self.store.update('session', id, status='running', messages=messages, lastTurnStatus=None, currentRequestId=request_id)
+            self.store.update('session', id, status='running', messages=messages, lastTurnStatus=None, currentRequestId=request_id, error=None, transportError=None)
             self.store.event('prompt.submitted', {'text': text}, id, s['projectId'])
             params = {'threadId': s['threadId'], 'input': [{'type': 'text', 'text': submitted_text}], 'effort': s['effort']}
+            if s.get('runtime', 'codex') == 'codex':
+                params['sandboxPolicy'] = {'type': 'readOnly'} if planning or s['sandbox'] == 'read-only' else {
+                    'type': 'workspaceWrite', 'writableRoots': [s['workingPath']], 'networkAccess': False,
+                    'excludeTmpdirEnvVar': True, 'excludeSlashTmp': True}
+                params['approvalPolicy'] = 'on-request'
             if schema:
                 params['outputSchema'] = schema
             try:
@@ -407,6 +483,21 @@ class Application:
                 self.done[id].set()
                 raise
         return self.store.get('session', id)
+
+    def approve_plan(self, id, accepted):
+        with self.session_locks[id]:
+            session = self.store.get('session', id)
+            if session['status'] != 'waiting_plan' or session.get('planningStage') != 'awaiting_approval':
+                raise ValueError('Aucun plan en attente de validation.')
+            self.store.event('plan.approved' if accepted else 'plan.declined', {}, id, session['projectId'])
+            if not accepted:
+                self.store.update('session', id, status='ready', planningStage='diagnosis', workEnabled=False)
+                self.task_queue.release(id, 'Plan refusé ; tâche remise à faire.')
+                self.task_queue.wake.set()
+                return {'ok': True}
+            self.store.update('session', id, status='ready', planningStage='implementation')
+            return self.prompt(id, 'Plan validé explicitement par l’utilisateur. Implémente le plan proposé pour la demande précédente dans le périmètre choisi. '
+                                   'Pour un bug : produis et exécute le test de régression rouge, corrige, puis exécute à nouveau. Rapporte les résultats et les limites, sans inventer de preuve.')
 
     def update_request_usage(self, session, usage):
         request = self.store.get('request', session['currentRequestId'])
@@ -425,6 +516,10 @@ class Application:
     def interrupt(self, id):
         self.store.update('session', id, workEnabled=False)
         s = self.store.get('session', id)
+        if s['status'] == 'waiting_plan':
+            self.store.update('session', id, status='stopped', planningStage='diagnosis')
+            self.task_queue.release(id, 'Plan interrompu.')
+            self.task_queue.wake.set()
         if s.get('turnId') and id in self.clients:
             self.clients[id].rpc('turn/interrupt', {'threadId': s['threadId'], 'turnId': s['turnId']})
         elif s['status'] == 'running':
@@ -463,7 +558,7 @@ class Application:
 
     def report(self, id, close=False):
         s = self.store.get('session', id)
-        if close and s['status'] in ('running', 'waiting'):
+        if close and s['status'] in ('running', 'waiting', 'waiting_plan'):
             self.interrupt(id)
             self.done[id].wait(5)
             s = self.store.get('session', id)
@@ -478,15 +573,10 @@ class Application:
                 break
             events.extend(page)
             cursor = page[-1]['seq']
-        tools = [e for e in events if e['type'] == 'item/completed' and e['data'].get('item', {}).get('type') in ('commandExecution', 'fileChange', 'mcpToolCall')]
-        elapsed = max(0, time.time() - __import__('datetime').datetime.fromisoformat(s['createdAt']).timestamp())
-        text = f"# Rapport de session — {s['name']}\n\nDate : {now()}\nModèle : {s['model']}\nProfil : {s['sandbox']}\nÉtat du dernier tour : {s.get('lastTurnStatus', 'aucun')}\nTemps écoulé depuis la création : {round(elapsed)} s (inclut l’attente).\n\n## Mission\n{s['mission']}\n\n## Traçabilité\n{len(events)} événements observables ; {len(tools)} résultats d’outils.\nJournal : {handoff['log']}\nSortie : {handoff['output']['path']}\nSHA-256 : {handoff['output']['sha256']}\n\n## Validation\nUNVERIFIED : aucune recette humaine n’est déduite de ce rapport.\n\n## Résultats d’outils\n"
-        for event in tools:
-            item = event['data']['item']
-            text += '\n```json\n' + json.dumps(redact(item), ensure_ascii=False, indent=2)[:12000] + '\n```\n'
-        text += '\n## Production de l’agent (déclarations à vérifier)\n' + '\n\n'.join(m['text'] for m in s['messages'] if m['role'] == 'assistant')
+        metadata, text = build_report(s, events, handoff)
+        json_artifact = self.store.artifact(id, 'report.json', metadata)
         artifact = self.store.artifact(id, 'report.md', redact(text))
-        self.store.update('session', id, report=artifact)
+        self.store.update('session', id, report=artifact, reportMetadata=json_artifact)
         self.store.event('report.generated', artifact, id, s['projectId'])
         if close:
             self.store.update('session', id, workEnabled=False)
@@ -495,7 +585,7 @@ class Application:
                 request = self.store.get('request', s['currentRequestId'])
                 if request['status'] == 'running':
                     self.store.update('request', request['id'], status='interrupted', completedAt=now())
-            self.store.update('session', id, status='closed')
+            self.store.update('session', id, status='closed', closedAt=s.get('closedAt') or now())
             client = self.clients.pop(id, None)
             if client:
                 client.close()
@@ -503,11 +593,11 @@ class Application:
                 if a['sessionId'] == id:
                     self.store.delete('approval', a['id'])
             self.store.event('session.closed', {}, id, s['projectId'])
-        return {'content': redact(text), 'artifact': artifact}
+        return {'content': redact(text), 'artifact': artifact, 'metadata': metadata, 'jsonArtifact': json_artifact}
 
     def resume(self, id):
         s = self.store.get('session', id)
-        if s['status'] in ('running', 'waiting', 'initializing', 'ready'):
+        if s['status'] in ('running', 'waiting', 'waiting_plan', 'initializing', 'ready'):
             raise ValueError('Cette session est déjà ouverte.')
         previous = self.clients.pop(id, None)
         if previous:
@@ -575,7 +665,7 @@ class Application:
         if kind == 'project':
             path = Path(obj['path']).expanduser().resolve()
             if not path.is_dir():
-                raise ValueError('Le dossier doit exister sur ce Mac.')
+                raise ValueError('Le dossier doit exister sur cet ordinateur.')
             obj['path'] = str(path)
         else:
             self.project(obj['projectId'])
@@ -692,7 +782,7 @@ class Application:
     def wait_session(self, id, prompt, schema=None, cancel=None, timeout=240):
         deadline = time.time() + 45
         while self.store.get('session', id)['status'] == 'initializing' and time.time() < deadline:
-            if cancel and cancel():
+            if self.task_queue.closed or (cancel and cancel()):
                 raise ValueError('Exécution annulée.')
             time.sleep(.2)
         if self.store.get('session', id)['status'] != 'ready':
@@ -700,7 +790,7 @@ class Application:
         self.prompt(id, prompt, schema)
         deadline = time.time() + timeout
         while not self.done[id].wait(.5):
-            if (cancel and cancel()) or time.time() >= deadline:
+            if self.task_queue.closed or (cancel and cancel()) or time.time() >= deadline:
                 self.interrupt(id)
                 raise ValueError('Exécution annulée ou délai dépassé.')
         s = self.store.get('session', id)
@@ -855,9 +945,13 @@ class Application:
                  mode=data['mode'], **base, agents=agents, maxTasks=max_tasks, stepTimeout=timeout, sandbox=data.get('sandbox', 'read-only'),
                  mission=mission, baseMission=data['mission'], status='queued', steps=[], createdAt=now(), workingPath=working_path,
                  memory=bool(data.get('memory', True)), skills=data.get('skills', []),
-                 taskId=selected_task['id'] if selected_task else data.get('taskId'), claimedTaskId=selected_task['id'] if selected_task else None)
+                 taskId=selected_task['id'] if selected_task else data.get('taskId'), claimedTaskId=selected_task['id'] if selected_task else None,
+                 planMode=bool(data.get('planMode', True)))
         self.store.put('workflow', w)
-        threading.Thread(target=self._workflow_run, args=(w,), daemon=True).start()
+        thread = threading.Thread(target=self._workflow_run, args=(w,), daemon=True)
+        with self.lock:
+            self.workflow_threads.add(thread)
+        thread.start()
         return w
 
     def _workflow_run(self, w):
@@ -895,14 +989,23 @@ class Application:
             self.store.update('workflow', id, steps=steps)
             return output
         try:
-            if w['mode'] == 'orchestration':
+            if w['mode'] == 'orchestration' or w.get('planMode'):
                 schema = {'type': 'object', 'properties': {'tasks': {'type': 'array', 'items': {'type': 'object', 'properties': {'title': {'type': 'string'}, 'prompt': {'type': 'string'}}, 'required': ['title', 'prompt'], 'additionalProperties': False}}}, 'required': ['tasks'], 'additionalProperties': False}
-                plan = json.loads(run('Planification', f"Décompose la mission en 1 à {w.get('maxTasks', 3)} tâches séquentielles concrètes. Chaque tâche contient title et prompt. Ne réalise aucune implémentation. Mission:\n" + w['mission'], schema))
+                plan = json.loads(run('Planification', f"Diagnostic en lecture seule : inspecte les preuves et reproduis le problème si possible sans écriture. Signale toute inconnue. Décompose ensuite la mission en 1 à {w.get('maxTasks', 3)} tâches séquentielles concrètes, avec les tests de régression à produire et vérifier. Chaque tâche contient title et prompt. Ne réalise aucune implémentation. Mission:\n" + w['mission'], schema))
                 tasks = plan.get('tasks', [])
                 if not 1 <= len(tasks) <= w.get('maxTasks', 3):
                     raise ValueError('Le plan dépasse la limite de tâches configurée.')
             else:
                 tasks = [{'title': 'Implémentation', 'prompt': w['mission']}]
+            if w.get('planMode'):
+                self.store.update('workflow', id, status='waiting_plan', plan=tasks)
+                self.notify(id + ':plan', 'Plan de l’équipe à valider · ' + w['title'], project_id=w['projectId'])
+                while self.store.get('workflow', id)['status'] == 'waiting_plan':
+                    if self.task_queue.closed:
+                        raise ValueError('Serveur arrêté pendant la validation du plan.')
+                    time.sleep(0.5)
+                if not self.store.get('workflow', id).get('planAccepted'):
+                    raise ValueError('Plan non validé.')
             summaries = []
             for worker_index, task in enumerate(tasks):
                 output = run('Implémentation', task['prompt'] + '\nTravail antérieur (déclarations à vérifier):\n' + '\n'.join(summaries)[-12000:], worker_index=worker_index)
@@ -933,8 +1036,21 @@ class Application:
                 completed = self.store.get('workflow', id)['status'] == 'completed'
                 self.task_queue.finish(w['claimedTaskId'], id, completed, None if completed else 'Workflow interrompu ou échoué.')
             self.store.artifact(id, 'workflow.json', self.store.get('workflow', id))
+            with self.lock:
+                self.workflow_threads.discard(threading.current_thread())
+
+    def approve_workflow_plan(self, id, accepted):
+        with self.lock:
+            workflow = self.store.get('workflow', id)
+            if workflow['status'] != 'waiting_plan':
+                raise ValueError('Aucun plan d’équipe en attente.')
+            self.store.update('workflow', id, status='running' if accepted else 'cancelled', planAccepted=accepted)
+            self.store.event('workflow.plan_approved' if accepted else 'workflow.plan_declined', {'id': id}, project_id=workflow['projectId'])
+        return {'ok': True}
 
     def shutdown(self):
         self.task_queue.close()
         for client in list(self.clients.values()) + ([self.discovery] if self.discovery else []):
             client.close()
+        for thread in list(self.workflow_threads):
+            thread.join(timeout=3)

@@ -1,5 +1,6 @@
 "use strict";
 const $ = (s) => document.querySelector(s);
+let renderedProjectId = null;
 const esc = (v) =>
   String(v ?? "").replace(
     /[&<>"']/g,
@@ -39,6 +40,7 @@ const paths = {
   code: "M8 6l-6 6 6 6 M16 6l6 6-6 6 M14 3l-4 18",
   git: "M6 3v12 M18 6v6c0 4-12 2-12 6 M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0 M9 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0 M21 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0",
   settings: "M4 7h16 M4 17h16 M8 4v6 M16 14v6",
+  bell: "M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9 M10 21h4",
   spark: "M12 2l3 7 7 3-7 3-3 7-3-7-7-3 7-3z",
 };
 const icon = (name, cls = "") =>
@@ -46,6 +48,8 @@ const icon = (name, cls = "") =>
 const nav = [
   ["overview", "Vue d’ensemble", "grid"],
   ["agents", "Agents", "agents"],
+  ["webchat", "ChatGPT", "agents"],
+  ["design", "Architecture", "network"],
   ["tasks", "Tableau des tâches", "tasks"],
   ["sprints", "Sprints", "sprint"],
   ["memory", "Mémoire", "memory"],
@@ -115,6 +119,7 @@ const labels = {
   running: "En cours",
   initializing: "Démarrage",
   waiting: "À valider",
+  waiting_plan: "Plan à valider",
   stopped: "Arrêté",
   closed: "Clôturé",
   failed: "Erreur",
@@ -174,7 +179,8 @@ async function refresh(force = false) {
     const hash = JSON.stringify(next);
     if (force || hash !== lastStateHash) {
       lastStateHash = hash;
-      render();
+      if (!force && view === 'design' && $('#design-canvas')) $('#notifications-button').innerHTML=notificationBell();
+      else render();
     }
   } catch (e) {
     $("#footer-sessions").textContent = "Serveur déconnecté";
@@ -199,6 +205,7 @@ function render() {
   $("#project-name").textContent = project().name;
   $("#breadcrumb-project").textContent = project().name;
   $("#breadcrumb-view").textContent = nav.find((n) => n[0] === view)?.[1];
+  $('#notifications-button').innerHTML = notificationBell();
   $("#project-list").innerHTML = state.projects
     .map(
       (p) =>
@@ -218,7 +225,7 @@ function render() {
   $("#main")
     .querySelectorAll("input,textarea,select")
     .forEach((el) => {
-      if (el.id) values[el.id] = el.value;
+      if (renderedProjectId === projectId && el.id && !['design-page','design-title','design-explanation','design-node-label','browser-resource-text','browser-instructions'].includes(el.id)) values[el.id] = el.value;
     });
   const scrolls = {};
   $("#main")
@@ -233,6 +240,8 @@ function render() {
   $("#main").innerHTML = {
     overview: cockpitView,
     agents: agentsView,
+    webchat: webChatView,
+    design: designView,
     tasks: tasksView,
     sprints: sprintsView,
     memory: memoryView,
@@ -242,6 +251,8 @@ function render() {
     audit: auditView,
     settings: connectionsView,
   }[view]();
+  renderedProjectId = projectId;
+  mountWorkbench();
   Object.entries(values).forEach(([key, val]) => {
     const el = document.getElementById(key);
     if (el && el.tagName !== "BUTTON") el.value = val;

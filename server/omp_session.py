@@ -31,6 +31,7 @@ class OmpSession:
         self.turn_id = None
         self.turn_error = None
         self.interrupted = False
+        self.planning = bool(session.get('planMode'))
         self.total = dict((session.get('usage') or {}).get('total') or {})
         self.last = {}
         self.client = OmpClient(session['workingPath'], directory, self.on_frame, session['model'],
@@ -181,7 +182,7 @@ class OmpSession:
                     text = redact(path.read_text(encoding='utf-8'))
                 self.tool_result(frame['id'], text)
                 self.emit('item/completed', {'item': {'type': 'mcpToolCall', 'tool': 'atelier_read', 'path': relative, 'success': True}})
-            elif frame['toolName'] == 'atelier_write' and self.session['sandbox'] == 'workspace-write':
+            elif frame['toolName'] == 'atelier_write' and self.session['sandbox'] == 'workspace-write' and not self.planning:
                 content = arguments.get('content')
                 if not isinstance(content, str) or len(content.encode('utf-8')) > MAX_FILE_BYTES:
                     raise ValueError('Contenu invalide ou trop volumineux.')

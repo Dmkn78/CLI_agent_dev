@@ -19,6 +19,8 @@ Révision du 1 octobre 2026, fondée sur les cinq nouvelles captures archivées.
 
 ## Analyse des références
 
+Le [retour workbench](references/2026-10-01-workbench-feedback.md) affine cette charte : champs lisibles, panneaux de session à rayon 8 px, canvas sombre éditable, inspecteur discret et navigation repliable. ChatGPT.com est une vraie surface navigateur avec ressources autour, distincte de la conversation CLI. Le mode Agent reste indéfini, donc pas de troisième mode factice. Notifications cliquables, quotas et durées natifs doivent rester proches du travail concerné. La fermeture masque un panneau sans annuler le travail ; interruption et clôture de session restent des actions séparées.
+
 Nexus propose une topologie centrée sur l'orchestrateur et un inspecteur à droite. Analytics privilégie la comparaison dense par fournisseur/modèle/tâche. Les trois images Workspace, identiques octet pour octet, présentent les flux entre ressources, agents et sorties. Combiner ces hiérarchies avec les événements et artefacts locaux sans reproduire les chiffres fictifs.
 
 ## Repères

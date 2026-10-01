@@ -7,12 +7,17 @@
     <meta name="theme-color" content="#101114" />
     <title>Atelier · Agents & projets</title>
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/vendor/logicflow.css" />
     <link rel="stylesheet" href="/style.css" />
     <script src="/core.js" defer></script>
     <script src="/views.js" defer></script>
     <script src="/cockpit.js" defer></script>
     <script src="/chat.js" defer></script>
     <script src="/forms.js" defer></script>
+    <script src="/vendor/logicflow.js" defer></script>
+    <script src="/workbench.js" defer></script>
+    <script src="/design.js" defer></script>
+    <script src="/webchat.js" defer></script>
     <script src="/app.js" defer></script>
   </head>
   <body>
@@ -34,11 +39,14 @@
             ><small>Espace de travail</small></span
           ><span class="chevrons">⌃<br />⌄</span>
         </button>
-        <div class="nav-label">ESPACE DE TRAVAIL</div>
-        <nav id="main-nav" aria-label="Navigation principale"></nav>
+        <details id="workspace-section" class="sidebar-section" open>
+          <summary class="nav-label">ESPACE DE TRAVAIL</summary>
+          <nav id="main-nav" aria-label="Navigation principale"></nav>
+        </details>
         <div class="sidebar-projects">
-          <div class="nav-label">
-            MES PROJETS
+          <details id="projects-section" class="sidebar-section" open>
+          <summary class="nav-label">MES PROJETS</summary>
+          <div class="project-section-tools">
             <button
               id="add-project"
               title="Ajouter un projet"
@@ -48,6 +56,7 @@
             </button>
           </div>
           <div id="project-list"></div>
+          </details>
         </div>
         <div class="sidebar-bottom">
           <div class="local-status">
@@ -70,6 +79,7 @@
             ><strong id="breadcrumb-view">Vue d’ensemble</strong>
           </div>
           <div class="topbar-actions">
+            <button id="notifications-button" class="icon-btn" data-action="notifications" title="Notifications" aria-label="Notifications"></button>
             <button class="search-trigger" id="global-search">
               ⌕ <span>Rechercher dans le projet</span><kbd>⌘ K</kbd></button
             ><span class="topbar-divider"></span

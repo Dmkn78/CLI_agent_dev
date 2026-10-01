@@ -73,7 +73,7 @@ class ApplicationTests(unittest.TestCase):
         self.app.store.db.close()
         self.temp.cleanup()
     def session(self):
-        s = self.app.new_session({'name': 'Fixture', 'model': 'fixture-model'}, start=False)
+        s = self.app.new_session({'name': 'Fixture', 'model': 'fixture-model', 'planMode': False}, start=False)
         self.app.start_session(s['id'])
         return self.app.store.get('session', s['id'])
     def wait_for(self, kind, id):
@@ -215,7 +215,7 @@ class ApplicationTests(unittest.TestCase):
         self.assertEqual(reused['workingPath'],str(path))
         with self.assertRaises(ValueError):self.app.new_session({'model':'fixture','worktreeMode':'existing','existingWorktree':'/private/tmp'},start=False)
     def test_controlled_orchestration_pipeline(self):
-        w = self.app.workflow({'mode':'orchestration', 'name':'Fixture workflow', 'model':'fixture-model', 'mission':'Petite tâche.'})
+        w = self.app.workflow({'mode':'orchestration', 'name':'Fixture workflow', 'model':'fixture-model', 'mission':'Petite tâche.', 'planMode':False})
         done = self.wait_for('workflow', w['id'])
         self.assertEqual(done['status'], 'completed', done.get('error'))
         self.assertEqual([s['role'] for s in done['steps']], ['Planification','Implémentation','Vérification','Synthèse'])
@@ -229,7 +229,7 @@ class ApplicationTests(unittest.TestCase):
                   'workers': [{'model': 'worker-model', 'effort': 'low', 'sandbox': 'workspace-write'}],
                   'reviewer': {'model': 'review-model', 'effort': 'high'},
                   'synthesizer': {'model': 'summary-model', 'effort': 'medium'}}
-        workflow = self.app.workflow({'mode': 'orchestration', 'model': 'fixture-model', 'mission': 'ok',
+        workflow = self.app.workflow({'mode': 'orchestration', 'model': 'fixture-model', 'mission': 'ok', 'planMode':False,
                                       'sandbox': 'workspace-write', 'agents': agents})
         completed = self.wait_for('workflow', workflow['id'])
         self.assertEqual(completed['status'], 'completed', completed.get('error'))
@@ -322,7 +322,7 @@ class ApplicationTests(unittest.TestCase):
         self.assertNotEqual(self.app.store.get('task',task['id'])['status'],'done')
     def test_launched_worker_takes_existing_and_new_todos(self):
         task = self.app.upsert('task',{'title':'First TODO'})
-        session = self.app.new_session({'model':'fixture-model','startWork':True,'mission':'Role instructions'},start=False)
+        session = self.app.new_session({'model':'fixture-model','startWork':True,'mission':'Role instructions','planMode':False},start=False)
         self.app.start_session(session['id'])
         for _ in range(300):
             if self.app.store.get('task',task['id'])['status'] == 'review': break
@@ -382,7 +382,7 @@ class ApplicationTests(unittest.TestCase):
             self.assertEqual(len(self.app.store.all('request')),1)
         finally: FakeCodex.fail_turn = False
     def test_dynamic_workers_and_optional_review_are_not_fixed_slots(self):
-        workflow = self.app.workflow({'mode':'orchestration','model':'fixture-model','mission':'Fixture',
+        workflow = self.app.workflow({'mode':'orchestration','model':'fixture-model','mission':'Fixture','planMode':False,
                                       'agents':{'workers':[{'name':'Custom '+str(index),'role':'designer'} for index in range(4)],'reviewer':None,'synthesizer':None}})
         current = self.wait_for('workflow',workflow['id'])
         self.assertEqual(current['status'],'completed')
