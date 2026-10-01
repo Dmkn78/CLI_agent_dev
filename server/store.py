@@ -80,7 +80,7 @@ class Store:
             self.db.commit()
             directory = self.root / 'logs'
             directory.mkdir(exist_ok=True)
-            with (directory / ((session_id or 'application') + '.jsonl')).open('a') as out:
+            with (directory / ((session_id or 'application') + '.jsonl')).open('a', encoding='utf-8') as out:
                 out.write(json.dumps(event, ensure_ascii=False) + '\n')
         return event
 

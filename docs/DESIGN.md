@@ -1,12 +1,28 @@
 # Contrat visuel
 
-Les captures constituent une référence de fonctionnalités et de hiérarchie. Atelier adopte une identité propre : fond charbon, surfaces discrètes, accent sauge, petites touches ambre/violet pour la revue et la mémoire. Aucune ressource distante, police externe ou image générée nécessaire.
+Révision du 1 octobre 2026, fondée sur les cinq nouvelles captures archivées. La charte sauge de la première version est remplacée par un cockpit sombre, compact, inspiré de Nexus AI et AgentOS. Garder la marque Atelier ; les noms, dates et métriques des maquettes sont illustratifs.
+
+## Charte révisée
+
+- Fond charbon presque noir, sidebar et surfaces gris neutre ; bordures fines.
+- Cyan pour navigation, sélection et liens ; vert pour activité, ambre pour validation, violet et rose pour différencier les rôles.
+- Typographie système, titres de vue de 22 à 24 pixels, libellés de 11 à 13 pixels, espacement des lettres nul. Rayons de 4 à 8 pixels.
+- Premier écran de travail : graphe projet/orchestrateur/agents/sorties, détails sélectionnés, activité et tâches réelles. Aucune composition marketing ni statistique fictive.
+- Graphe sur fond ponctué discret : liens directionnels, états nommés, sélection donnant accès au modèle, aux permissions et aux preuves. Les nœuds prévus sont distincts des sessions lancées.
+- Création : fournisseur/catalogue réel et configuration séparée du planificateur, des spécialistes, du vérificateur et de la synthèse.
+- Consommation : tableaux par fournisseur, consommateur, tâche et requête. Inconnue affichée par un tiret ; zéro seulement lorsqu'une mesure contient zéro.
+- Connexions : compte, clé API et moteur local distincts. Installation, catalogue et capacité restent séparés ; secrets exclus des logs et de Git.
+- Terminal OMP : dossier, modèles principal/plan/slow/smol, effort, restrictions et commande consultables. Une ouverture ne prouve aucune activité ou consommation.
+
+## Analyse des références
+
+Nexus propose une topologie centrée sur l'orchestrateur et un inspecteur à droite. Analytics privilégie la comparaison dense par fournisseur/modèle/tâche. Les trois images Workspace, identiques octet pour octet, présentent les flux entre ressources, agents et sorties. Combiner ces hiérarchies avec les événements et artefacts locaux sans reproduire les chiffres fictifs.
 
 ## Repères
 
 - Sidebar fixe : projet, navigation, projets secondaires, connexions.
 - Barre supérieure : fil d’Ariane, recherche globale `⌘K`, journal.
-- Vue d’ensemble : invitation claire, compteurs réels, sessions, choix solo/duo/équipe, connexion et mémoire.
+- Vue d’ensemble : compteurs réels, graphe, sessions, activité et tâches.
 - Panneaux de session : nom, modèle, état, permissions, consommation, conversation et actions de clôture.
 - Mémoire : budget en haut, recherche et filtres à gauche, souvenir et provenance à droite.
 - Explorateur : dossiers à gauche, source numérotée ou image à droite, périmètre et lecture seule explicites.

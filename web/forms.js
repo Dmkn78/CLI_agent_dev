@@ -12,23 +12,37 @@ const select = (label, name, options, value) =>
   `<label>${label}<select name="${name}">${options.map(([id, title]) => `<option value="${esc(id)}" ${id === value ? "selected" : ""}>${esc(title)}</option>`).join("")}</select></label>`;
 const formFooter = (label = "Enregistrer", hint = "") =>
   `<footer class="modal-footer"><span>${hint}</span><button type="button" class="button secondary" data-action="dismiss">Annuler</button><button class="button primary" type="submit">${label}${icon("arrow")}</button></footer>`;
-function modelFields() {
-  const models = provider().models || [];
+function modelFields(runtime = 'codex', prefix = '') {
+  const models = provider(runtime).models || [];
   const m = models.find((m) => m.isDefault) || models[0];
   return `${select(
     "Modèle",
-    "model",
+    prefix + "model",
     models.map((m) => [m.model, m.displayName]),
     m?.model,
   )}${select(
     "Raisonnement",
-    "effort",
+    prefix + "effort",
     (m?.supportedReasoningEfforts || []).map((r) => [
       r.reasoningEffort,
       r.reasoningEffort,
     ]),
     m?.defaultReasoningEffort,
   )}`;
+}
+function runtimeFields(prefix = '', title = '') {
+  return `<fieldset class="model-configuration" data-model-config="${prefix}">${title ? `<legend>${title}</legend>` : ''}${select('Moteur', prefix + 'runtime', [['codex', 'Codex · compte ChatGPT'], ['omp', 'Oh My Pi · fournisseurs connectés']], 'codex')}<div class="form-grid">${modelFields('codex', prefix)}</div></fieldset>`;
+}
+function workflowConfiguration(mode) {
+  return `<section id="workflow-configuration" ${mode === 'classic' ? 'hidden' : ''}><span class="form-section-label">ÉQUIPE & ORCHESTRATEUR</span>${runtimeFields('planner_', 'Orchestrateur / planification')}${runtimeFields('worker0_', 'Spécialiste 1')}${select('Permissions du spécialiste 1', 'worker0_sandbox', [['read-only', 'Lecture seule'], ['workspace-write', 'Écriture projet']], 'read-only')}${[1,2].map(i => `<label class="check-option"><input type="checkbox" name="worker${i}_enabled"><span>Spécialiste ${i + 1}</span></label><div data-worker-extra="${i}" hidden>${runtimeFields('worker' + i + '_', 'Spécialiste ' + (i + 1))}${select('Permissions', 'worker' + i + '_sandbox', [['read-only','Lecture seule'],['workspace-write','Écriture projet']], 'read-only')}</div>`).join('')}${runtimeFields('reviewer_', 'Vérificateur · lecture seule')}${runtimeFields('synthesizer_', 'Synthèse · lecture seule')}<div class="form-grid">${field('Tâches maximum', 'maxTasks', 3, 'number', 'min="1" max="3"')}${field('Délai par étape (secondes)', 'stepTimeout', 600, 'number', 'min="60" max="1800" step="60"')}</div></section>`;
+}
+function terminalModal() {
+  const models = provider('omp').models || [];
+  modal('Terminal Oh My Pi', project().path,
+    `<form data-form="terminal"><div class="modal-body">${select('Agent', 'role', [['researcher','Recherche'],['developer','Développeur'],['verifier','Vérificateur']], 'researcher')}<fieldset class="model-configuration" data-model-config=""><input type="hidden" name="runtime" value="omp"><div class="form-grid">${modelFields('omp')}</div></fieldset>${['plan','slow','smol'].map(role => select('Modèle ' + role, role, [['','Par défaut OMP'], ...models.map(m => [m.model, m.displayName + ' · ' + m.provider])], '')).join('')}<p class="muted small">Lecture seule · approbations always-ask · sans délégation. Aucune mission n'est envoyée à l'ouverture.</p></div>${formFooter('Préparer le terminal')}</form>`, true);
+}
+function terminalReview(plan, title) {
+  modal(title, plan.cwd, `<div class="modal-body"><pre id="terminal-command" class="result-output">${esc(plan.display)}</pre><p class="muted small">Le terminal est externe. Son activité, ses outils et sa consommation ne sont pas importés dans les sessions Atelier. Les identifiants sont gérés par le coffre natif OMP.</p></div><footer class="modal-footer">${btn('copy-terminal','Copier la commande','code')}${btn('terminal-launch','Ouvrir le terminal','terminal','primary')}</footer>`, true);
 }
 async function newAgent(mode = "classic") {
   modal(
@@ -50,7 +64,7 @@ async function newAgent(mode = "classic") {
       )
       .join(
         "",
-      )}</div><span class="form-section-label">IDENTITÉ & MODÈLE</span>${field("Nom de l’agent ou de l’équipe", "name", "", "text", 'placeholder="Ex. Architecture du projet" required')}<div class="form-grid">${modelFields()}</div>${!provider().models?.length ? `<div class="inline-error">Le catalogue doit être chargé depuis Codex. ${btn("refresh-provider", "Vérifier la connexion", "plug", "quiet")}</div>` : ""}${select("Tâche associée", "taskId", [["", "Aucune tâche"], ...objects("tasks").map((t) => [t.id, t.title])], "")}<span class="form-section-label">DOSSIER DE TRAVAIL</span><div id="worktree-settings"><p class="muted small">Lecture du dépôt Git…</p></div>${area("Mission initiale", "mission", "", 3, 'placeholder="Quel résultat attendez-vous ? Quelles contraintes faut-il respecter ?"')}<div class="form-grid">${select(
+      )}</div><span class="form-section-label">IDENTITÉ & MODÈLE</span>${field("Nom de l’agent ou de l’équipe", "name", "", "text", 'placeholder="Ex. Architecture du projet" required')}${runtimeFields()}${btn("refresh-provider", "Actualiser les catalogues", "plug", "quiet")}${workflowConfiguration(mode)}${select("Tâche associée", "taskId", [["", "Aucune tâche"], ...objects("tasks").map((t) => [t.id, t.title])], "")}<span class="form-section-label">DOSSIER DE TRAVAIL</span><div id="worktree-settings"><p class="muted small">Lecture du dépôt Git…</p></div>${area("Mission initiale", "mission", "", 3, 'placeholder="Quel résultat attendez-vous ? Quelles contraintes faut-il respecter ?"')}<div class="form-grid">${select(
       "Permissions",
       "sandbox",
       [
@@ -68,7 +82,7 @@ async function newAgent(mode = "classic") {
         ["synthesizer", "Synthèse"],
       ],
       "developer",
-    )}</div><label class="check-option"><input type="checkbox" name="memory" checked><span><strong>Activer la mémoire du projet</strong><small>Noyau court au démarrage, réserve consultable par MCP. Le noyau et les souvenirs consultés sont transmis au fournisseur du modèle.</small></span></label><details class="advanced-settings"><summary>Skills & paramètres d’exécution ${icon("settings")}</summary><div id="skills-list" class="skills-list">Lecture de la bibliothèque du projet…</div><p class="muted small">Workflows : profondeur 1, exécution séquentielle, 1 à 3 tâches, puis revue. Les agents utilisent le modèle choisi et demandent les permissions requises.</p><p class="muted small">Dossier : ${esc(project().path)}</p></details></div>${formFooter("Créer & ouvrir", "Codex · connexion locale")}</form>`,
+    )}</div><label class="check-option"><input type="checkbox" name="memory" checked><span><strong>Activer la mémoire du projet</strong><small>Le noyau est transmis au fournisseur choisi. La réserve MCP est disponible pour Codex ; OMP reçoit le noyau uniquement.</small></span></label><details class="advanced-settings"><summary>Skills & paramètres d’exécution ${icon("settings")}</summary><div id="skills-list" class="skills-list">Lecture de la bibliothèque du projet…</div><p class="muted small">Profondeur 1, étapes séquentielles. Les spécialistes configurés sont affectés aux tâches dans l'ordre. Planification, revue et synthèse restent en lecture seule.</p><p class="muted small">Dossier : ${esc(project().path)}</p></details></div>${formFooter("Créer & ouvrir", "Compte ou API du moteur sélectionné")}</form>`,
     true,
   );
   try {

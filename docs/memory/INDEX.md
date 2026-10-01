@@ -7,6 +7,7 @@
 | Architecture, protocole et structure du code | [../ARCHITECTURE.md](../ARCHITECTURE.md) |
 | Contrat visuel et accessibilité | [../DESIGN.md](../DESIGN.md) |
 | Résultats de la livraison initiale | [../audit/2026-09-30-initial-build.md](../audit/2026-09-30-initial-build.md) |
+| Cockpit, consommation, modèles indépendants et Oh My Pi | [../audit/2026-10-01-cockpit-providers.md](../audit/2026-10-01-cockpit-providers.md) |
 | Orchestration, logs, handoffs, memory | [../references/multi-agent-audit.txt](../references/multi-agent-audit.txt) |
 | Coûts, benchmark, onboarding | [../references/ingenierie_agentique_cout_benchmark_onboarding.md](../references/ingenierie_agentique_cout_benchmark_onboarding.md) |
 | Recette, sécurité, ressources, transfert | [../references/ingenierie_systemes_agentiques_avances_volume2.md](../references/ingenierie_systemes_agentiques_avances_volume2.md) |

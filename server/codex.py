@@ -22,7 +22,7 @@ class CodexClient:
         executable = executable or shutil.which('codex')
         if not executable:
             raise CodexError('Codex CLI est absent. Installe-le puis connecte ton compte avec « codex login ».')
-        command = [executable, 'app-server', '--listen', 'stdio://', '-c', 'features.multi_agent=false']
+        command = (executable if isinstance(executable, list) else [executable]) + ['app-server', '--listen', 'stdio://', '-c', 'features.multi_agent=false']
         for key, value in (config or {}).items():
             command.extend(['-c', key + '=' + json.dumps(value)])
         self.process = subprocess.Popen(

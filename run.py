@@ -91,7 +91,7 @@ def make_handler(app, token):
                 elif route in ('/', '/index.html'):
                     content = (ROOT / 'web/index.html').read_text().replace('__ATELIER_TOKEN__', token)
                     self.reply(content.encode(), mime='text/html; charset=utf-8')
-                elif route in ('/app.js', '/core.js', '/views.js', '/forms.js', '/style.css', '/icon.svg'):
+                elif route in ('/app.js', '/core.js', '/views.js', '/cockpit.js', '/forms.js', '/style.css', '/icon.svg'):
                     path = ROOT / 'web' / route[1:]
                     self.reply(path.read_bytes(), mime=mimetypes.guess_type(path.name)[0] or 'text/plain')
                 elif route == '/favicon.ico':
@@ -118,6 +118,10 @@ def make_handler(app, token):
                     result = app.discover()
                 elif route == '/api/providers/login':
                     result = app.login()
+                elif route == '/api/terminal/prepare':
+                    result = app.terminal_plan(data)
+                elif route == '/api/terminal/open':
+                    result = app.open_terminal(data)
                 elif route == '/api/sessions':
                     result = app.new_session(data)
                 elif route == '/api/sessions/prompt':

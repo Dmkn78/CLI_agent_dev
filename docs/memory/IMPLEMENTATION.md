@@ -1,34 +1,37 @@
-# État de l’implémentation — livraison initiale, finalisée le 1 octobre 2026
+# État de l’implémentation — cockpit et Oh My Pi, 1 octobre 2026
 
-La première version utilisable est disponible dans ce dossier. Elle constitue le socle du produit demandé, pas la réalisation de toutes ses extensions. Le compte Codex local a été découvert et un thread réel a été créé/clôturé sans inférence. Les parcours de modèle, de benchmark et de workflow sont testés avec un fournisseur fictif ; leur qualité sur des modèles réels reste à évaluer lors de campagnes explicitement lancées par l’utilisateur.
+La plateforme intègre Codex app-server et Oh My Pi RPC. Le cockpit charbon/cyan suit les sessions et workflows réels, avec inspecteur et consommation par requête. Le compte Codex local, les catalogues et les métadonnées OMP ont été examinés sans inférence. Les parcours de session, benchmark, workflow et écriture OMP sont testés avec des fournisseurs fictifs ; leur qualité et l’accès effectif aux modèles restent à vérifier lors de lancements explicites de l’utilisateur. Voir le [rapport de cette évolution](../audit/2026-10-01-cockpit-providers.md).
 
 ## Couverture de la demande
 
 | Demande | Version actuelle | Limite / suite |
 |---|---|---|
-| Création d’agents | Catalogue/effort Codex, mission, rôle, permissions, tâche, skills, dossier/worktree et MCP | Adaptateurs des autres outils à ajouter |
+| Création d’agents | Catalogues/efforts Codex et OMP, mission, rôle, permissions, tâche, skills, dossier/worktree | OMP sans shell ni MCP de réserve ; autres adaptateurs à ajouter |
 | Plusieurs fenêtres | Grille d’agents, 1 à 3 sessions côte à côte, streaming structuré | Terminal PTY/TUI complet à ajouter |
 | Sprints et tâches | CRUD local, priorités, dates, rattachement et états explicites | Scheduler/ressources et dépendances à ajouter |
 | Git/worktrees | Lecture Git, sélection d’un worktree, création de branche et worktree local | Aucun cleanup ou merge automatique |
-| Pull requests | Lecture avec `gh`, état de review/checks et lien vers GitHub | Pas de dépôt distant fourni ; création/merge à ajouter |
+| Pull requests | Lecture avec `gh`, état de review/checks et lien vers GitHub ; dépôt CLI_agent_dev identifié | Création/merge dans le produit à ajouter |
 | Second cerveau | Souvenirs projet/utilisateur, budget combiné 4 000 caractères, recherche lexicale MCP à la demande, provenance | Promotion assistée de logs et embeddings à ajouter si utiles |
-| Bibliothèque de skills | Sélection de `SKILL.md` dans les dossiers du projet | Bibliothèque personnelle complète non présente |
-| Tokens et graphes | Usage réel par session/model, cache lu, regroupement des sessions par date de fin, CSV | Tarifs datés, devises, comptes/fournisseurs multiples à ajouter |
+| Bibliothèque de skills | Bibliothèque du projet, sélection de `SKILL.md`, validation des chemins | Pas de chargement automatique de tous les skills personnels |
+| Tokens et graphes | Mesures par fournisseur/consommateur/tâche/modèle/requête, cache lu, historique de sessions distinct, CSV | Coûts facturés, tarifs datés, devises et comptes multiples par fournisseur non importés |
+| Connexions | Codex/ChatGPT ; fournisseurs OAuth/API découverts par OMP et login dans son terminal natif | Aucun secret dans le formulaire web ; succès d’inférence non vérifié |
+| Terminal OMP | Choix rôle, modèle, effort, plan/slow/smol, aperçu sûr et lancement confirmé | Terminal externe en lecture seule, pas de PTY ni télémétrie importée |
 | Chat/navigateur | Conversation outillée Codex ; lien vers ChatGPT | Navigateur desktop embarqué et moteur local à ajouter ; aucun accès supposé à `/mnt/data` ChatGPT |
 | Fichiers | Navigation, source numérotée, images, lecture seule, contrôle des chemins | Écriture/édition et diff IDE à ajouter |
-| Multi-agent | Duo ou planificateur → 1 à 3 tâches → review → synthèse, profondeur 1, handoffs | Worktrees par sous-tâche, parallélisme, budgets et routing avancés à ajouter |
+| Multi-agent | Duo ou planificateur → 1 à 3 tâches → review → synthèse, configuration indépendante par rôle, graphe et handoffs | Séquentiel ; worktrees par sous-tâche, parallélisme et budgets tokens à ajouter |
 | Rapports et audit | JSONL par agent, projections SQLite, rapports, outputs, handoffs, hash, UNVERIFIED explicite | Attestations de tests/runtime indépendants à ajouter |
 | Benchmarks | 1 à 50 candidats, jeu JSON hashé, répétitions, générateur proposant des cas, oracle exact ou juge modèle distinct, exports | Oracles exécutables de code, navigateur, sécurité/alignement et recette humaine structurée à ajouter |
-| Maintenabilité | Sources archivées, six captures durables, contexte court, index, architecture, design, audit et tests | Mettre ces fichiers à jour lors des prochaines évolutions |
+| Maintenabilité | Sources archivées, onze captures utilisateur dont trois identiques, hashes, demande canonique, architecture, design, audits et tests | Mettre ces fichiers à jour lors des prochaines évolutions |
 
 ## Points techniques à connaître
 
 - L’application n’a pas de dépendance d’exécution hors Python standard et les CLI explicitement installés.
 - Le serveur n’écoute que sur `127.0.0.1`. Les API exigent un nonce par lancement ; Host et Origin sont vérifiés. Les données privées sont dans `.atelier/`, ignorées par Git.
-- `codex app-server` et MCP sont les interfaces réelles. Le frontend n’automatise pas le site ChatGPT et ne copie pas les credentials.
+- `codex app-server`, MCP mémoire et `omp --mode rpc` sont les interfaces réelles. Le frontend n’automatise pas ChatGPT et ne copie pas les credentials. Les comptes OMP sont indépendants des comptes Codex.
+- OMP n’active que les outils hôtes de fichiers ; l’écriture est confirmée dans Atelier et revalidée avant application. Les outils shell/MCP/délégation sont absents. Le protocole v1 est supporté ; les frames fragmentées non prises en charge échouent explicitement. Les fichiers de session OMP restent privés dans `.atelier/`.
 - Le catalogue local n’est pas une entitlement garantie. Un tour réussi doit confirmer l’accès réel pour la requête.
 - Une session sans aucun message n’a pas forcément de rollout Codex. À sa reprise, Atelier recrée un thread vide en conservant l’identifiant local et la trace. Avec des messages, il appelle `thread/resume`.
-- Le MCP mémoire est requis lorsqu’il est activé : sa panne doit faire échouer le démarrage plutôt que produire une session silencieusement dépourvue de mémoire.
+- Le MCP mémoire Codex est requis lorsqu’il est activé : sa panne fait échouer le démarrage. OMP ne reçoit que le noyau, sans réserve MCP.
 - Les workflows utilisent un seul worktree, séquentiellement. Aucun orchestrateur secondaire natif n’est lancé.
 - La configuration native du CLI reste applicable aux benchmarks. Le mode sans mémoire désactive le noyau et MCP Atelier, pas tout l’environnement du fournisseur. Lors de la recette réelle, des MCP natifs (`codex_apps`, `cua_repl`, `node_repl`) étaient présents. Une table `mcp_servers={}` ne les supprimait pas ; cet override inefficace a été retiré. La V1 ne prétend donc pas filtrer tous les outils du fournisseur.
 - 50 tests signifie 50 candidats maximum. La génération et les reviews distinctes ajoutent des inférences et du quota.
@@ -37,15 +40,19 @@ La première version utilisable est disponible dans ce dossier. Elle constitue l
 
 ## Vérifications
 
-21 tests automatisés, sans inférence : JSON-RPC stdio, corrélation, cycle de session, permissions, erreurs, redaction de motifs connus, exclusion du raisonnement, mémoire/réserve, budget, filtres de projet, chemins/symlinks, Host/Origin/nonce, pagination des événements, redémarrage, édition d’objet existant, reprise vide/non vide, génération de dataset, juge distinct, workflow contrôlé et worktree Git réel temporaire.
+34 tests automatisés exécutés, 33 réussis et 1 saut de symlink Windows faute de privilège dédié. La traversée et les fichiers sensibles sont vérifiés avant ce saut. Couverture : protocoles fictifs Codex/OMP, corrélation, sessions, approbations et annulation, écritures périmées, confinement des chemins, exclusion du raisonnement, mémoire, Host/Origin/nonce, redémarrage, compteurs par requête, configurations indépendantes de workflow, benchmarks et worktree Git temporaire. Vérification syntaxique de tous les fichiers JS.
+
+Recette Playwright avec fournisseur fictif : graphe et inspecteur, sessions indépendantes, modèles indépendants, ventilation de consommation, connexions et préparation du terminal. Dix vues à 1600/900/390/300 pixels, sans débordement global ni nœuds coupés sur mobile. Captures et résultat privés sous `.atelier/browser-evidence/`. Aucun terminal interactif ni prompt réel lancé par cette recette.
+
+Recette OMP 18.1.10 limitée aux métadonnées : démarrage sans outils natifs, enregistrement d’`atelier_read`, liste active conforme, catalogue et fournisseurs de login. Aucun secret lu ni inférence envoyée.
 
 Recette réelle initiale : connexion ChatGPT détectée, 7 modèles découverts, création en lecture seule d’un thread Codex, clôture avec artefacts. Aucun prompt d’inférence réel envoyé. Le journal de cette session technique demeure dans `.atelier/logs/`.
 
-Le sprint local « V1 — Cockpit local » conserve une tâche de livraison en revue, afin de laisser la recette produit à Damien. La réussite des tests n’est pas présentée comme son approbation.
+La réussite des tests n’est pas présentée comme une approbation produit de Damien. Les données historiques ou fictives ne sont pas injectées dans son espace réel pour remplir le cockpit.
 
 ## Prochaines unités de travail
 
-1. Choisir les autres outils à intégrer et vérifier pour chacun CLI, authentification par abonnement et protocole d’événements. Ne pas construire des providers fictifs.
+1. Effectuer une recette réelle explicitement autorisée par moteur/fournisseur ; vérifier quotas et accès effectif sans supposer que le catalogue est une entitlement.
 2. Décider du packaging desktop et du terminal PTY si l’expérience TUI complète est prioritaire.
 3. Ajouter des oracles de benchmark exécutables : tests de code dans un workspace isolé, artefacts de build, captures/runtime UI et score de review explicitement séparé.
 4. Introduire un scheduler par ressource et des worktrees par sous-tâche avant d’autoriser les écritures parallèles.

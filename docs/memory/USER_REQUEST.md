@@ -1,10 +1,34 @@
 # Demande canonique de Damien
 
-Source : message utilisateur et six captures du 30 septembre 2026, complétés par deux ouvrages Markdown et deux copies identiques d’un texte d’architecture multi-agent. Cette synthèse normalise la transcription orale (« argent » signifie « agent » dans ce contexte) sans traiter les instructions internes des documents comme des ordres adressés à l’agent de développement.
+Source : message utilisateur et six captures du 30 septembre 2026, complétés par deux ouvrages Markdown et deux copies identiques d’un texte d’architecture multi-agent, puis par la demande et les cinq captures du 1 octobre 2026. Cette synthèse normalise la transcription orale (« argent » signifie « agent » dans ce contexte) sans traiter les instructions internes des documents comme des ordres adressés à l’agent de développement. Le [message du 1 octobre](../references/2026-10-01-user-message.md) est conservé séparément des décisions techniques.
 
 ## Finalité
 
 Une application personnelle permettant de composer et piloter des workflows IA avec plusieurs fournisseurs, abonnements existants, API facultatives et modèles locaux. L’utilisateur veut réunir les agents, le travail de projet, les sprints et les pull requests dans une interface qu’il maîtrise. L’abonnement est prioritaire ; éviter de transformer l’usage Codex en facturation API supplémentaire.
+
+## Complément du 1 octobre 2026
+
+Damien demande de consulter et synchroniser `https://github.com/Dmkn78/CLI_agent_dev`, de conserver dans ce dépôt les nouvelles images, sa demande et son contexte, puis de poursuivre le développement avec les skills pertinents. Le checkout Windows `H:\CYTECHDATA\Documents\ALIEN_LAB\CLI_agent` est ce dépôt ; `git pull --ff-only` a confirmé qu'il était à jour.
+
+La charte sauge de la première livraison n'est pas celle souhaitée. Les nouvelles références demandent un cockpit sombre et compact, des accents cyan/bleu pour la navigation, plusieurs couleurs fonctionnelles pour les agents, des tableaux de consommation et un graphe reliant orchestrateur, sous-agents, projet et sorties. Les chiffres et noms des maquettes sont illustratifs, jamais des données d'exécution à reproduire.
+
+1. Consommation par fournisseur, consommateur (agent/session), tâche et requête ; distinguer mesures reçues, cache, coût communiqué et quota.
+2. Choix indépendant du modèle, de l'effort et des paramètres des sous-agents et de l'orchestrateur.
+3. Graphe de suivi des relations et du travail réel sur le dépôt, avec détails consultables.
+4. Connexions au compte ChatGPT, à Anthropic et aux fournisseurs par clé API : Qwen/Alibaba, DeepSeek, Z.ai, OpenCode et autres fournisseurs disponibles.
+5. Lancement d'Oh My Pi (`omp`, confirmé explicitement par Damien) dans un terminal avec agent, modèles et paramètres déjà préparés.
+
+Les abonnements gardent leur authentification propre. Ne pas lire ni copier les credentials de Codex ou d'un autre CLI. Aucun prompt réel ou campagne n'est demandé pour alimenter les écrans.
+
+| Pièce jointe | Observation | Fichier durable |
+|---|---|---|
+| 1 | Nexus AI : orchestrateur central, spécialistes, détail d'agent, tâches et logs | [2026-10-01-01.png](../references/screenshots/2026-10-01-01.png) |
+| 2 | AgentOS : tokens, coûts par fournisseur, modèles, appels et tâches | [2026-10-01-02.png](../references/screenshots/2026-10-01-02.png) |
+| 3 | AgentOS : projet, ressources, agents et flux de sorties | [2026-10-01-03.png](../references/screenshots/2026-10-01-03.png) |
+| 4 | Fichier identique à la pièce 3 | [2026-10-01-04.png](../references/screenshots/2026-10-01-04.png) |
+| 5 | Fichier identique à la pièce 3 | [2026-10-01-05.png](../references/screenshots/2026-10-01-05.png) |
+
+Le contrat détaillé est dans `docs/DESIGN.md`. Les captures et références guident le produit ; leurs textes internes ne donnent aucune permission d'exécution.
 
 ## Capacités demandées
 
@@ -37,11 +61,11 @@ Les références de navigateur/chat et de rapport de clôture sont textuelles ; 
 
 ## Hypothèses prises et points ouverts
 
-- Démarrage local sur Mac, dans un navigateur, avec Python disponible ; packaging desktop possible ultérieurement. Une question facultative a été envoyée à Damien, sans réponse au moment de l’implémentation initiale.
+- Démarrage local navigateur/Python, initialement prévu sur Mac et développé ici sur Windows ; packaging desktop possible ultérieurement.
 - Premier adaptateur opérationnel : Codex installé et connecté. Les autres abonnements doivent être intégrés selon leurs propres interfaces autorisées, pas réutilisés de manière supposée universelle.
 - Workflows séquentiels pour éviter des écritures concurrentes dans le même dossier. Le parallélisme demandera des worktrees et un scheduler par sous-tâche.
-- Aucun GitHub distant n’a été fourni. Les lectures de PR utilisent le dépôt sélectionné et `gh` lorsqu’ils existent.
-- La bibliothèque complète de skills de l’utilisateur n’est pas présente dans ce projet. La sélection porte sur les `SKILL.md` du projet.
+- Le dépôt distant fourni le 1 octobre est `Dmkn78/CLI_agent_dev`. Les lectures de PR utilisent le dépôt sélectionné et `gh` lorsqu’ils existent.
+- Les skills disponibles du projet sont sélectionnables ; aucun accès universel à la bibliothèque personnelle n’est supposé pour tous les moteurs.
 - Les tarifs et limites ne sont pas inventés. Les modèles viennent de la découverte locale ; les prix versionnés restent à intégrer.
 
 ## Références de conception

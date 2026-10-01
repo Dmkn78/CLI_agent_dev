@@ -1,4 +1,24 @@
 const actions = {
+  'select-graph-node': (el) => { selectedGraphNode = el.dataset.id; render(); },
+  'select-workflow': (el) => { graphWorkflowId = el.dataset.id; selectedGraphNode = null; render(); },
+  'graph-page': (el) => { graphPage = Math.max(0, graphPage + Number(el.dataset.direction)); selectedGraphNode = null; render(); },
+  'usage-group': (el) => { usageGrouping = el.dataset.group; render(); },
+  'terminal-omp': () => terminalModal(),
+  'omp-connect': async (el) => {
+    terminalSettings = {projectId, loginProvider: el.dataset.id};
+    const plan = await api('terminal/prepare', terminalSettings);
+    terminalReview(plan, 'Connexion ' + el.dataset.name);
+  },
+  'terminal-launch': async () => {
+    await api('terminal/open', terminalSettings);
+    $('#modal').close();
+    toast('Terminal ouvert. L’activité et les tokens de ce terminal ne sont pas suivis par Atelier.');
+    await refresh(true);
+  },
+  'copy-terminal': async () => {
+    await navigator.clipboard.writeText($('#terminal-command').textContent);
+    toast('Commande copiée.');
+  },
   navigate: (el) => route(el.dataset.view),
   dismiss: () => $("#modal").close(),
   "new-agent": (el) => newAgent(el.dataset.mode || "classic"),
@@ -105,18 +125,25 @@ const actions = {
     download(b.id + ".json", JSON.stringify(b, null, 2), "application/json");
   },
   "export-usage": () => {
-    const rows = objects("sessions").filter((s) => s.usage);
+    const rows = consumptionRecords();
     const csv = [
-      "session,model,input,output,cached_input,total",
+      "request,session,provider,runtime,consumer,task,model,status,input,output,cached_input,total,observed_at",
       ...rows.map((s) =>
         [
           s.id,
+          s.sessionId,
+          s.provider,
+          s.runtime,
+          s.consumer,
+          s.taskId,
           s.model,
-          s.usage.total.inputTokens,
-          s.usage.total.outputTokens,
-          s.usage.total.cachedInputTokens,
-          s.usage.total.totalTokens,
-        ].join(","),
+          s.status,
+          s.usage?.inputTokens,
+          s.usage?.outputTokens,
+          s.usage?.cachedInputTokens,
+          s.usage?.totalTokens,
+          s.completedAt || s.createdAt,
+        ].map(csvCell).join(","),
       ),
     ].join("\n");
     download("atelier-consommation.csv", csv, "text/csv");
@@ -176,11 +203,14 @@ const actions = {
     await refresh(true);
   },
   "refresh-provider": async () => {
-    toast("Vérification de Codex et du catalogue…");
+    toast("Vérification des comptes et des catalogues…");
     await api("providers/refresh", {});
     await refresh(true);
     const form = $("#modal form");
     if (form?.dataset.form === "agent" || form?.dataset.form === "benchmark") {
+      if (form.querySelector('[data-model-config]')) {
+        form.querySelectorAll('[data-model-config]').forEach(scope => updateConfigurationModels(scope));
+      } else {
       const models = provider().models || [];
       form.elements.model.innerHTML = models
         .map(
@@ -189,6 +219,7 @@ const actions = {
         )
         .join("");
       updateEfforts(form);
+      }
     }
     toast(
       provider().connected
@@ -224,6 +255,10 @@ const actions = {
     localStorage.setItem("atelier-project", projectId);
     selectedAgents = [];
     selectedMemory = null;
+    selectedGraphNode = null;
+    graphWorkflowId = '';
+    graphPage = 0;
+    usageProvider = '';
     filePath = "";
     fileData = null;
     fileContent = null;
@@ -244,6 +279,28 @@ function updateEfforts(form) {
         `<option value="${esc(r.reasoningEffort)}" ${r.reasoningEffort === m.defaultReasoningEffort ? "selected" : ""}>${esc(r.reasoningEffort)}</option>`,
     )
     .join("");
+}
+function updateConfigurationModels(scope) {
+  const prefix = scope.dataset.modelConfig;
+  const runtime = scope.querySelector(`[name="${prefix}runtime"]`).value;
+  const models = provider(runtime).models || [];
+  const modelSelect = scope.querySelector(`[name="${prefix}model"]`);
+  const previous = modelSelect.value;
+  modelSelect.innerHTML = models.map(m => `<option value="${esc(m.model)}">${esc(m.displayName)}${runtime === 'omp' ? ' · ' + esc(m.provider) : ''}</option>`).join('');
+  if (models.some(m => m.model === previous)) modelSelect.value = previous;
+  updateConfigurationEfforts(scope);
+}
+function updateConfigurationEfforts(scope) {
+  const prefix = scope.dataset.modelConfig;
+  const runtime = scope.querySelector(`[name="${prefix}runtime"]`).value;
+  const model = provider(runtime).models?.find(m => m.model === scope.querySelector(`[name="${prefix}model"]`).value);
+  const effort = scope.querySelector(`[name="${prefix}effort"]`);
+  const previous = effort.value;
+  effort.innerHTML = (model?.supportedReasoningEfforts || []).map(e => `<option value="${esc(e.reasoningEffort)}">${esc(e.reasoningEffort)}</option>`).join('');
+  effort.value = model?.supportedReasoningEfforts?.some(e => e.reasoningEffort === previous) ? previous : (model?.defaultReasoningEffort || effort.options[0]?.value || '');
+}
+function configurationValues(form, prefix) {
+  return Object.fromEntries(['runtime', 'model', 'effort'].map(key => [key, form.elements[prefix + key].value]));
 }
 document.addEventListener("click", async (event) => {
   const el = event.target.closest("[data-action]");
@@ -278,6 +335,14 @@ document.addEventListener("submit", async (event) => {
           memory: fd.has("memory"),
           skills: fd.getAll("skills"),
         };
+        if (value.mode !== 'classic') {
+          data.agents = {
+            planner: configurationValues(form, 'planner_'),
+            reviewer: configurationValues(form, 'reviewer_'),
+            synthesizer: configurationValues(form, 'synthesizer_'),
+            workers: [0,1,2].filter(i => i === 0 || fd.has('worker' + i + '_enabled')).map(i => ({...configurationValues(form, 'worker' + i + '_'), sandbox: value['worker' + i + '_sandbox']})),
+          };
+        }
         if (!data.model)
           throw new Error("Chargez le catalogue de modèles depuis Connexions.");
         if (value.mode !== "classic" && !value.mission.trim())
@@ -296,6 +361,12 @@ document.addEventListener("submit", async (event) => {
         }
         $("#modal").close();
         await refresh(true);
+        break;
+      }
+      case 'terminal': {
+        terminalSettings = {...value, projectId, sandbox: 'read-only'};
+        const plan = await api('terminal/prepare', terminalSettings);
+        terminalReview(plan, 'Oh My Pi');
         break;
       }
       case "prompt":
@@ -395,10 +466,19 @@ document.addEventListener("input", (event) => {
     quickSearchResults(event.target.value);
 });
 document.addEventListener("change", (event) => {
-  if (event.target.name === "model") {
+  const scope = event.target.closest('[data-model-config]');
+  if (scope && event.target.name.endsWith('runtime')) updateConfigurationModels(scope);
+  else if (scope && event.target.name.endsWith('model')) updateConfigurationEfforts(scope);
+  else if (event.target.name === "model") {
     const form = event.target.closest("form");
     if (form?.elements.effort) updateEfforts(form);
   }
+  if (event.target.name === 'mode') $('#workflow-configuration').hidden = event.target.value === 'classic';
+  if (/^worker[12]_enabled$/.test(event.target.name)) {
+    $(`[data-worker-extra="${event.target.name[6]}"]`).hidden = !event.target.checked;
+  }
+  if (event.target.id === 'graph-workflow') { graphWorkflowId = event.target.value; selectedGraphNode = null; render(); }
+  if (event.target.id === 'usage-provider') { usageProvider = event.target.value; render(); }
 });
 document.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {

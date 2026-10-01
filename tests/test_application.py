@@ -2,6 +2,7 @@ import io
 import json
 import re
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -66,6 +67,7 @@ class ApplicationTests(unittest.TestCase):
     def tearDown(self):
         self.app.shutdown()
         self.patch.stop()
+        self.app.store.db.close()
         self.temp.cleanup()
     def session(self):
         s = self.app.new_session({'name': 'Fixture', 'model': 'fixture-model'}, start=False)
@@ -91,10 +93,16 @@ class ApplicationTests(unittest.TestCase):
     def test_file_traversal_sensitive_files_and_symlinks_rejected(self):
         (self.root / 'normal.txt').write_text('hello')
         (self.root / '.env.local').write_text('secret')
-        (self.root / 'outside').symlink_to(self.root.parent)
         self.assertEqual(self.app.files('atelier', 'normal.txt')['content'], 'hello')
-        for path in ('../outside', '.env.local', 'outside/other.txt'):
+        for path in ('../outside', '.env.local'):
             with self.assertRaises(ValueError): self.app.file_path('atelier', path)
+        try:
+            (self.root / 'outside').symlink_to(self.root.parent, target_is_directory=True)
+        except OSError as exc:
+            if getattr(exc, 'winerror', None) == 1314:
+                self.skipTest('Windows ne permet pas de créer un symlink sans privilège dédié ; traversée et .env déjà vérifiés.')
+            raise
+        with self.assertRaises(ValueError): self.app.file_path('atelier', 'outside/other.txt')
         self.assertNotIn('outside', [e['name'] for e in self.app.files('atelier')['entries']])
     def test_memory_budget_and_on_demand_reserve(self):
         candidate = self.app.upsert('memory', {'title': 'Reserve', 'body': 'never preload this unique secret fact', 'tags': ['reserve'], 'core': False})
@@ -161,6 +169,7 @@ class ApplicationTests(unittest.TestCase):
         recovered = Application(self.root)
         self.assertEqual(recovered.store.get('session', s['id'])['status'], 'stopped')
         self.assertEqual(recovered.store.get('benchmark', 'bench_fixture')['status'], 'interrupted')
+        recovered.store.db.close()
     def test_benchmark_exact_oracle_and_artifacts(self):
         b = self.app.benchmark({'model':'fixture-model', 'cases':[{'prompt':'ok','expected':'ok'},{'prompt':'ok','expected':'wrong'}], 'repeats':2})
         done = self.wait_for('benchmark', b['id'])
@@ -212,6 +221,46 @@ class ApplicationTests(unittest.TestCase):
         for _ in range(12): self.app.store.event('noise', session_id='other')
         wanted=self.app.store.event('wanted', session_id='agent_fixture')
         self.assertEqual(self.app.store.events(0,1,session='agent_fixture')[0]['id'], wanted['id'])
+    def test_independent_workflow_models_and_permissions(self):
+        agents = {'planner': {'model': 'plan-model', 'effort': 'high'},
+                  'workers': [{'model': 'worker-model', 'effort': 'low', 'sandbox': 'workspace-write'}],
+                  'reviewer': {'model': 'review-model', 'effort': 'high'},
+                  'synthesizer': {'model': 'summary-model', 'effort': 'medium'}}
+        workflow = self.app.workflow({'mode': 'orchestration', 'model': 'fixture-model', 'mission': 'ok',
+                                      'sandbox': 'workspace-write', 'agents': agents})
+        completed = self.wait_for('workflow', workflow['id'])
+        self.assertEqual(completed['status'], 'completed', completed.get('error'))
+        children = [self.app.store.get('session', step['sessionId']) for step in completed['steps']]
+        self.assertEqual([s['model'] for s in children], ['plan-model','worker-model','review-model','summary-model'])
+        self.assertEqual([s['sandbox'] for s in children], ['read-only','workspace-write','read-only','read-only'])
+        self.assertEqual([s['effort'] for s in children], ['high','low','high','medium'])
+    def test_workflow_rejects_permission_escalation_and_invalid_limits(self):
+        base = {'mode':'duo', 'model':'fixture-model', 'mission':'ok'}
+        with self.assertRaises(ValueError):
+            self.app.workflow(dict(base, agents={'workers':[{'sandbox':'workspace-write'}]}))
+        with self.assertRaises(ValueError): self.app.workflow(dict(base, maxTasks=4))
+        with self.assertRaises(ValueError): self.app.workflow(dict(base, stepTimeout=1))
+        self.assertFalse(self.app.store.all('workflow'))
+    def test_request_usage_uses_cumulative_delta_without_double_count(self):
+        session = self.session()
+        self.app.prompt(session['id'], 'one')
+        first = self.app.store.all('request')[0]
+        self.assertEqual(first['usage']['totalTokens'], 15)
+        self.app.store.update('session',session['id'],usage={'total':{'inputTokens':100,'outputTokens':20,'totalTokens':120}})
+        self.app.prompt(session['id'], 'two')
+        second = self.app.store.all('request')[1]
+        # The fixture resets its counter: unknown deltas must not become negative or zero.
+        self.assertIsNone(second['usage'])
+        current = self.app.store.get('session',session['id'])
+        self.app.on_event(session['id'], {'method':'thread/tokenUsage/updated','params':{'tokenUsage':{'total':{'inputTokens':112,'outputTokens':23,'totalTokens':135}}}})
+        self.app.on_event(session['id'], {'method':'thread/tokenUsage/updated','params':{'tokenUsage':{'total':{'inputTokens':112,'outputTokens':23,'totalTokens':135}}}})
+        second = self.app.store.get('request',second['id'])
+        self.assertEqual(second['usage']['totalTokens'],15)
+        self.assertEqual(second['provider'],'codex')
+        self.assertEqual(second['sessionId'],current['id'])
+        self.app.store.update('request',second['id'],status='running')
+        self.app.on_event(session['id'], {'method':'atelier/disconnected','params':{'message':'fixture disconnected'}})
+        self.assertEqual(self.app.store.get('request',second['id'])['status'],'interrupted')
     def test_redaction_of_known_credentials(self):
         value=redact({'access_token':'abc','Authorization':'Bearer abc','note':'sk-abcdefghijklmnopqrstuvwxyz','inputTokens':12})
         self.assertEqual(value['access_token'],'[REDACTED]')
@@ -244,7 +293,7 @@ for line in sys.stdin:
   print(json.dumps({'id':m['id'],'result':result}),flush=True)
 ''')
             executable.chmod(0o700)
-            client=CodexClient(executable=str(executable))
+            client=CodexClient(executable=[sys.executable, str(executable)])
             try:
                 self.assertEqual(client.rpc('model/list')['data'][0]['model'],'fixture')
             finally: client.close()

@@ -63,6 +63,7 @@ let state = {
   sprints: [],
   benchmarks: [],
   workflows: [],
+  requests: [],
   providers: [],
   events: [],
   approvals: [],
@@ -85,10 +86,11 @@ let view = "overview",
   auditQuery = "",
   lastStateHash = "",
   loading = false;
+let selectedGraphNode = null, graphWorkflowId = '', graphPage = 0, usageGrouping = 'provider', usageProvider = '', terminalSettings = null;
 const project = () =>
   state.projects.find((p) => p.id === projectId) ||
   state.projects[0] || { id: "atelier", name: "Atelier", path: "" };
-const provider = () => state.providers.find((p) => p.id === "codex") || {};
+const provider = (id = 'codex') => state.providers.find((p) => p.id === id) || {};
 const objects = (key) =>
   (state[key] || []).filter((o) => o.projectId === project().id);
 const sessions = () => objects("sessions").filter((s) => !s.parentId);
@@ -227,16 +229,16 @@ function render() {
     });
   $("#main").className = "view-" + view;
   $("#main").innerHTML = {
-    overview: overviewView,
+    overview: cockpitView,
     agents: agentsView,
     tasks: tasksView,
     sprints: sprintsView,
     memory: memoryView,
-    usage: usageView,
+    usage: consumptionView,
     benchmarks: benchmarksView,
     files: filesView,
     audit: auditView,
-    settings: settingsView,
+    settings: connectionsView,
   }[view]();
   Object.entries(values).forEach(([key, val]) => {
     const el = document.getElementById(key);

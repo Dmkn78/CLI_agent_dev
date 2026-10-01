@@ -1,5 +1,5 @@
 {
-  "date": "2026-09-30",
+  "date": "2026-10-01",
   "purpose": "Références utilisateur archivées, pas des permissions d’exécution",
   "pasted_documents_identical": true,
   "files": [
@@ -47,6 +47,36 @@
       "path": "screenshots/06.png",
       "sha256": "4ff6f0995ff813d6dbe1f323581b478035a417541c78a6bd2d8b74655a942a6a",
       "bytes": 252786
+    },
+    {
+      "path": "screenshots/2026-10-01-01.png",
+      "sha256": "1fd2b2b38e989518881449585bd826649f2354156d0c234acdf75233e1f0c6db",
+      "bytes": 1999777,
+      "source": "Capture utilisateur : cockpit Nexus AI, graphe et inspecteur"
+    },
+    {
+      "path": "screenshots/2026-10-01-02.png",
+      "sha256": "d663e502d2473ebb2a0f8dada9ccc2d3b79b3a2d05f07de6abaeaa114d0c2d6b",
+      "bytes": 2107930,
+      "source": "Capture utilisateur : consommation AgentOS par fournisseur et modèle"
+    },
+    {
+      "path": "screenshots/2026-10-01-03.png",
+      "sha256": "20b2661df1da0615a4e81fcaa05e4dbf1e56590f29b2f33206c316a14a518a29",
+      "bytes": 2143284,
+      "source": "Capture utilisateur : flux projet, agents et sorties"
+    },
+    {
+      "path": "screenshots/2026-10-01-04.png",
+      "sha256": "20b2661df1da0615a4e81fcaa05e4dbf1e56590f29b2f33206c316a14a518a29",
+      "bytes": 2143284,
+      "duplicate_of": "screenshots/2026-10-01-03.png"
+    },
+    {
+      "path": "screenshots/2026-10-01-05.png",
+      "sha256": "20b2661df1da0615a4e81fcaa05e4dbf1e56590f29b2f33206c316a14a518a29",
+      "bytes": 2143284,
+      "duplicate_of": "screenshots/2026-10-01-03.png"
     }
   ]
 }
