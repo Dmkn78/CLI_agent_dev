@@ -1,0 +1,1688 @@
+OBJECTIF GÉNÉRAL
+
+Construire un système multi-agents dans lequel un agent orchestrateur pilote plusieurs sous-agents spécialisés, avec une architecture observable, traçable, auditable et configurable depuis une interface.
+
+Le système ne doit pas être conçu comme un ensemble de chatbots qui se parlent librement.
+
+Il doit être conçu comme un système contrôlé :
+
+USER
+  ↓
+ORCHESTRATOR
+  ↓
+PLANIFICATION
+  ↓
+DÉLÉGATION
+  ↓
+SOUS-AGENTS
+  ↓
+HANDOFFS
+  ↓
+VALIDATION
+  ↓
+SYNTHÈSE
+  ↓
+RÉPONSE FINALE
+
+Autour de cette chaîne doivent exister :
+
+LOGS
+MEMORY
+SESSION STATE
+OUTPUTS
+AUDIT
+EVALS
+
+
+==================================================
+1. LOGS : POURQUOI ILS SONT ESSENTIELS
+==================================================
+
+Pour un agent simple qui génère uniquement du texte, les logs sont utiles.
+
+Pour un système agentique utilisant des outils, des fichiers, plusieurs agents, du RAG, du code ou des actions externes, les logs deviennent indispensables.
+
+La distinction fondamentale est :
+
+MEMORY
+= ce que le système veut conserver pour le futur.
+
+LOGS
+= ce qui s'est réellement passé.
+
+EVALS
+= est-ce que ce qui s'est passé était correct ?
+
+Le log est la boîte noire de l'agent.
+
+Il permet de savoir :
+
+qui a exécuté une action ;
+quand l'action a été exécutée ;
+sur quelle tâche ;
+avec quel outil ;
+sur quelle source ;
+avec quels paramètres utiles ;
+quel résultat a été retourné ;
+si l'action a réussi ou échoué ;
+si un retry a été effectué ;
+quelle décision observable a été prise ;
+quel artefact a finalement été produit.
+
+Un agent peut déclarer :
+
+"J'ai exécuté les tests et ils passent."
+
+Cette phrase ne doit jamais constituer une preuve suffisante.
+
+Le système doit pouvoir vérifier :
+
+Existe-t-il réellement un tool_call correspondant ?
+Existe-t-il un tool_result ?
+Le résultat indique-t-il réellement que les tests passent ?
+Le fichier testé est-il le bon fichier ?
+Le résultat final correspond-il réellement à cette preuve ?
+
+On obtient :
+
+AFFIRMATION DE L'AGENT
+        ↓
+RECHERCHE DANS LES LOGS
+        ↓
+TOOL_CALL TROUVÉ ?
+        ↓
+TOOL_RESULT TROUVÉ ?
+        ↓
+RÉSULTAT COHÉRENT ?
+        ↓
+AFFIRMATION VÉRIFIÉE / NON VÉRIFIÉE
+
+Sans logs, l'audit devient déclaratif.
+
+Avec les logs, on peut reconstruire réellement le run.
+
+
+==================================================
+2. FORMAT DES LOGS
+==================================================
+
+Le format recommandé pour le runtime est JSONL.
+
+Un événement par ligne.
+
+Les logs doivent idéalement être append-only : on ajoute les événements, on ne réécrit pas l'historique du run après coup.
+
+Exemple conceptuel :
+
+{
+  "ts": "ISO-8601",
+  "run_id": "run_0182",
+  "session_id": "session_004",
+  "event_id": "evt_123",
+  "agent_id": "researcher-a",
+  "event_type": "tool_call",
+  "phase": "research",
+  "task_id": "task_03",
+  "tool_name": "web_search",
+  "status": "started",
+  "note": "Recherche documentation officielle"
+}
+
+Types d'événements utiles :
+
+start
+decision
+delegation
+tool_call
+tool_result
+validation
+warning
+error
+retry
+handoff
+end
+
+Les secrets ne doivent pas être enregistrés dans les logs.
+
+Il ne faut pas non plus chercher à enregistrer une chaîne de pensée privée complète.
+
+On journalise des actions et décisions observables.
+
+
+==================================================
+3. LOGS SÉPARÉS PAR AGENT
+==================================================
+
+Chaque agent possède son propre journal.
+
+Exemple :
+
+logs/
+  orchestrator.jsonl
+  researcher-a.jsonl
+  researcher-b.jsonl
+  developer.jsonl
+  verifier.jsonl
+  synthesizer.jsonl
+
+Cela évite de mélanger les trajectoires.
+
+L'orchestrateur ne doit pas recopier les centaines d'événements produits par les sous-agents.
+
+Il doit uniquement référencer leur travail.
+
+Par exemple :
+
+{
+  "event_type": "agent_result",
+  "target_agent": "researcher-a",
+  "child_log": "logs/researcher-a.jsonl",
+  "child_output": "agents/researcher-a/output.json",
+  "status": "received"
+}
+
+On obtient une chaîne de provenance :
+
+ORCHESTRATOR
+     ↓
+délègue task_03
+     ↓
+RESEARCHER-A
+     ↓
+log propre
+     ↓
+output propre
+     ↓
+handoff
+     ↓
+ORCHESTRATOR
+
+
+==================================================
+4. AUDITER UNE IA
+==================================================
+
+L'audit peut être séparé en quatre niveaux.
+
+NIVEAU 1 : AUDIT DE TRAJECTOIRE
+
+Reconstituer chronologiquement :
+
+démarrage ;
+délégations ;
+agents lancés ;
+outils utilisés ;
+résultats ;
+erreurs ;
+retries ;
+validations ;
+production finale.
+
+NIVEAU 2 : AUDIT DE PREUVE
+
+Pour chaque affirmation importante du résultat final :
+
+identifier l'origine ;
+retrouver la source ;
+retrouver le résultat d'outil ;
+retrouver le fichier ;
+retrouver éventuellement le test exécuté.
+
+Si aucune preuve ne correspond :
+
+status = UNVERIFIED
+
+NIVEAU 3 : AUDIT COMPORTEMENTAL
+
+Détecter :
+
+outil interdit ;
+écriture hors périmètre ;
+source non autorisée ;
+erreur ignorée ;
+tâche déclarée terminée alors qu'elle est incomplète ;
+résultat d'outil inventé ;
+source déclarée consultée sans trace ;
+retry infini ;
+délégation interdite ;
+modification non autorisée.
+
+NIVEAU 4 : AUDIT QUALITATIF
+
+Les logs prouvent ce qui s'est passé.
+
+Ils ne prouvent pas que le résultat est bon.
+
+Il faut ajouter des évaluations.
+
+Exemples :
+
+pertinence des sources ;
+fidélité à la source ;
+couverture de la demande ;
+traçabilité ;
+stabilité ;
+respect du format ;
+respect des contraintes ;
+absence d'invention ;
+respect du périmètre.
+
+Donc :
+
+LOGGABLE ≠ CORRECT
+
+Mais :
+
+PAS DE LOGS = DIFFICILE DE SAVOIR POURQUOI C'EST INCORRECT
+
+
+==================================================
+5. ARCHITECTURE DE STOCKAGE
+==================================================
+
+Architecture possible :
+
+project/
+  config/
+    system_config.json
+
+  session/
+    session_state.json
+
+  logs/
+    orchestrator.jsonl
+    researcher-a.jsonl
+    researcher-b.jsonl
+    verifier.jsonl
+
+  agents/
+    researcher-a/
+      output.json
+      handoff.json
+
+    researcher-b/
+      output.json
+      handoff.json
+
+    verifier/
+      output.json
+      handoff.json
+
+  memories/
+    MEMORY.md
+    memory_summary.md
+    raw_memories/
+    rollout_summaries/
+
+  audit/
+    run_manifest.json
+    audit_report.json
+    anomalies.jsonl
+
+  evals/
+    golden_set.jsonl
+    results.jsonl
+    metrics.json
+
+
+==================================================
+6. SESSION STATE
+==================================================
+
+Le session_state est différent du log.
+
+LOG :
+Que s'est-il passé ?
+
+SESSION STATE :
+Où en sommes-nous maintenant ?
+
+MEMORY :
+Que voulons-nous conserver pour les futurs runs ?
+
+Exemple :
+
+{
+  "run_id": "run_0182",
+  "status": "running",
+  "current_phase": "verification",
+
+  "completed_tasks": [
+    "task_001",
+    "task_002"
+  ],
+
+  "active_tasks": [
+    "task_003"
+  ],
+
+  "failed_tasks": [],
+
+  "agents": {
+    "researcher-a": "done",
+    "researcher-b": "done",
+    "verifier": "running"
+  },
+
+  "next_action": "wait_for_verifier"
+}
+
+
+==================================================
+7. AGENT ORCHESTRATEUR
+==================================================
+
+L'orchestrateur est DEPTH 0.
+
+Son rôle principal n'est pas de réaliser lui-même tout le travail.
+
+Son rôle est :
+
+UNDERSTAND
+  ↓
+PLAN
+  ↓
+DECOMPOSE
+  ↓
+ROUTE
+  ↓
+DELEGATE
+  ↓
+OBSERVE
+  ↓
+VALIDATE
+  ↓
+RETRY / ESCALATE
+  ↓
+MERGE
+  ↓
+DELIVER
+
+Il doit pouvoir dire :
+
+"Cette sous-tâche doit être confiée au researcher."
+
+"Ces deux sous-tâches sont indépendantes et peuvent être exécutées en parallèle."
+
+"Cette sortie ne respecte pas son schéma."
+
+"Cette information n'est pas suffisamment vérifiée."
+
+"Je dois appeler le verifier."
+
+"Cette délégation dépasserait la profondeur autorisée."
+
+"Les résultats sont maintenant suffisants pour produire le résultat final."
+
+Il ne faut pas construire un orchestrateur qui effectue toute la recherche, tout le code, toute la vérification et toute la rédaction en parallèle des agents.
+
+Sinon les sous-agents deviennent inutiles.
+
+
+==================================================
+8. CONFIGURATION DE L'ORCHESTRATEUR
+==================================================
+
+Configuration conceptuelle :
+
+{
+  "id": "orchestrator",
+  "type": "orchestrator",
+
+  "provider": "openai",
+  "model": "gpt-5.6-sol",
+
+  "reasoning": {
+    "effort": "high"
+  },
+
+  "orchestration": {
+    "max_depth": 1,
+    "delegation": "orchestrator_controlled",
+    "fanout": "parallel",
+    "fallback": "sequential",
+    "final_answer_owner": "orchestrator"
+  },
+
+  "logging": {
+    "enabled": true,
+    "format": "jsonl",
+    "isolated_per_agent": true
+  },
+
+  "handoffs": {
+    "required": true,
+    "require_evidence": true
+  },
+
+  "memory": {
+    "mode": "persistent"
+  },
+
+  "subagents": [
+    "researcher",
+    "developer",
+    "verifier"
+  ]
+}
+
+Pour un MVP :
+
+max_depth = 1
+
+On obtient :
+
+ORCHESTRATOR
+   ├── AGENT
+   ├── AGENT
+   ├── AGENT
+   └── AGENT
+
+Pas encore :
+
+ORCHESTRATOR
+   ↓
+AGENT
+   ↓
+AGENT
+   ↓
+AGENT
+   ↓
+AGENT
+
+La profondeur supplémentaire pourra venir ensuite.
+
+
+==================================================
+9. DÉLÉGATION
+==================================================
+
+La délégation doit rester contrôlée.
+
+Un sous-agent peut demander une nouvelle délégation :
+
+{
+  "delegation_request": {
+    "needed": true,
+    "target_role": "verifier",
+    "reason": "Deux claims restent non vérifiés.",
+    "inputs": [
+      "claim_12",
+      "claim_14"
+    ]
+  }
+}
+
+Mais il ne doit pas nécessairement lancer lui-même l'agent.
+
+Flux :
+
+SUBAGENT
+   ↓
+delegation_request
+   ↓
+ORCHESTRATOR
+   ↓
+VÉRIFICATION DE LA PROFONDEUR
+   ↓
+VÉRIFICATION DU BUDGET
+   ↓
+VÉRIFICATION DE LA NÉCESSITÉ
+   ↓
+ACCEPT / REJECT
+   ↓
+SPAWN SI ACCEPTÉ
+
+
+==================================================
+10. SOUS-AGENTS
+==================================================
+
+Chaque sous-agent doit avoir une mission limitée.
+
+Par exemple :
+
+RESEARCHER
+Recherche et collecte de preuves.
+
+DEVELOPER
+Modification ou production de code.
+
+VERIFIER
+Contrôle indépendant.
+
+SYNTHESIZER
+Fusion de résultats déjà validés.
+
+Un agent canonique peut être représenté par :
+
+AGENT_ID
+NAME
+ROLE
+MISSION
+DEPTH
+MODEL
+REASONING
+TOOLS
+READ PERMISSIONS
+WRITE PERMISSIONS
+MEMORY POLICY
+OUTPUT CONTRACT
+LOGGING
+HANDOFF POLICY
+STOP CONDITIONS
+
+Exemple :
+
+{
+  "id": "researcher-01",
+  "name": "Research Agent",
+
+  "provider": "inherit",
+  "model": "gpt-5.6-mini",
+
+  "role": "researcher",
+
+  "mission": "Research and extract evidence.",
+
+  "reasoning": {
+    "effort": "medium"
+  },
+
+  "depth": 1,
+
+  "delegation": {
+    "can_request": true,
+    "can_spawn": false
+  },
+
+  "tools": [
+    "web",
+    "files"
+  ],
+
+  "permissions": {
+    "read": [],
+    "write": [
+      "agents/researcher-01/"
+    ]
+  },
+
+  "memory": {
+    "mode": "session"
+  },
+
+  "logging": {
+    "enabled": true,
+    "format": "jsonl"
+  },
+
+  "handoff": {
+    "required": true
+  },
+
+  "output": {
+    "type": "structured"
+  }
+}
+
+
+==================================================
+11. INVOCATION DES SOUS-AGENTS
+==================================================
+
+Ajouter un agent ne suffit pas.
+
+Il faut expliquer à l'orchestrateur quand l'utiliser.
+
+Exemple :
+
+Research Agent
+
+Use when:
+la tâche nécessite une recherche documentaire, des sources externes ou une vérification factuelle.
+
+Do not use when:
+le contexte déjà validé contient la réponse nécessaire.
+
+Developer Agent
+
+Use when:
+une modification, création ou analyse de code est nécessaire.
+
+Verifier
+
+Use when:
+une sortie importante nécessite une validation indépendante.
+
+Chaque sous-agent devient donc conceptuellement un outil spécialisé disponible pour l'orchestrateur.
+
+
+==================================================
+12. HANDOFFS
+==================================================
+
+Un handoff n'est pas un simple résumé conversationnel.
+
+C'est un objet de transfert auditable.
+
+Il doit permettre à l'agent suivant de savoir :
+
+ce qui a été demandé ;
+ce qui a été fait ;
+comment cela a été fait ;
+quels résultats ont été obtenus ;
+quelles preuves existent ;
+quelles décisions ont été prises ;
+quelles erreurs sont survenues ;
+ce qui reste inconnu ;
+quelle est la prochaine action.
+
+Formule :
+
+LOGS
+= historique détaillé
+
+OUTPUT
+= résultat produit
+
+HANDOFF
+= état compact permettant à l'agent suivant de reprendre correctement
+
+
+==================================================
+13. STRUCTURE DU HANDOFF
+==================================================
+
+Chaque handoff peut contenir :
+
+TASK
+STATUS
+METHOD
+ACTIONS COMPLETED
+RESULTS
+EVIDENCE
+DECISIONS
+ISSUES
+UNCERTAINTIES
+NEXT ACTION
+
+Exemple :
+
+{
+  "handoff_id": "handoff_0042",
+  "run_id": "run_0182",
+  "task_id": "task_research_03",
+
+  "from_agent": "researcher-a",
+  "to_agent": "orchestrator",
+
+  "status": "completed",
+
+  "objective": "Identifier les mécanismes d'audit des agents IA.",
+
+  "method_summary": {
+    "approach": [
+      "Recherche dans les sources autorisées",
+      "Sélection des passages pertinents",
+      "Comparaison des recommandations",
+      "Extraction des points convergents"
+    ],
+
+    "scope": "Sources projet uniquement",
+
+    "completion_criterion":
+      "Les éléments nécessaires sont couverts et reliés à des preuves."
+  },
+
+  "actions_completed": [
+    "Recherche",
+    "Lecture",
+    "Classification",
+    "Synthèse"
+  ],
+
+  "tools_used": [
+    "files.search",
+    "files.read"
+  ],
+
+  "outputs": [
+    "agents/researcher-a/output.json"
+  ],
+
+  "evidence": [
+    {
+      "type": "source",
+      "ref": "source_001"
+    }
+  ],
+
+  "decisions": [],
+
+  "issues": [],
+
+  "unknowns": [],
+
+  "next_action":
+    "Faire vérifier les conclusions par le verifier."
+}
+
+
+==================================================
+14. METHOD SUMMARY DU HANDOFF
+==================================================
+
+La partie méthode doit expliquer ce qui a réellement été fait.
+
+Elle ne doit pas contenir une chaîne de pensée libre.
+
+Mauvais :
+
+"J'ai réfléchi à plusieurs possibilités puis je me suis dit que..."
+
+Bon :
+
+METHOD
+
+Sources analysées :
+documents internes autorisés.
+
+Procédure :
+recherche ciblée ;
+sélection ;
+lecture ;
+comparaison ;
+validation ;
+extraction.
+
+Filtres :
+sources directement applicables uniquement.
+
+Adaptation :
+requête initiale trop large ;
+recherche resserrée sur observability, audit et logs.
+
+Critère de fin :
+les claims importants disposent d'une preuve suffisante.
+
+Le handoff transmet donc une méthode observable et vérifiable.
+
+
+==================================================
+15. LE HANDOFF N'EST PAS LA PREUVE
+==================================================
+
+Le handoff doit pointer vers :
+
+logs ;
+sources ;
+outputs ;
+tool results ;
+tests ;
+artefacts.
+
+Exemple :
+
+HANDOFF
+   ↓
+method_summary
+results
+decisions
+limits
+next_action
+   ↓
+evidence_refs
+   ↓
+LOG EVENTS
+SOURCE FILES
+TOOL RESULTS
+OUTPUT FILES
+
+Une phrase comme :
+
+"J'ai vérifié les sources."
+
+n'est pas suffisante.
+
+Il faut pouvoir retrouver ce qui correspond à cette vérification.
+
+
+==================================================
+16. VALIDATION DU HANDOFF
+==================================================
+
+Le destinataire du handoff doit pouvoir l'accepter ou le rejeter.
+
+Exemple :
+
+{
+  "handoff_id": "H02",
+
+  "acceptance": {
+    "status": "accepted",
+    "schema_valid": true,
+    "evidence_accessible": true,
+    "required_fields_present": true
+  }
+}
+
+Ou :
+
+{
+  "handoff_id": "H02",
+
+  "acceptance": {
+    "status": "rejected",
+    "reason": "MISSING_EVIDENCE_REFERENCES"
+  }
+}
+
+Flux :
+
+AGENT A
+  ↓
+travail
+  ↓
+logs + output
+  ↓
+handoff
+  ↓
+AGENT B
+  ↓
+validation
+  ↓
+ACCEPT
+ou
+REJECT
+  ↓
+si ACCEPT : continuation
+si REJECT : correction
+
+
+==================================================
+17. AUDIT AGENT INDÉPENDANT
+==================================================
+
+On peut ajouter un agent d'audit indépendant.
+
+Il reçoit :
+
+config ;
+session state ;
+orchestrator logs ;
+subagent logs ;
+handoffs ;
+outputs ;
+final output.
+
+Il vérifie :
+
+chaque délégation correspond-elle à un agent réellement exécuté ?
+
+chaque agent_result correspond-il à un fichier existant ?
+
+chaque sortie acceptée a-t-elle réellement passé sa validation ?
+
+des erreurs ont-elles été ignorées ?
+
+des tâches ont-elles été déclarées terminées trop tôt ?
+
+une source utilisée dans le final existe-t-elle dans la chaîne de provenance ?
+
+un outil est-il déclaré utilisé sans tool_result ?
+
+un agent a-t-il écrit en dehors de son espace ?
+
+un sous-agent a-t-il dépassé sa profondeur ?
+
+des claims importants restent-ils sans preuve ?
+
+Résultat :
+
+AUDIT
+  ↓
+VALID
+WARNING
+FAIL
+
+avec éventuellement :
+
+anomalies
+missing_evidence
+policy_violations
+unverified_claims
+
+
+==================================================
+18. MEMORY
+==================================================
+
+La mémoire ne doit pas être utilisée comme un gigantesque log.
+
+MEMORY.md :
+
+contexte durable ;
+conventions ;
+décisions validées ;
+connaissances stables ;
+erreurs importantes à ne pas répéter.
+
+memory_summary.md :
+
+résumé court permettant à l'orchestrateur de démarrer rapidement.
+
+raw memories :
+
+candidats avant validation.
+
+rollout summaries :
+
+résumés détaillés de runs importants.
+
+Les sous-agents ne devraient pas modifier directement la mémoire globale.
+
+Flux :
+
+SUBAGENT
+  ↓
+memory_update_proposal
+  ↓
+ORCHESTRATOR
+  ↓
+VALIDATION
+  ↓
+ACCEPT / REJECT
+  ↓
+MEMORY
+
+
+==================================================
+19. INTERFACE DE CRÉATION
+==================================================
+
+L'objectif n'est pas de construire uniquement un éditeur de prompts.
+
+L'objectif est de construire un éditeur de systèmes d'agents.
+
+Écran initial :
+
+CREATE AGENT
+
+Provider
+[ OpenAI ]
+
+Model
+[ modèle ]
+
+Agent Type
+[ Normal Agent ]
+[ Orchestrator ]
+
+Name
+[ nom ]
+
+Continue
+
+
+==================================================
+20. PROVIDER
+==================================================
+
+Pour le MVP :
+
+un seul provider par système.
+
+Exemple :
+
+Workspace Provider = OpenAI
+
+Tous les agents héritent du provider :
+
+provider = inherit
+
+Chaque agent peut cependant utiliser un modèle différent.
+
+Exemple :
+
+Orchestrator
+GPT-5.6 Sol
+
+Researcher
+modèle plus petit
+
+Developer
+GPT-5.6 Sol
+
+Verifier
+GPT-5.6 Sol
+
+Plus tard :
+
+Override provider
+
+pourrait permettre des architectures multi-provider.
+
+
+==================================================
+21. INTERFACE AGENT NORMAL
+==================================================
+
+Si Agent Type = Normal Agent :
+
+AGENT CONFIGURATION
+
+Identity
+Name
+Description
+Role
+
+Model
+Provider = inherited
+Model
+Reasoning
+
+Mission
+Instructions
+
+Tools
+Web
+Files
+Python
+Shell
+etc.
+
+Memory
+None
+Session
+Persistent
+
+Output
+Markdown
+Structured JSON
+
+Logging
+Enabled / Disabled
+
+Handoff
+Enabled / Disabled
+
+Advanced
+Read paths
+Write paths
+Stop conditions
+Retries
+Timeouts
+Budgets
+
+
+==================================================
+22. INTERFACE ORCHESTRATEUR
+==================================================
+
+Si Agent Type = Orchestrator :
+
+ORCHESTRATOR CONFIGURATION
+
+Provider
+OpenAI
+
+Model
+[ choix ]
+
+Reasoning
+[ choix ]
+
+Maximum depth
+[ 1 ]
+
+Execution
+Sequential
+Parallel when possible
+
+Delegation
+Orchestrator controlled
+
+Final answer owner
+Orchestrator
+ou
+Synthesis agent
+
+Memory
+Session / Persistent
+
+Logs
+JSONL
+Separate log per agent
+
+Handoffs
+Required
+Evidence required
+
+SUBAGENTS
+
+[ + ADD AGENT ]
+
+
+==================================================
+23. BOUTON + ADD AGENT
+==================================================
+
+Quand l'utilisateur clique :
+
++ ADD AGENT
+
+une carte apparaît.
+
+Exemple :
+
+Research Agent
+
+Provider
+OpenAI inherited
+
+Model
+[ modèle ]
+
+Role
+Research official documentation
+
+Reasoning
+Medium
+
+Tools
+Web
+Files
+
+Configure
+Delete
+
+L'utilisateur peut répéter :
+
++ ADD AGENT
+
+Developer Agent
+
+Verifier
+
+Synthesizer
+
+etc.
+
+
+==================================================
+24. INTERFACE EN GRAPHE
+==================================================
+
+Une fois les agents ajoutés :
+
+                  ORCHESTRATOR
+                GPT-5.6 Sol
+                     |
+        +------------+------------+
+        |            |            |
+        v            v            v
+   RESEARCHER    DEVELOPER     VERIFIER
+      model         model         model
+      tools         tools         tools
+
+Chaque carte peut afficher :
+
+Name
+Model
+Reasoning
+Tools
+Memory
+Status
+
+Un clic ouvre la configuration détaillée.
+
+
+==================================================
+25. PARAMÈTRES D'UN AGENT DANS L'INTERFACE
+==================================================
+
+Chaque carte agent peut contenir :
+
+IDENTITY
+Name
+Role
+Description
+
+MODEL
+Provider
+Model
+Reasoning
+Verbosity éventuellement
+
+MISSION
+Instructions principales
+
+TOOLS
+Liste d'outils autorisés
+
+INVOCATION
+When to use
+When not to use
+
+PERMISSIONS
+Read paths
+Write paths
+
+MEMORY
+None
+Session
+Persistent
+Read global summary
+Can propose memory update
+
+OUTPUT
+Markdown
+Structured output
+Schema
+
+HANDOFF
+Generate on completion
+Require evidence
+
+LOGGING
+Enabled
+JSONL
+
+EXECUTION
+Timeout
+Retries
+Stop conditions
+Budget
+
+
+==================================================
+26. OPTIONS HANDOFF DANS L'INTERFACE
+==================================================
+
+Handoff
+
+Generate handoff on completion
+
+Include:
+
+Status
+Method summary
+Actions performed
+Evidence references
+Decisions
+Errors
+Unknowns
+Next action
+
+L'orchestrateur reçoit :
+
+OUTPUT
++
+HANDOFF
++
+LOG REFERENCE
+
+Il n'a pas besoin de recevoir toute la conversation interne du sous-agent.
+
+
+==================================================
+27. INTERFACE MEMORY
+==================================================
+
+Memory
+
+None
+Session
+Persistent
+
+Read global memory summary
+Yes / No
+
+Write global memory
+No par défaut pour les sous-agents
+
+Can propose memory update
+Yes
+
+Pour l'orchestrateur :
+
+Read global memory
+Yes
+
+Validate memory proposals
+Yes
+
+Write validated memory
+Yes
+
+
+==================================================
+28. ÉCRAN D'EXÉCUTION
+==================================================
+
+Une fois le système lancé :
+
+RUN #184
+
+Orchestrator
+Running
+
+Researcher
+Completed
+12.4s
+
+Developer
+Running
+8.7s
+
+Verifier
+Waiting
+
+Current Phase
+Implementation
+
+Tool calls
+18
+
+Handoffs
+1 / 3
+
+Warnings
+0
+
+Tokens
+...
+
+Cost
+...
+
+En cliquant sur Researcher :
+
+RESEARCHER
+
+Status
+Completed
+
+Task
+Research documentation
+
+Method
+Search → select → verify → extract
+
+Output
+Open
+
+Handoff
+Open
+
+Logs
+Open
+
+Sources
+Open
+
+
+==================================================
+29. OBJETS CENTRAUX DE L'APPLICATION
+==================================================
+
+L'application peut être construite autour de quelques objets.
+
+SYSTEM
+  |
+  +-- PROVIDER
+  |
+  +-- ORCHESTRATOR
+  |     |
+  |     +-- model
+  |     +-- orchestration policy
+  |     +-- subagents
+  |
+  +-- AGENT
+  |     |
+  |     +-- model
+  |     +-- role
+  |     +-- mission
+  |     +-- tools
+  |     +-- permissions
+  |     +-- output contract
+  |
+  +-- HANDOFF
+  |
+  +-- MEMORY
+  |
+  +-- RUN
+        |
+        +-- state
+        +-- logs
+        +-- outputs
+        +-- audit
+        +-- metrics
+
+
+==================================================
+30. MVP RECOMMANDÉ
+==================================================
+
+Pour commencer, ne pas construire immédiatement toutes les possibilités.
+
+MVP :
+
+1 provider par système.
+
+1 orchestrateur.
+
+N sous-agents.
+
+Maximum depth = 1.
+
+Orchestrator controlled delegation.
+
+Fan-out parallèle lorsque possible.
+
+Fallback séquentiel.
+
+Un log JSONL par agent.
+
+Un session_state.
+
+Un output séparé par agent.
+
+Un handoff obligatoire par agent.
+
+Un format de handoff standard.
+
+Un memory_summary global.
+
+Pas d'écriture directe des sous-agents dans MEMORY.
+
+Structured outputs pour les données machine.
+
+Interface graphe simple.
+
+Interface run avec statuts.
+
+Audit basique après exécution.
+
+Ensuite seulement ajouter :
+
+depth = 2 ;
+
+sous-sous-agents ;
+
+multi-provider ;
+
+routage conditionnel avancé ;
+
+budgets dynamiques ;
+
+autoscaling des agents ;
+
+agents temporaires ;
+
+sélection automatique de modèles ;
+
+évaluation automatique ;
+
+replay des runs ;
+
+comparaison entre runs.
+
+
+==================================================
+31. ARCHITECTURE GLOBALE FINALE
+==================================================
+
+USER
+  |
+  v
+ORCHESTRATOR
+  |
+  +--> PLAN
+  |
+  +--> TASK A ----------> RESEARCHER
+  |                         |
+  |                         +--> LOG
+  |                         +--> OUTPUT
+  |                         +--> HANDOFF
+  |
+  +--> TASK B ----------> DEVELOPER
+  |                         |
+  |                         +--> LOG
+  |                         +--> OUTPUT
+  |                         +--> HANDOFF
+  |
+  +--> TASK C ----------> VERIFIER
+                            |
+                            +--> LOG
+                            +--> OUTPUT
+                            +--> HANDOFF
+
+Tous les handoffs reviennent vers :
+
+ORCHESTRATOR
+  |
+  +--> VALIDATE
+  |
+  +--> RETRY si nécessaire
+  |
+  +--> SYNTHESIZE
+  |
+  +--> FINAL OUTPUT
+
+En parallèle :
+
+SESSION STATE
+= état actuel
+
+LOGS
+= événements réels
+
+MEMORY
+= connaissances durables
+
+HANDOFFS
+= transfert opérationnel compact
+
+OUTPUTS
+= artefacts produits
+
+EVALS
+= qualité
+
+AUDIT
+= cohérence entre déclarations et preuves
+
+
+==================================================
+32. FORMULES À RETENIR
+==================================================
+
+Agent
+=
+Model
++
+Mission
++
+Tools
++
+Permissions
++
+Memory policy
++
+Output contract
++
+Logging policy
++
+Handoff policy
+
+Orchestrator
+=
+Agent
++
+Task decomposition
++
+Routing
++
+Delegation
++
+Validation
++
+Retry
++
+Fan-out / Fan-in
++
+Final ownership
+
+Handoff
+=
+Status
++
+Method
++
+Actions
++
+Results
++
+Evidence references
++
+Decisions
++
+Issues
++
+Unknowns
++
+Next action
+
+Audit
+=
+Logs
++
+Outputs
++
+Handoffs
++
+Sources
++
+Tool results
++
+Evaluation rules
+
+Architecture fiable
+=
+Orchestration
++
+Traçabilité
++
+Validation
++
+Isolation
++
+Handoffs
++
+Auditabilité
+
+L'objectif final n'est donc pas de construire une interface permettant uniquement de choisir un modèle et d'écrire un prompt.
+
+L'objectif est de construire une interface permettant de concevoir, exécuter, observer et auditer une véritable équipe d'agents IA.

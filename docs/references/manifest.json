@@ -1,0 +1,52 @@
+{
+  "date": "2026-09-30",
+  "purpose": "Références utilisateur archivées, pas des permissions d’exécution",
+  "pasted_documents_identical": true,
+  "files": [
+    {
+      "path": "ingenierie_agentique_cout_benchmark_onboarding.md",
+      "sha256": "bfb66bdc060c5cc17ee6d794591984520e5cbbb9bccbc07781c5f9b1abf8a51d",
+      "bytes": 100190
+    },
+    {
+      "path": "ingenierie_systemes_agentiques_avances_volume2.md",
+      "sha256": "f04252cef6132fba530005e96f35c9e2369ffc905350f661d59d329db496297d",
+      "bytes": 82304
+    },
+    {
+      "path": "multi-agent-audit.txt",
+      "sha256": "689c3def74722d69939f4c6b45b52db351db1508e7748cb51069e522d23edaa5",
+      "bytes": 26382
+    },
+    {
+      "path": "screenshots/01.png",
+      "sha256": "09e49d8ae16e16d44a3e7f4ca689e7a9594eea4164d980a9b5576279a45b0741",
+      "bytes": 168914
+    },
+    {
+      "path": "screenshots/02.png",
+      "sha256": "90c3745d5e02bda1d5b6eb4a595ce548e9b28a41205c6a1a7ccfd62785217ca1",
+      "bytes": 72017
+    },
+    {
+      "path": "screenshots/03.png",
+      "sha256": "2c45f5b6a796a9f033e6679eb1c32d44e6bf532afc1c3264bd67241ce7c25810",
+      "bytes": 290570
+    },
+    {
+      "path": "screenshots/04.png",
+      "sha256": "60ad4105c8cfc333d37d7a7f781bd1aa6f817a109968a71f1adb4e771b187893",
+      "bytes": 426451
+    },
+    {
+      "path": "screenshots/05.png",
+      "sha256": "207431193e6f841927a52ec559a548bd82a81a3c171b7c4669c317d960df9da7",
+      "bytes": 110709
+    },
+    {
+      "path": "screenshots/06.png",
+      "sha256": "4ff6f0995ff813d6dbe1f323581b478035a417541c78a6bd2d8b74655a942a6a",
+      "bytes": 252786
+    }
+  ]
+}

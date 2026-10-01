@@ -1,0 +1,6 @@
+.atelier/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+artifacts/qa/
