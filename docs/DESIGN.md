@@ -12,7 +12,10 @@ Révision du 1 octobre 2026, fondée sur les cinq nouvelles captures archivées.
 - Création : fournisseur/catalogue réel et configuration séparée du planificateur, des spécialistes, du vérificateur et de la synthèse.
 - Consommation : tableaux par fournisseur, consommateur, tâche et requête. Inconnue affichée par un tiret ; zéro seulement lorsqu'une mesure contient zéro.
 - Connexions : compte, clé API et moteur local distincts. Installation, catalogue et capacité restent séparés ; secrets exclus des logs et de Git.
-- Terminal OMP : dossier, modèles principal/plan/slow/smol, effort, restrictions et commande consultables. Une ouverture ne prouve aucune activité ou consommation.
+- Terminal : choix Codex/OMP, dossier, modèles/effort/restrictions et commande consultables ; variantes OMP plan/slow/smol. Une ouverture ne prouve aucune activité ou consommation.
+- Équipe composable : boutons Ajouter/retirer, nom/rôle/consignes par sous-agent, review/synthèse facultatives ; aucune rangée de cases spécialistes fixes. Reconfigurer prépare un nouveau lancement.
+- Chat : conversations, message central et panneau contexte latéral ; empilés sur mobile. Noyau, skills/fichiers choisis, instructions transmises, tokens observés et fenêtre uniquement si rapportée. Estimation du brouillon clairement distincte des tokens reçus.
+- Travail : activation visible de la file TODO au lancement, affectation explicite facultative. Les captures vides restent vides tant qu'aucune donnée réelle n'existe. Codex est présent dans le filtre de consommation même sans requête.
 
 ## Analyse des références
 

@@ -2,6 +2,7 @@
   "date": "2026-10-01",
   "purpose": "Références utilisateur archivées, pas des permissions d’exécution",
   "pasted_documents_identical": true,
+  "text_hash_note": "Hashes des textes sur leurs octets LF d'origine ; Git peut convertir le checkout Windows en CRLF. Les PNG sont conservés octet pour octet.",
   "files": [
     {
       "path": "ingenierie_agentique_cout_benchmark_onboarding.md",
@@ -77,6 +78,30 @@
       "sha256": "20b2661df1da0615a4e81fcaa05e4dbf1e56590f29b2f33206c316a14a518a29",
       "bytes": 2143284,
       "duplicate_of": "screenshots/2026-10-01-03.png"
+    },
+    {
+      "path": "screenshots/2026-10-01-feedback-01.png",
+      "sha256": "9e62342759743be968d14c129f790e69760f2a7edc7701b273eb8430b076fe75",
+      "bytes": 270212,
+      "source": "Capture utilisateur : panneau contexte et mesures, texte partiellement illisible"
+    },
+    {
+      "path": "screenshots/2026-10-01-feedback-02.png",
+      "sha256": "e266849c473089d8ac43c5e685a843eec88a4a4a1d841e37c3cb5059e747da2c",
+      "bytes": 76370,
+      "source": "Capture utilisateur : configuration des rôles fixes"
+    },
+    {
+      "path": "screenshots/2026-10-01-feedback-03.png",
+      "sha256": "396cccd9d60bc05e05f5d21fb893146ff1c890e44bbd3f4779990c8c45fc41b3",
+      "bytes": 54319,
+      "source": "Capture utilisateur : tableau de tâches vide"
+    },
+    {
+      "path": "screenshots/2026-10-01-feedback-04.png",
+      "sha256": "9690a4dbb22766d6cf23c201c93b8d2872d90a7a751b6e1ee48cf6325cd08abd",
+      "bytes": 17213,
+      "source": "Capture utilisateur : modèles Codex manquants, complément à la TODO"
     }
   ]
 }

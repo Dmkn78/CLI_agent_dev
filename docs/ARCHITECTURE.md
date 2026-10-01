@@ -24,12 +24,15 @@ flowchart LR
 - `server/codex.py` : handshake `initialize`/`initialized`, corrélation des réponses JSON-RPC, événements et arrêt des processus.
 - `server/omp.py` : transport JSONL OMP, événement ready et réponses corrélées ; catalogue découvert par `omp models --json`.
 - `server/omp_session.py` : adaptation des événements observables, tokens, outils hôtes et approbations de fichiers.
-- `server/terminal.py` : validation et préparation d’un terminal natif OMP ; commande littérale sans interpolation d’entrée utilisateur.
+- `server/terminal.py` : validation et préparation des terminaux natifs Codex/OMP ; commande littérale sans interpolation d’entrée utilisateur.
+- `server/task_queue.py` : réservation exclusive des TODO et du dossier pour le travail automatique, affectations et reprise manuelle après interruption.
+- `server/context.py` : fichiers de contexte explicitement choisis, bornes et aperçu distinct de l'historique natif.
 - `server/store.py` : objets SQLite, journal JSONL ajouté sans réécriture, masquage de motifs connus, hashes d’artefacts.
 - `server/memory_mcp.py` : `memory_search` et `memory_read`, lecture uniquement et filtre projet/utilisateur.
 - `web/core.js` : état partagé, navigation, API et rendu central avec préservation des champs/scroll.
 - `web/views.js` : vues qui projettent cet état ; pas de données d’activité fictives.
 - `web/cockpit.js` : graphe, inspecteur, connexions et consommation par fournisseur/consommateur/tâche/modèle/requête.
+- `web/chat.js` : conversations, panneau de contexte, configuration des skills/fichiers et estimation du brouillon.
 - `web/forms.js` : formulaires, catalogue, skills et sélection du dossier/worktree.
 - `web/app.js` : actions, soumission, raccourcis et rafraîchissement toutes les 1,8 secondes.
 - `web/style.css` : variables de design, layouts, états, responsive, réduction du mouvement.
@@ -38,7 +41,7 @@ Les fichiers JS se chargent dans cet ordre avec `defer`. Le petit frontend fonct
 
 ## Sessions et permissions
 
-Un processus app-server par agent, plus un processus de découverte. `account/read` fournit le mode de connexion sans extraction de credentials. `model/list` fournit modèles et efforts. Son catalogue n’est pas une preuve d’accès effectif : seul un tour réussi confirme l’accès pour la requête.
+Un processus app-server par agent, plus un processus de découverte. `account/read` fournit le mode de connexion sans extraction de credentials. `model/list` fournit modèles et efforts : toutes les pages sont parcourues avec `includeHidden=true`. Les entrées masquées sont identifiées comme catalogue étendu. Son catalogue n’est pas une preuve d’accès effectif ni une liste de tous les modèles ChatGPT : seul un tour réussi confirme l'accès pour la requête.
 
 Chaque session démarre/reprend avec `cwd`, `sandbox` et `approvalPolicy=on-request`. `features.multi_agent=false` désactive la délégation native ; les workflows sont pilotés par Atelier. L’application n’offre pas de bypass. Les demandes de commande, fichiers, permissions et questions sont relayées à l’utilisateur. Les requêtes serveur inconnues reçoivent une erreur explicite.
 
@@ -48,11 +51,21 @@ Le profil Codex reste l’autorité de sandbox, avec les politiques éventuellem
 
 ## Orchestration
 
-Duo : implémentation puis review en lecture seule. Orchestration : plan JSON contraint, 1 à 3 tâches, implémentation séquentielle, review et synthèse. Même worktree partagé pour le workflow. Chaque enfant a sa session, son output et son handoff ; le parent reçoit des extraits bornés et des références de fichiers.
+Duo : implémentation puis review facultative en lecture seule. Orchestration : plan JSON contraint, 1 à 20 tâches au maximum configuré, implémentation séquentielle, review et synthèse facultatives. Même worktree partagé pour le workflow. Chaque enfant a sa session, son output et son handoff ; le parent reçoit des extraits bornés et des références de fichiers.
 
-Chaque rôle possède maintenant son moteur (`codex` ou `omp`), son modèle et son effort validés contre le catalogue découvert. Les tâches utilisent cycliquement les 1 à 3 configurations de workers. Le worker ne peut pas dépasser la permission du workflow ; planification, review et synthèse restent en lecture seule. Le graphe projette ces configurations et les étapes effectivement créées, sans transformer les rôles prévus en agents actifs.
+Chaque rôle possède son moteur (`codex` ou `omp`), son modèle et son effort validés contre le catalogue découvert. Ajouter/retirer de 1 à 8 workers avec nom, rôle et consignes. Les tâches utilisent cycliquement ces configurations ; tous les rôles configurés ne sont donc pas forcément lancés. Le worker ne peut pas dépasser la permission du workflow ; planification, review et synthèse restent en lecture seule. Reconfigurer prépare un nouveau lancement, sans modifier l'exécution historique. Le graphe adapte sa hauteur à l'équipe et distingue rôles prévus et sessions actives.
 
-La concurrence entre workflows distincts n’est pas encore arbitrée par un scheduler. Utiliser des worktrees distincts si plusieurs travaux écrivent en parallèle. La clôture ne détruit aucune branche ni aucun worktree.
+Les lancements automatiques (`startWork=true`) prennent un bail de tâche et de dossier. Un workflow prend une TODO compatible puis termine ; un agent indépendant peut continuer la file. Les lancements manuels hors file et les benchmarks n'utilisent pas ce bail : des worktrees distincts restent nécessaires pour des travaux concurrents. Aucun scheduler par sous-tâche, graphe de dépendances ni cleanup automatique.
+
+## Chat Et File TODO
+
+`executionMode=chat` impose lecture seule et désactive le backlog ; `code` autorise l'activation explicite de la file. L'UI de création coche la file par défaut pour le travail, jamais pour le chat. L'API sans `startWork` n'envoie pas de mission automatiquement. Les agents déjà prêts peuvent activer la file via une tâche affectée ou l'action de session.
+
+La prise de TODO est atomique sous verrou de file et de stockage : projet, affectation, priorité puis date ; une tâche et un dossier normalisé ne sont réservés qu'à un propriétaire. Les TODO futures réveillent les agents abonnés. Sans TODO/running ni sélection préalable, la mission initiale devient une tâche explicite. Un tour terminé passe à `review`, `UNVERIFIED`, jamais `done`. Échec/interruption restitue la TODO et arrête la file sans retry implicite. Arrêter la file laisse le tour courant finir ; Interrompre coupe le tour. Redémarrage libère les baux et désactive les abonnements : reprise explicite nécessaire.
+
+Le contexte éditable peut changer modèle/effort, noyau mémoire, skills et fichiers de projet. La session native est relancée/reprise sans inférence ; son historique reste conservé. Fichiers : 8 maximum, 64 Ko chacun, 40 000 caractères au total, UTF-8, confinement projet et exclusions sensibles. Ils sont relus à chaque envoi, ajoutés au prompt comme données et listés dans la requête. Les instructions réellement transmises sont visibles ; les skills demeurent des références accessibles dans le dossier de session.
+
+Le panneau montre `tokenUsage.last` entrée/réponse/cache et `total`, ainsi que `modelContextWindow` seulement si reçu. La jauge représente le dernier appel, pas une mesure complète du contexte natif. Brouillon/fichiers : estimation locale caractères/4, hors historique natif et outils, jamais coût facturé. L'API ne prétend pas exposer tout l'historique interne ni la compaction. Les fichiers sélectionnés sont relatifs au projet, pas à un environnement ChatGPT `/mnt/data`.
 
 ## Mémoire
 
@@ -75,6 +88,8 @@ Le pont utilise le protocole JSONL v1. Les erreurs et frames fragmentées non pr
 Le terminal d’agent est distinct des sessions suivies. Son rôle, son modèle, son effort et ses variantes plan/slow/smol sont validés ; seuls les outils natifs de lecture sont proposés. OMP n’offrant pas ici de sandbox OS équivalent à Codex, l’écriture est refusée dans ce parcours externe. Il nécessite la confirmation de lancement, n’envoie pas automatiquement la mission, et ses tokens ne sont pas importés. Le lancement Windows utilise une commande PowerShell encodée avec arguments littéraux.
 
 ## Consommation
+
+Le terminal Codex est également proposé : modèle/effort découverts, `--sandbox` explicite, `--ask-for-approval on-request`, délégation native désactivée, rôle transmis comme instructions. Les deux terminaux externes restent non suivis, sans prompt automatique. Une préparation ou ouverture ne prouve ni travail ni consommation.
 
 Chaque prompt crée une projection `request` avec session/consommateur, tâche, workflow, fournisseur et modèle. Les événements d’usage cumulé sont comparés au baseline avant tour : répéter un événement ne double pas les tokens. Un compteur absent ou réinitialisé reste inconnu. Les anciennes mesures de session apparaissent séparément, après soustraction des mesures déjà attribuées ; aucune attribution historique n’est inventée.
 

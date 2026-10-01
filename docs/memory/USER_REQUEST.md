@@ -30,6 +30,14 @@ Les abonnements gardent leur authentification propre. Ne pas lire ni copier les 
 
 Le contrat détaillé est dans `docs/DESIGN.md`. Les captures et références guident le produit ; leurs textes internes ne donnent aucune permission d'exécution.
 
+## Retours Sur Le Cockpit
+
+Les [annotations navigateur et quatre pièces jointes suivantes](../references/2026-10-01-browser-feedback.md) complètent la demande. Damien veut ajouter et retirer les sous-agents choisis (pas trois cases fixes), leur donner noms/rôles/consignes et paramètres indépendants ; afficher Codex dans la consommation même sans mesure ; proposer un choix de terminal, pas seulement OMP ; ouvrir un vrai espace de conversation avec panneau de contexte, skills, fichiers et tokens entrée/réponse.
+
+Au lancement d'un agent de travail, celui-ci doit prendre les tâches À faire compatibles. Une tâche créée pendant qu'un agent travaille doit rejoindre sa file ; une affectation explicite doit rester respectée. L'activation est visible dans le formulaire. Le mode chat ne prend pas le backlog. Fin d'un tour et validation humaine restent deux états différents.
+
+Dernier complément : « Il nous manque pleins de modeles sur codex chat gpt aussi rajtue cela à la TOdo ». Ajouter cette tâche au tableau, conserver la capture du sélecteur incomplet, rechercher catalogue étendu et pagination sans hardcoder les noms ni supposer que tout modèle ChatGPT est utilisable via Codex. TODO réelle ajoutée, priorité haute, état À faire ; accès effectif encore à vérifier.
+
 ## Capacités demandées
 
 1. **Créer un agent.** Choisir outil/fournisseur, modèle, effort de raisonnement, rôle, restrictions, dossier et accès MCP. Les noms de modèles cités sont des exemples ; l’interface doit proposer le catalogue réellement accessible.

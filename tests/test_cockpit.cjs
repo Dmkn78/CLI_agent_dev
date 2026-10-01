@@ -6,10 +6,13 @@ const context = vm.createContext({
   usageProvider: '',
   records: {},
   esc: value => String(value ?? ''),
+  provider: () => ({models:[]}),
 });
 vm.runInContext(fs.readFileSync('web/cockpit.js','utf8'),context);
 
 assert.equal(context.sumObserved([], 'totalTokens'),null);
+context.records = {};
+assert.deepEqual(Array.from(context.consumptionProviders()),['codex']);
 assert.equal(context.sumObserved([{usage:{totalTokens:0}}], 'totalTokens'),0);
 assert.equal(context.sumObserved([{usage:null},{usage:{totalTokens:12}}], 'totalTokens'),12);
 context.records = {

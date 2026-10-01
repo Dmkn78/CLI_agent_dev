@@ -3,7 +3,7 @@ function cockpitView() {
   const active = list.filter(s => ['running','waiting','initializing'].includes(s.status));
   const measured = list.filter(s => s.usage?.total?.totalTokens != null);
   const tokens = measured.reduce((sum, s) => sum + s.usage.total.totalTokens, 0);
-  return `${heading('ESPACE DE TRAVAIL', 'Atelier', esc(project().name), `<div class="heading-actions">${btn('terminal-omp','Terminal OMP','terminal')}${btn('new-agent','Nouvel agent','plus','primary')}</div>`)}
+  return `${heading('ESPACE DE TRAVAIL', 'Atelier', esc(project().name), `<div class="heading-actions">${btn('terminal','Terminal','terminal')}${btn('new-chat','Chat','agents')}${btn('new-agent','Nouvel agent','plus','primary')}</div>`)}
     <div class="cockpit-summary"><span>${icon('agents')}<strong>${list.length}</strong> sessions</span><span><i class="status-dot"></i><strong>${active.length}</strong> en activité</span><span>${icon('tasks')}<strong>${objects('tasks').filter(t => t.status !== 'done').length}</strong> tâches ouvertes</span><span>${icon('usage')}<strong>${measured.length ? compact(tokens) : '—'}</strong> tokens observés</span></div>
     ${workspaceGraph()}
     <div class="cockpit-bottom"><section class="work-band"><div class="panel-heading"><h3>${icon('audit')} Activité du projet</h3>${btn('navigate','Journal','arrow','quiet','data-view="audit"')}</div>${activityList(state.events.filter(e => e.projectId === projectId).slice(0,6))}</section><section class="work-band"><div class="panel-heading"><h3>${icon('tasks')} Tâches</h3>${btn('new-task','Ajouter','plus','quiet')}</div>${objects('tasks').slice(0,5).map(t => `<button class="cockpit-task" data-action="edit-task" data-id="${esc(t.id)}"><strong>${esc(t.title)}</strong>${badge(t.status)}</button>`).join('') || '<p class="muted panel-description">Aucune tâche enregistrée.</p>'}</section></div>`;
@@ -20,6 +20,7 @@ function workspaceGraph() {
   const workflows = objects('workflows');
   const workflow = graphWorkflowId === 'sessions' ? null : workflows.find(w => w.id === graphWorkflowId) || workflows.at(-1);
   const independent = objects('sessions').filter(s => !s.parentId);
+  const graphHeight = Math.max(560,(workflow?.agents?.workers?.length || 0)*165+65);
   let nodes = graphNode('project', project().name, project().path, '', 2.5, 235, 'folder', 'neutral');
   let edges = '';
   if (workflow) {
@@ -31,17 +32,18 @@ function workspaceGraph() {
       const step = implementationSteps.filter((s,i) => (s.workerIndex ?? i) % workerConfigs.length === index).at(-1);
       const session = state.sessions.find(s => s.id === step?.sessionId);
       const y = 65 + index * 165;
-      nodes += graphNode(session?.id || 'worker:' + index, 'Spécialiste ' + (index + 1), session?.model || config.model, session?.status, 53, y, 'code', index === 1 ? 'purple' : 'green');
+      nodes += graphNode(session?.id || 'worker:' + index, config.name || 'Spécialiste ' + (index + 1), session?.model || config.model, session?.status, 53, y, 'code', index === 1 ? 'purple' : 'green');
       edges += graphEdge(450,282,530,y + 47, session?.status === 'running' ? 'active' : '');
-      edges += graphEdge(710,y + 47,780,202,'handoff');
+      if (workflow.agents?.reviewer !== null) edges += graphEdge(710,y + 47,780,202,'handoff');
     });
     ['Vérification','Synthèse'].forEach((role, index) => {
       const step = workflow.steps.find(s => s.role === role);
       const session = state.sessions.find(s => s.id === step?.sessionId);
       const config = workflow.agents?.[index ? 'synthesizer' : 'reviewer'];
+      if (config === null || (index && workflow.mode !== 'orchestration')) return;
       nodes += graphNode(session?.id || 'role:' + role, role, session?.model || config?.model || workflow.model, session?.status, 78, index ? 320 : 155, index ? 'audit' : 'shield', index ? 'pink' : 'amber');
     });
-    edges += graphEdge(870,250,870,320,'handoff');
+    if (workflow.agents?.reviewer !== null && workflow.agents?.synthesizer !== null && workflow.mode === 'orchestration') edges += graphEdge(870,250,870,320,'handoff');
   } else if (independent.length) {
     graphPage = Math.min(graphPage, Math.max(0,Math.ceil(independent.length/6)-1));
     independent.slice(graphPage*6,graphPage*6+6).forEach((session, index) => {
@@ -58,7 +60,7 @@ function workspaceGraph() {
   nodes += graphNode('artifacts', 'Sorties & preuves', artifacts.length + ' sessions avec artefacts', '', 2.5, 410, 'audit', 'neutral');
   const graphSelect = workflows.length ? `<label class="graph-filter">Vue<select id="graph-workflow"><option value="sessions" ${!workflow ? 'selected' : ''}>Sessions indépendantes</option>${workflows.map(w => `<option value="${esc(w.id)}" ${w.id === workflow?.id ? 'selected' : ''}>${esc(w.title)}</option>`).join('')}</select></label>` : '';
   const pages = !workflow && independent.length > 6 ? `<div class="graph-pagination">${btn('graph-page','Précédent','chevron','quiet','data-direction="-1"')}<span>${graphPage+1} / ${Math.ceil(independent.length/6)}</span>${btn('graph-page','Suivant','arrow','quiet','data-direction="1"')}</div>` : '';
-  return `<section class="graph-workspace"><div class="graph-heading"><div><h2>${icon('network')} Architecture des agents</h2><span class="muted small">${esc(project().name)} · ${workflow ? 'Orchestration séquentielle' : independent.length + ' sessions indépendantes'}</span></div>${graphSelect}</div><div class="graph-layout"><div class="graph-scroll" data-scroll="agent-graph"><div class="graph-canvas"><svg class="graph-links" viewBox="0 0 1000 560" preserveAspectRatio="none" aria-hidden="true"><defs><marker id="graph-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>${edges}</svg>${nodes}<div class="graph-legend"><span><i class="green"></i> Activité</span><span><i class="amber"></i> Revue</span><span><i class="purple"></i> Spécialiste</span></div></div>${pages}</div><aside class="graph-inspector">${graphDetails(workflow, artifacts)}</aside></div></section>`;
+  return `<section class="graph-workspace"><div class="graph-heading"><div><h2>${icon('network')} Architecture des agents</h2><span class="muted small">${esc(project().name)} · ${workflow ? 'Orchestration séquentielle' : independent.length + ' sessions indépendantes'}</span></div>${graphSelect}</div><div class="graph-layout"><div class="graph-scroll" data-scroll="agent-graph"><div class="graph-canvas" style="height:${graphHeight}px"><svg class="graph-links" viewBox="0 0 1000 ${graphHeight}" preserveAspectRatio="none" aria-hidden="true"><defs><marker id="graph-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>${edges}</svg>${nodes}<div class="graph-legend"><span><i class="green"></i> Activité</span><span><i class="amber"></i> Revue</span><span><i class="purple"></i> Spécialiste</span></div></div>${pages}</div><aside class="graph-inspector">${graphDetails(workflow, artifacts)}</aside></div></section>`;
 }
 function graphDetails(workflow, artifacts) {
   if (workflow && (selectedGraphNode?.startsWith('worker:') || selectedGraphNode?.startsWith('role:'))) {
@@ -102,10 +104,15 @@ function csvCell(value) {
   if (/^\s*[=+\-@]/.test(text)) text = "'" + text;
   return '"' + text.replaceAll('"','""') + '"';
 }
+function consumptionProviders() {
+  return [...new Set(['codex',...(provider('omp').models || []).map(model => model.provider),
+    ...objects('requests').map(request => request.provider),...objects('sessions').map(session => session.provider)].filter(Boolean))];
+}
 function consumptionView() {
   const records = consumptionRecords();
-  const providers = [...new Set([...objects('requests'), ...objects('sessions')].map(r => r.provider || 'codex'))];
+  const providers = consumptionProviders();
   const groups = new Map();
+  if (usageGrouping === 'provider') providers.filter(id => !usageProvider || usageProvider === id).forEach(id => groups.set(id,{title:id === 'codex' ? 'Codex · OpenAI' : id,records:[]}));
   for (const record of records) {
     const session = state.sessions.find(s => s.id === record.sessionId);
     let key = record.provider, title = key;

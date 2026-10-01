@@ -87,6 +87,8 @@ let view = "overview",
   lastStateHash = "",
   loading = false;
 let selectedGraphNode = null, graphWorkflowId = '', graphPage = 0, usageGrouping = 'provider', usageProvider = '', terminalSettings = null;
+let selectedChatId = null;
+const chatFileCharacters = {};
 const project = () =>
   state.projects.find((p) => p.id === projectId) ||
   state.projects[0] || { id: "atelier", name: "Atelier", path: "" };
@@ -244,6 +246,7 @@ function render() {
     const el = document.getElementById(key);
     if (el && el.tagName !== "BUTTON") el.value = val;
   });
+  $('#main').querySelectorAll('.prompt-form textarea').forEach(updateDraftEstimate);
   $("#main")
     .querySelectorAll("[data-scroll]")
     .forEach((el) => {

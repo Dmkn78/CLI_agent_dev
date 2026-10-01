@@ -3,7 +3,18 @@ const actions = {
   'select-workflow': (el) => { graphWorkflowId = el.dataset.id; selectedGraphNode = null; render(); },
   'graph-page': (el) => { graphPage = Math.max(0, graphPage + Number(el.dataset.direction)); selectedGraphNode = null; render(); },
   'usage-group': (el) => { usageGrouping = el.dataset.group; render(); },
-  'terminal-omp': () => terminalModal(),
+  'terminal-omp': () => terminalModal('omp'),
+  'terminal': () => terminalModal(),
+  'new-chat': () => newAgent('classic','chat'),
+  'open-chat': async (el) => { selectedChatId = el.dataset.id; agentLayout = 'chat'; route('agents'); await loadChatFiles(el.dataset.id); },
+  'session-context': (el) => sessionContextModal(el.dataset.id),
+  'toggle-work': async (el) => { await api('sessions/work',{id:el.dataset.id,enabled:el.dataset.enabled === 'true'}); await refresh(true); },
+  'add-worker': () => {
+    if (document.querySelectorAll('[data-worker-index]').length >= 8) throw new Error('Maximum 8 sous-agents.');
+    $('#worker-editors').insertAdjacentHTML('beforeend',workerConfiguration(nextWorkerIndex++));
+    updateWorkerCount();
+  },
+  'remove-worker': (el) => { el.closest('[data-worker-index]').remove(); updateWorkerCount(); },
   'omp-connect': async (el) => {
     terminalSettings = {projectId, loginProvider: el.dataset.id};
     const plan = await api('terminal/prepare', terminalSettings);
@@ -23,6 +34,7 @@ const actions = {
   dismiss: () => $("#modal").close(),
   "new-agent": (el) => newAgent(el.dataset.mode || "classic"),
   "new-workflow": () => newAgent("orchestration"),
+  'configure-team': (el) => { const workflow = state.workflows.find(workflow => workflow.id === el.dataset.id); return newAgent(workflow.mode,'code',workflow); },
   "new-task": (el) => taskModal(null, el.dataset.status),
   "edit-task": (el) => taskModal(el.dataset.id),
   "new-memory": () => memoryModal(),
@@ -30,14 +42,16 @@ const actions = {
   "new-sprint": () => sprintModal(),
   "edit-sprint": (el) => sprintModal(el.dataset.id),
   "new-benchmark": () => benchmarkModal(),
-  "agent-layout": (el) => {
+  "agent-layout": async (el) => {
     agentLayout = el.dataset.layout;
     if (agentLayout === "panes" && !selectedAgents.length && sessions().length)
       selectedAgents = [sessions()[0].id];
     render();
+    if (agentLayout === 'chat' && selectedChatId) await loadChatFiles(selectedChatId);
   },
   "open-agent": (el) => {
     const id = el.dataset.id;
+    if (state.sessions.find(session => session.id === id)?.executionMode === 'chat') return actions['open-chat'](el);
     if (!selectedAgents.includes(id))
       selectedAgents = [...selectedAgents.slice(-2), id];
     agentLayout = "panes";
@@ -168,7 +182,7 @@ const actions = {
   },
   interrupt: async (el) => {
     await api("sessions/interrupt", { id: el.dataset.id });
-    toast("Demande d’arrêt envoyée à Codex.");
+    toast("Arrêt demandé au moteur ; file TODO désactivée.");
     await refresh(true);
   },
   resume: async (el) => {
@@ -286,7 +300,7 @@ function updateConfigurationModels(scope) {
   const models = provider(runtime).models || [];
   const modelSelect = scope.querySelector(`[name="${prefix}model"]`);
   const previous = modelSelect.value;
-  modelSelect.innerHTML = models.map(m => `<option value="${esc(m.model)}">${esc(m.displayName)}${runtime === 'omp' ? ' · ' + esc(m.provider) : ''}</option>`).join('');
+  modelSelect.innerHTML = models.map(m => `<option value="${esc(m.model)}">${esc(m.displayName)}${m.hidden ? ' · catalogue étendu' : ''}${runtime === 'omp' ? ' · ' + esc(m.provider) : ''}</option>`).join('');
   if (models.some(m => m.model === previous)) modelSelect.value = previous;
   updateConfigurationEfforts(scope);
 }
@@ -301,6 +315,23 @@ function updateConfigurationEfforts(scope) {
 }
 function configurationValues(form, prefix) {
   return Object.fromEntries(['runtime', 'model', 'effort'].map(key => [key, form.elements[prefix + key].value]));
+}
+function updateWorkerCount() {
+  const count = document.querySelectorAll('[data-worker-index]').length;
+  $('#worker-count').textContent = count+' / 8';
+  $('[data-action="add-worker"]').disabled = count >= 8;
+}
+function updateAgentMode(form) {
+  const chat = form.elements.executionMode?.value === 'chat';
+  const picker = form.querySelector('.mode-picker');
+  picker.hidden = chat;
+  if (chat) form.querySelector('[name="mode"][value="classic"]').checked = true;
+  $('#workflow-configuration').hidden = chat || form.elements.mode.value === 'classic';
+  form.elements.sandbox.value = chat ? 'read-only' : form.elements.sandbox.value;
+  form.elements.sandbox.disabled = chat;
+  form.elements.startWork.checked = !chat;
+  form.elements.startWork.disabled = chat;
+  if (chat && !form.elements.name.value) form.elements.name.value = 'Nouvelle conversation';
 }
 document.addEventListener("click", async (event) => {
   const el = event.target.closest("[data-action]");
@@ -334,25 +365,33 @@ document.addEventListener("submit", async (event) => {
           projectId,
           memory: fd.has("memory"),
           skills: fd.getAll("skills"),
+          startWork: fd.has('startWork'),
+          sandbox: value.executionMode === 'chat' ? 'read-only' : value.sandbox,
         };
         if (value.mode !== 'classic') {
           data.agents = {
             planner: configurationValues(form, 'planner_'),
-            reviewer: configurationValues(form, 'reviewer_'),
-            synthesizer: configurationValues(form, 'synthesizer_'),
-            workers: [0,1,2].filter(i => i === 0 || fd.has('worker' + i + '_enabled')).map(i => ({...configurationValues(form, 'worker' + i + '_'), sandbox: value['worker' + i + '_sandbox']})),
+            reviewer: fd.has('reviewer_enabled') ? configurationValues(form, 'reviewer_') : null,
+            synthesizer: fd.has('synthesizer_enabled') ? configurationValues(form, 'synthesizer_') : null,
+            workers: [...form.querySelectorAll('[data-worker-index]')].map(editor => {
+              const prefix = 'worker'+editor.dataset.workerIndex+'_';
+              return {...configurationValues(form,prefix),...Object.fromEntries(['name','role','sandbox','instructions'].map(key => [key,value[prefix+key]]))};
+            }),
           };
+          if (!data.agents.workers.length) throw new Error('Ajoute au moins un sous-agent pour lancer une équipe.');
         }
         if (!data.model)
           throw new Error("Chargez le catalogue de modèles depuis Connexions.");
-        if (value.mode !== "classic" && !value.mission.trim())
-          throw new Error(
-            "Une mission est nécessaire pour lancer un workflow.",
-          );
+        if (value.mode !== 'classic' && !value.mission.trim()) {
+          const task = objects('tasks').find(task => task.status === 'todo' && (!value.taskId || task.id === value.taskId));
+          if (!data.startWork || !task) throw new Error('Indique une mission ou choisis une tâche À faire.');
+          data.mission = task.title;
+        }
         if (value.mode === "classic") {
           const s = await api("sessions", data);
           selectedAgents = [s.id];
-          agentLayout = "panes";
+          agentLayout = value.executionMode === 'chat' ? 'chat' : 'panes';
+          if (value.executionMode === 'chat') selectedChatId = s.id;
           view = "agents";
         } else {
           await api("workflows", data);
@@ -364,15 +403,26 @@ document.addEventListener("submit", async (event) => {
         break;
       }
       case 'terminal': {
-        terminalSettings = {...value, projectId, sandbox: 'read-only'};
+        terminalSettings = {...value, projectId};
         const plan = await api('terminal/prepare', terminalSettings);
-        terminalReview(plan, 'Oh My Pi');
+        terminalReview(plan, value.runtime === 'omp' ? 'Oh My Pi' : 'Codex');
         break;
       }
       case "prompt":
         await api("sessions/prompt", { id: form.dataset.id, text: value.text });
         form.reset();
+        {
+          const current = document.getElementById('prompt-'+form.dataset.id);
+          if (current && current.value === value.text) current.value = '';
+        }
         await refresh(true);
+        break;
+      case 'session-context':
+        await api('sessions/context',{id:form.dataset.id,model:value.model,effort:value.effort,memory:fd.has('memory'),skills:fd.getAll('skills'),contextFiles:value.contextFiles.split(/\r?\n/).map(path => path.trim()).filter(Boolean)});
+        delete chatFileCharacters[form.dataset.id];
+        $('#modal').close();
+        await refresh(true);
+        await loadChatFiles(form.dataset.id);
         break;
       case "answers":
         await api("approvals", { id: form.dataset.id, answers: value });
@@ -398,6 +448,7 @@ document.addEventListener("submit", async (event) => {
         break;
       case "task":
       case "sprint":
+        if (form.dataset.form === 'task') value.activateAgent = fd.has('activateAgent');
         await api("save", {
           kind: form.dataset.form,
           value: {
@@ -454,6 +505,7 @@ document.addEventListener("submit", async (event) => {
   }
 });
 document.addEventListener("input", (event) => {
+  if (event.target.closest('.prompt-form') && event.target.name === 'text') updateDraftEstimate(event.target);
   if (event.target.id === "memory-search") {
     memoryQuery = event.target.value;
     render();
@@ -474,8 +526,15 @@ document.addEventListener("change", (event) => {
     if (form?.elements.effort) updateEfforts(form);
   }
   if (event.target.name === 'mode') $('#workflow-configuration').hidden = event.target.value === 'classic';
-  if (/^worker[12]_enabled$/.test(event.target.name)) {
-    $(`[data-worker-extra="${event.target.name[6]}"]`).hidden = !event.target.checked;
+  if (event.target.name === 'executionMode') updateAgentMode(event.target.closest('form'));
+  if (['reviewer_enabled','synthesizer_enabled'].includes(event.target.name)) {
+    $(`[data-optional-role="${event.target.name.split('_')[0]}"]`).hidden = !event.target.checked;
+  }
+  if (event.target.closest('[data-form="terminal"]') && event.target.name === 'runtime') {
+    $('#omp-terminal-variants').hidden = event.target.value !== 'omp';
+    const sandbox = event.target.closest('form').elements.sandbox;
+    if (event.target.value === 'omp') sandbox.value = 'read-only';
+    sandbox.options[1].disabled = event.target.value === 'omp';
   }
   if (event.target.id === 'graph-workflow') { graphWorkflowId = event.target.value; selectedGraphNode = null; render(); }
   if (event.target.id === 'usage-provider') { usageProvider = event.target.value; render(); }

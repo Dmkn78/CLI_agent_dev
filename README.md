@@ -24,19 +24,20 @@ Une seule instance doit utiliser le même dossier de données. `--data /chemin/v
 
 ## Ce qui fonctionne
 
-- Catalogue réel Codex, choix du modèle et de son effort de raisonnement.
+- Catalogue Codex paginé et étendu (`includeHidden`), choix du modèle et de son effort de raisonnement ; accès réel distinct du catalogue.
 - Catalogue Oh My Pi découvert, connexions natives OAuth/API et sessions Atelier avec outils de fichiers restreints, sans shell.
 - Sessions persistantes, réponses en streaming, jusqu’à trois panneaux côte à côte, interruption et reprise.
 - Lecture seule ou écriture projet ; demandes d’approbation et questions du modèle visibles dans l’interface.
 - Dossier projet, worktree Git existant ou nouveau worktree. Les worktrees restent conservés après clôture.
-- Duo implémenteur / vérificateur ; workflow planificateur → 1 à 3 tâches → vérificateur → synthèse. Les étapes sont séquentielles.
+- Équipes de 1 à 8 sous-agents ajoutables/supprimables, noms/rôles/consignes ; jusqu'à 20 tâches planifiées, vérification et synthèse facultatives. Les étapes sont séquentielles.
 - Moteur, modèle et effort indépendants par rôle ; graphe des configurations et étapes réelles avec inspecteur de session.
-- Tableau des tâches, priorités, sprints et rattachement d’une session à une tâche. Les statuts de tâches restent une décision humaine.
+- Tableau des tâches, priorités, sprints, affectation et file TODO activée au lancement des agents de travail ; réservation exclusive par tâche et dossier. Fin technique → En revue, Terminé reste humain.
+- Mode chat en lecture seule avec conversations et panneau contexte : mémoire, skills, fichiers explicitement choisis, instructions transmises, entrée/réponse/cache observés et estimation du brouillon.
 - Mémoire projet / utilisateur, noyau de 4 000 caractères maximum, réserve et recherche lexicale en lecture via MCP.
 - Sélection de skills `SKILL.md` présents dans les dossiers du projet.
 - Explorateur en lecture seule, aperçu d’images, état Git et lecture des PR si `gh` est installé et connecté.
 - Tokens observés, cache lu, ventilation par fournisseur, consommateur, tâche, modèle et requête, export CSV ; aucune facturation déduite de l’abonnement.
-- Préparation d’un terminal Oh My Pi avec rôle, modèle, effort et variantes plan/slow/smol ; lancement après confirmation.
+- Préparation d'un terminal Codex ou Oh My Pi avec rôle, modèle, effort, permissions et variantes OMP plan/slow/smol ; lancement après confirmation, aucun prompt automatique.
 - Campagnes de 1 à 50 tests, contexte Atelier neuf, oracle exact ou review par un modèle distinct. Générateur de cas avec examen humain avant lancement, export JSON et hash du dataset.
 - Journaux JSONL par agent, rapports Markdown, sorties, handoffs JSON et hash SHA-256 des sorties.
 
@@ -48,13 +49,13 @@ Les sessions OMP intégrées ne disposent que de la lecture locale et, si autori
 
 Claude Code et Ollama sont détectés ; leurs adaptateurs de session ne sont pas encore implémentés. Les benchmarks évaluent des réponses textuelles. Une review par modèle est un avis, pas une preuve de compilation ni une certification de sécurité. Les oracles de code et les recettes visuelles sont à ajouter.
 
-GitHub est optionnel, en lecture. Création/merge de PR, scheduler de ressources, worktrees par sous-tâche en parallèle et distribution desktop native restent à développer. ChatGPT s’ouvre dans son navigateur ; ni ses conversations ni son environnement `/mnt/data` ne sont fournis par Codex app-server.
+GitHub est optionnel, en lecture. Création/merge de PR, scheduler par sous-tâche, worktrees par sous-tâche en parallèle et distribution desktop native restent à développer. Le chat Atelier utilise Codex/OMP ; il n'importe pas les conversations ChatGPT ni `/mnt/data`. Le contexte natif et sa compaction ne sont pas entièrement exposés. La jauge concerne le dernier appel, l'estimation caractères/4 ne vaut pas token facturé.
 
 ## Données et reprise
 
 Tout est enregistré dans `.atelier/` : projections SQLite, `logs/*.jsonl`, `runs/<id>/output.md`, `handoff.json`, `report.md`, résultats et worktrees. Sauvegardez ce dossier avec les fichiers du projet. Les journaux sont ajoutés sans réécriture, mais ne constituent pas un stockage immuable protégé contre un administrateur local. Les clés connues et motifs usuels de credentials sont masqués ; cela ne remplace pas une revue des exports avant partage.
 
-Après redémarrage, les sessions passent en état arrêté et se reprennent via leur thread Codex. Les campagnes interrompues sont conservées avec leurs résultats partiels ; elles ne reprennent pas automatiquement. Les demandes d’autorisation expirées sont effacées.
+Après redémarrage, les sessions passent en état arrêté et se reprennent via leur thread Codex. Les campagnes interrompues sont conservées avec leurs résultats partiels ; elles ne reprennent pas automatiquement. Les demandes d’autorisation expirées sont effacées. Les TODO réservées sont libérées et leur file reste arrêtée jusqu'à votre activation explicite.
 
 ## Tests et maintenance
 

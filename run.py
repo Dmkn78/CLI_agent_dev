@@ -79,10 +79,12 @@ def make_handler(app, token):
                     for directory, dirs, files in os.walk(root):
                         dirs[:] = [d for d in dirs if d not in IGNORED and not d.startswith('.') and not (Path(directory) / d).is_symlink()]
                         if 'SKILL.md' in files:
-                            paths.append(str((Path(directory) / 'SKILL.md').relative_to(root)))
+                            paths.append((Path(directory) / 'SKILL.md').relative_to(root).as_posix())
                         if len(paths) >= 80:
                             break
                     self.reply(paths)
+                elif route == '/api/sessions/context':
+                    self.reply(app.session_context(query['id']))
                 elif route == '/api/image':
                     path = app.file_path(query.get('project', 'atelier'), query.get('path', ''))
                     if path.suffix.lower() not in ('.png', '.jpg', '.jpeg', '.webp') or path.stat().st_size > 10 * 1024 * 1024:
@@ -91,7 +93,7 @@ def make_handler(app, token):
                 elif route in ('/', '/index.html'):
                     content = (ROOT / 'web/index.html').read_text().replace('__ATELIER_TOKEN__', token)
                     self.reply(content.encode(), mime='text/html; charset=utf-8')
-                elif route in ('/app.js', '/core.js', '/views.js', '/cockpit.js', '/forms.js', '/style.css', '/icon.svg'):
+                elif route in ('/app.js', '/core.js', '/views.js', '/cockpit.js', '/chat.js', '/forms.js', '/style.css', '/icon.svg'):
                     path = ROOT / 'web' / route[1:]
                     self.reply(path.read_bytes(), mime=mimetypes.guess_type(path.name)[0] or 'text/plain')
                 elif route == '/favicon.ico':
@@ -130,6 +132,10 @@ def make_handler(app, token):
                     result = app.interrupt(data['id'])
                 elif route == '/api/sessions/resume':
                     result = app.resume(data['id'])
+                elif route == '/api/sessions/context':
+                    result = app.configure_session(data['id'], data)
+                elif route == '/api/sessions/work':
+                    result = app.set_work(data['id'], data.get('enabled', True))
                 elif route == '/api/sessions/report':
                     result = app.report(data['id'], bool(data.get('close')))
                 elif route == '/api/approvals':

@@ -11,6 +11,32 @@ def powershell_literal(value):
     return "'" + str(value).replace("'", "''") + "'"
 
 
+def terminal_plan(cwd, command, sandbox, runtime):
+    if os.name == 'nt':
+        script = 'Set-Location -LiteralPath ' + powershell_literal(cwd) + '\n& ' + ' '.join(powershell_literal(argument) for argument in command)
+    else:
+        script = 'cd ' + shlex.quote(str(cwd)) + '\n' + shlex.join(command)
+    return {'cwd': str(cwd), 'argv': command, 'script': script, 'display': script,
+            'sandbox': sandbox, 'runtime': runtime, 'tracked': False}
+
+
+def prepare_codex(cwd, settings, models):
+    executable = shutil.which('codex')
+    if not executable:
+        raise ValueError('Codex est absent du PATH.')
+    model = next((entry for entry in models if entry['model'] == settings.get('model')), None)
+    if not model or settings.get('effort') not in [entry['reasoningEffort'] for entry in model.get('supportedReasoningEfforts', [])]:
+        raise ValueError('Choisis un modèle et un effort du catalogue Codex.')
+    sandbox = settings.get('sandbox', 'read-only')
+    if sandbox not in ('read-only', 'workspace-write'):
+        raise ValueError('Profil de permissions invalide.')
+    instructions = 'Rôle: ' + str(settings.get('role', 'developer')) + '. Périmètre: ' + str(cwd) + '. Ne lance pas de sous-agent. Attends la mission de l’utilisateur.'
+    command = [executable, '--model', model['model'], '--sandbox', sandbox, '--ask-for-approval', 'on-request',
+               '-c', 'model_reasoning_effort=' + json.dumps(settings['effort']), '-c', 'features.multi_agent=false',
+               '-c', 'developer_instructions=' + json.dumps(instructions, ensure_ascii=False)]
+    return terminal_plan(cwd, command, sandbox, 'codex')
+
+
 def prepare_omp(cwd, settings, models):
     executable = shutil.which('omp')
     if not executable:
@@ -43,14 +69,7 @@ def prepare_omp(cwd, settings, models):
         role = str(settings.get('role', 'researcher'))
         command += ['--append-system-prompt', 'Rôle: ' + role + '. Périmètre: ' + str(cwd) +
                     '. Lecture seule. Ne lance aucun sous-agent. Attends la mission de l’utilisateur.']
-    if os.name == 'nt':
-        script = 'Set-Location -LiteralPath ' + powershell_literal(cwd) + '\n& ' + ' '.join(powershell_literal(a) for a in command)
-        display = script
-    else:
-        script = 'cd ' + shlex.quote(str(cwd)) + '\n' + shlex.join(command)
-        display = script
-    return {'cwd': str(cwd), 'argv': command, 'script': script, 'display': display,
-            'sandbox': 'read-only', 'tracked': False}
+    return terminal_plan(cwd, command, 'read-only', 'omp')
 
 
 def launch_terminal(plan):

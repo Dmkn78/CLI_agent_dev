@@ -1,6 +1,6 @@
-# État de l’implémentation — cockpit et Oh My Pi, 1 octobre 2026
+# État de l’implémentation — chat, équipes et TODO, 1 octobre 2026
 
-La plateforme intègre Codex app-server et Oh My Pi RPC. Le cockpit charbon/cyan suit les sessions et workflows réels, avec inspecteur et consommation par requête. Le compte Codex local, les catalogues et les métadonnées OMP ont été examinés sans inférence. Les parcours de session, benchmark, workflow et écriture OMP sont testés avec des fournisseurs fictifs ; leur qualité et l’accès effectif aux modèles restent à vérifier lors de lancements explicites de l’utilisateur. Voir le [rapport de cette évolution](../audit/2026-10-01-cockpit-providers.md).
+La plateforme intègre Codex app-server et Oh My Pi RPC. Le cockpit charbon/cyan suit sessions, workflows et consommation observée. Les retours suivants ajoutent un chat avec contexte, des équipes composables, la file TODO et le choix de terminal. Les parcours sont testés avec des fournisseurs fictifs ; qualité et accès effectif restent à vérifier lors de lancements explicites de l'utilisateur. Voir le [rapport courant](../audit/2026-10-01-chat-teams-todo.md) et le [rapport cockpit précédent](../audit/2026-10-01-cockpit-providers.md).
 
 ## Couverture de la demande
 
@@ -8,20 +8,21 @@ La plateforme intègre Codex app-server et Oh My Pi RPC. Le cockpit charbon/cyan
 |---|---|---|
 | Création d’agents | Catalogues/efforts Codex et OMP, mission, rôle, permissions, tâche, skills, dossier/worktree | OMP sans shell ni MCP de réserve ; autres adaptateurs à ajouter |
 | Plusieurs fenêtres | Grille d’agents, 1 à 3 sessions côte à côte, streaming structuré | Terminal PTY/TUI complet à ajouter |
-| Sprints et tâches | CRUD local, priorités, dates, rattachement et états explicites | Scheduler/ressources et dépendances à ajouter |
+| Sprints et tâches | CRUD local, affectation, priorités, file TODO des agents lancés, bail tâche/dossier, fin → En revue | Dépendances, scheduler par sous-tâche et budgets à ajouter ; Terminé reste humain |
 | Git/worktrees | Lecture Git, sélection d’un worktree, création de branche et worktree local | Aucun cleanup ou merge automatique |
 | Pull requests | Lecture avec `gh`, état de review/checks et lien vers GitHub ; dépôt CLI_agent_dev identifié | Création/merge dans le produit à ajouter |
 | Second cerveau | Souvenirs projet/utilisateur, budget combiné 4 000 caractères, recherche lexicale MCP à la demande, provenance | Promotion assistée de logs et embeddings à ajouter si utiles |
 | Bibliothèque de skills | Bibliothèque du projet, sélection de `SKILL.md`, validation des chemins | Pas de chargement automatique de tous les skills personnels |
-| Tokens et graphes | Mesures par fournisseur/consommateur/tâche/modèle/requête, cache lu, historique de sessions distinct, CSV | Coûts facturés, tarifs datés, devises et comptes multiples par fournisseur non importés |
+| Tokens et graphes | Mesures par fournisseur/consommateur/tâche/modèle/requête, cache lu, historique distinct, CSV ; Codex visible sans mesure | Coûts facturés, tarifs datés, devises et comptes multiples par fournisseur non importés |
 | Connexions | Codex/ChatGPT ; fournisseurs OAuth/API découverts par OMP et login dans son terminal natif | Aucun secret dans le formulaire web ; succès d’inférence non vérifié |
-| Terminal OMP | Choix rôle, modèle, effort, plan/slow/smol, aperçu sûr et lancement confirmé | Terminal externe en lecture seule, pas de PTY ni télémétrie importée |
-| Chat/navigateur | Conversation outillée Codex ; lien vers ChatGPT | Navigateur desktop embarqué et moteur local à ajouter ; aucun accès supposé à `/mnt/data` ChatGPT |
+| Terminaux | Choix Codex/OMP, rôle/modèle/effort, sandbox Codex explicite, variantes OMP, aperçu et confirmation | Externe non suivi ; OMP lecture seule ; aucun prompt automatique, pas de PTY intégré |
+| Chat/contexte | Conversations Codex/OMP en lecture seule, noyau/skills/fichiers, instructions transmises, tokens entrée/réponse/cache, fenêtre si reçue | Historique natif/compaction incomplets ; estimation locale non facturée ; pas d'import ChatGPT ni `/mnt/data` |
 | Fichiers | Navigation, source numérotée, images, lecture seule, contrôle des chemins | Écriture/édition et diff IDE à ajouter |
-| Multi-agent | Duo ou planificateur → 1 à 3 tâches → review → synthèse, configuration indépendante par rôle, graphe et handoffs | Séquentiel ; worktrees par sous-tâche, parallélisme et budgets tokens à ajouter |
+| Multi-agent | 1 à 8 sous-agents ajoutables/supprimables, noms/rôles/consignes/modèles indépendants, review/synthèse facultatives ; max 20 tâches, graphe et handoffs | Séquentiel ; reconfiguration pour nouveau lancement ; worktrees par sous-tâche/parallélisme/budgets à ajouter |
+| Modèles Codex/ChatGPT | Catalogue paginé `includeHidden=true`, entrées étendues identifiées ; TODO réelle prioritaire ajoutée | TODO ouverte : écart offre ChatGPT/catalogue Codex et accès effectif non vérifié |
 | Rapports et audit | JSONL par agent, projections SQLite, rapports, outputs, handoffs, hash, UNVERIFIED explicite | Attestations de tests/runtime indépendants à ajouter |
 | Benchmarks | 1 à 50 candidats, jeu JSON hashé, répétitions, générateur proposant des cas, oracle exact ou juge modèle distinct, exports | Oracles exécutables de code, navigateur, sécurité/alignement et recette humaine structurée à ajouter |
-| Maintenabilité | Sources archivées, onze captures utilisateur dont trois identiques, hashes, demande canonique, architecture, design, audits et tests | Mettre ces fichiers à jour lors des prochaines évolutions |
+| Maintenabilité | Sources archivées, quinze captures utilisateur dont trois identiques, hashes, annotations navigateur, demande canonique, architecture, design, audits et tests | Captures marquées inline sans chemin : texte conservé, aucun binaire prétendu archivé |
 
 ## Points techniques à connaître
 
@@ -33,6 +34,8 @@ La plateforme intègre Codex app-server et Oh My Pi RPC. Le cockpit charbon/cyan
 - Une session sans aucun message n’a pas forcément de rollout Codex. À sa reprise, Atelier recrée un thread vide en conservant l’identifiant local et la trace. Avec des messages, il appelle `thread/resume`.
 - Le MCP mémoire Codex est requis lorsqu’il est activé : sa panne fait échouer le démarrage. OMP ne reçoit que le noyau, sans réserve MCP.
 - Les workflows utilisent un seul worktree, séquentiellement. Aucun orchestrateur secondaire natif n’est lancé.
+- La file TODO ne démarre que pour un agent de travail explicitement lancé avec `startWork` ou activé par l'utilisateur. Les nouvelles tâches réveillent les abonnés compatibles. Échec/interruption arrête la file ; redémarrage libère les baux sans reprendre le travail. Même dossier : un seul propriétaire automatique ; les actions manuelles hors file restent à isoler.
+- Le chat n'envoie pas de mission au démarrage et ne prend pas le backlog. Les fichiers de contexte sont relatifs au projet et bornés à 8 fichiers / 64 Ko chacun / 40 000 caractères. Le panneau montre le dernier appel et les instructions réellement transmises, pas une reconstruction complète du contexte interne du fournisseur.
 - La configuration native du CLI reste applicable aux benchmarks. Le mode sans mémoire désactive le noyau et MCP Atelier, pas tout l’environnement du fournisseur. Lors de la recette réelle, des MCP natifs (`codex_apps`, `cua_repl`, `node_repl`) étaient présents. Une table `mcp_servers={}` ne les supprimait pas ; cet override inefficace a été retiré. La V1 ne prétend donc pas filtrer tous les outils du fournisseur.
 - 50 tests signifie 50 candidats maximum. La génération et les reviews distinctes ajoutent des inférences et du quota.
 - Les coûts facturés et les équivalents API ne sont pas inventés. Les graphes n’utilisent que les mesures reçues.
@@ -40,9 +43,9 @@ La plateforme intègre Codex app-server et Oh My Pi RPC. Le cockpit charbon/cyan
 
 ## Vérifications
 
-34 tests automatisés exécutés, 33 réussis et 1 saut de symlink Windows faute de privilège dédié. La traversée et les fichiers sensibles sont vérifiés avant ce saut. Couverture : protocoles fictifs Codex/OMP, corrélation, sessions, approbations et annulation, écritures périmées, confinement des chemins, exclusion du raisonnement, mémoire, Host/Origin/nonce, redémarrage, compteurs par requête, configurations indépendantes de workflow, benchmarks et worktree Git temporaire. Vérification syntaxique de tous les fichiers JS.
+43 tests automatisés exécutés, 42 réussis et 1 saut de symlink Windows faute de privilège dédié. La traversée et les fichiers sensibles sont vérifiés avant ce saut. Couverture supplémentaire : catalogue étendu paginé, chat/contexte borné et reconfigurable, reprise du contexte après redémarrage, bail tâche/dossier et affectation, TODO existantes/futures, échec sans retry, sous-agents dynamiques et rôles facultatifs, terminal Codex sans bypass. Couverture précédente préservée. Vérification syntaxique de tous les fichiers JS.
 
-Recette Playwright avec fournisseur fictif : graphe et inspecteur, sessions indépendantes, modèles indépendants, ventilation de consommation, connexions et préparation du terminal. Dix vues à 1600/900/390/300 pixels, sans débordement global ni nœuds coupés sur mobile. Captures et résultat privés sous `.atelier/browser-evidence/`. Aucun terminal interactif ni prompt réel lancé par cette recette.
+Recette Playwright/Chrome avec fournisseur fictif : graphe/inspecteur, configuration de quatre sous-agents et retrait, reconfiguration, review/synthèse désactivées, chat avec fichiers/skills/modèle et tokens entrée/réponse, affectation TODO et passage En revue, préparation des terminaux Codex/OMP, Codex visible en consommation. Dix vues plus chat à 1600/900/390/300 pixels, sans erreur JS, débordement global ni nœuds coupés sur mobile. Captures/résultat privés sous `.atelier/browser-evidence/`. Aucun terminal interactif ni prompt réel lancé par cette recette.
 
 Recette OMP 18.1.10 limitée aux métadonnées : démarrage sans outils natifs, enregistrement d’`atelier_read`, liste active conforme, catalogue et fournisseurs de login. Aucun secret lu ni inférence envoyée.
 
@@ -51,6 +54,10 @@ Recette réelle initiale : connexion ChatGPT détectée, 7 modèles découverts,
 La réussite des tests n’est pas présentée comme une approbation produit de Damien. Les données historiques ou fictives ne sont pas injectées dans son espace réel pour remplir le cockpit.
 
 ## Prochaines unités de travail
+
+TODO prioritaire ajoutée à la demande explicite de Damien : compléter/vérifier les modèles Codex/ChatGPT manquants. La découverte étendue est corrigée, mais la tâche reste À faire tant que les écarts d'offre et l'accès réel ne sont pas établis sans réutilisation de credentials.
+
+Après redémarrage de cette livraison : 11 entrées Codex, dont 6 masquées, contre 5 visibles avant correctif. Vérification limitée aux métadonnées, sans inférence. Les modèles absents ne sont pas ajoutés artificiellement.
 
 1. Effectuer une recette réelle explicitement autorisée par moteur/fournisseur ; vérifier quotas et accès effectif sans supposer que le catalogue est une entitlement.
 2. Décider du packaging desktop et du terminal PTY si l’expérience TUI complète est prioritaire.

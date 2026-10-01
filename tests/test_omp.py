@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from server.omp import OmpClient, OmpError, discover_models
 from server.omp_session import OmpSession, workspace_file
-from server.terminal import prepare_omp
+from server.terminal import prepare_omp, prepare_codex
 
 
 class FakeOmp:
@@ -112,6 +112,16 @@ class OmpTests(unittest.TestCase):
             self.assertNotIn('--print',plan['argv'])
             if os.name == 'nt': self.assertIn("project''; Write-Output ''unexpected",plan['script'])
             with self.assertRaises(ValueError): prepare_omp(self.root,{'model':'vendor/model','sandbox':'workspace-write'},models)
+    def test_codex_terminal_keeps_sandbox_approvals_and_dynamic_catalog(self):
+        models = [{'model':'fixture-code','supportedReasoningEfforts':[{'reasoningEffort':'medium'}]}]
+        with patch('server.terminal.shutil.which',return_value='codex'):
+            plan = prepare_codex(self.root,{'model':'fixture-code','effort':'medium','sandbox':'workspace-write'},models)
+            self.assertEqual(plan['runtime'],'codex')
+            self.assertEqual(plan['argv'][plan['argv'].index('--ask-for-approval')+1],'on-request')
+            self.assertEqual(plan['argv'][plan['argv'].index('--sandbox')+1],'workspace-write')
+            self.assertNotIn('exec',plan['argv'])
+            self.assertNotIn('--dangerously-bypass-approvals-and-sandbox',plan['argv'])
+            with self.assertRaises(ValueError): prepare_codex(self.root,{'model':'invented','effort':'medium'},models)
 
 
 class OmpTransportTests(unittest.TestCase):
