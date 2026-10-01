@@ -1,0 +1,8 @@
+interface:
+  display_name: "Inputs Curator"
+  short_description: "Sélectionne des sources intellectuelles fondatrices"
+  icon_small: "./assets/icon.svg"
+  icon_large: "./assets/icon.svg"
+  default_prompt: "Utilise $inputs-curator pour sélectionner les meilleures sources sur ce sujet."
+policy:
+  allow_implicit_invocation: true

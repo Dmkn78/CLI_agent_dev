@@ -1,0 +1,8 @@
+interface:
+  display_name: "Learning Orchestrator"
+  short_description: "Orchestre les parcours d’apprentissage adaptatifs"
+  icon_small: "./assets/icon.svg"
+  icon_large: "./assets/icon.svg"
+  default_prompt: "Utilise $learning-orchestrator pour organiser cet apprentissage de bout en bout."
+policy:
+  allow_implicit_invocation: true

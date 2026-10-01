@@ -1,0 +1,8 @@
+interface:
+  display_name: "Retention Loop"
+  short_description: "Transforme la compréhension en rétention durable"
+  icon_small: "./assets/icon.svg"
+  icon_large: "./assets/icon.svg"
+  default_prompt: "Utilise $retention-loop pour vérifier ma compréhension et planifier les rappels."
+policy:
+  allow_implicit_invocation: true

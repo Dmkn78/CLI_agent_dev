@@ -1,0 +1,8 @@
+interface:
+  display_name: "Atelier"
+  short_description: "Orchestre un parcours d’apprentissage complet"
+  icon_small: "./assets/icon.svg"
+  icon_large: "./assets/icon.svg"
+  default_prompt: "Utilise $atelier pour orchestrer ce parcours d’apprentissage."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Code Quality"
+  short_description: "Improve architecture, boundaries, and maintainability"
+  default_prompt: "Use $code-quality to refactor this code while preserving behavior and verifying the smallest useful scope."

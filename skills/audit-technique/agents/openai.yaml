@@ -1,0 +1,8 @@
+interface:
+  display_name: "Audit Technique"
+  short_description: "Audite une architecture et priorise ses risques"
+  icon_small: "./assets/icon.svg"
+  icon_large: "./assets/icon.svg"
+  default_prompt: "Utilise $audit-technique pour auditer cette architecture et prioriser les risques."
+policy:
+  allow_implicit_invocation: true

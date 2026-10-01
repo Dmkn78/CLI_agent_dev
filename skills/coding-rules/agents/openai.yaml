@@ -1,0 +1,4 @@
+interface:
+  display_name: "Coding Rules"
+  short_description: "Apply precise naming, typing, and file structure"
+  default_prompt: "Use $coding-rules to implement this change with precise names, types, constants, and focused files."

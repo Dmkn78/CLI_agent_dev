@@ -1,0 +1,8 @@
+interface:
+  display_name: "Concept Artifact Builder"
+  short_description: "Construit des simulateurs pédagogiques interactifs"
+  icon_small: "./assets/icon.svg"
+  icon_large: "./assets/icon.svg"
+  default_prompt: "Utilise $concept-artifact-builder pour construire un artifact qui rend ce concept manipulable."
+policy:
+  allow_implicit_invocation: true
