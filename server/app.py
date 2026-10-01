@@ -14,7 +14,7 @@ from .memory_mcp import search_memories
 from .store import Store, now, redact, uid
 from .omp import OmpClient, discover_models
 from .omp_session import OmpSession, workspace_file
-from .terminal import prepare_omp, prepare_codex, launch_terminal
+from .terminal import prepare_omp, prepare_codex, prepare_claude, prepare_opencode, launch_terminal
 from .task_queue import TaskQueue
 from .context import read_context_files, context_prompt, session_context
 from .session_report import build_report
@@ -134,7 +134,12 @@ class Application:
             self.provider['loginError'] = None if params.get('success') else redact(params.get('error') or 'Connexion interrompue.')
             self.notify('codex-login', 'Connexion Codex réussie' if params.get('success') else 'Connexion Codex échouée', detail=self.provider['loginError'])
         elif method == 'account/updated':
-            self.provider.update(connected=bool(params.get('authMode')), authType=params.get('authMode'), plan=params.get('planType'))
+            if 'authMode' in params:
+                self.provider.update(connected=bool(params['authMode']), authType=params['authMode'])
+                if not params['authMode']:
+                    self.provider['limits'] = None
+            if 'planType' in params:
+                self.provider['plan'] = params['planType']
 
     def login(self):
         if not self.discovery:
@@ -170,6 +175,10 @@ class Application:
 
     def terminal_plan(self, data):
         project = self.project(data.get('projectId', 'atelier'))
+        if data.get('runtime') == 'opencode':
+            return prepare_opencode(project['path'], data)
+        if data.get('runtime') == 'claude':
+            return prepare_claude(project['path'], data)
         if data.get('runtime', 'omp') == 'codex':
             return prepare_codex(project['path'], data, self.provider['models'])
         if data.get('runtime', 'omp') != 'omp':

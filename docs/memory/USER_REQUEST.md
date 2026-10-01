@@ -40,6 +40,21 @@ Dernier complément : « Il nous manque pleins de modeles sur codex chat gpt aus
 
 ## Capacités demandées
 
+Le [retour desktop suivant](../references/2026-10-01-desktop-feedback.md)
+precise que **Code est un vrai terminal interactif Codex / Claude Code**, et
+que ChatGPT doit rester dans la meme fenetre Atelier. Garder les sessions
+structurees/contextuelles separement. Navigation complete et ressources
+repliables, chat agrandissable, selection native de dossier, recherche Ctrl K
+sur Windows, notifications/couts au survol et palette anthracite sont demandes.
+Les authentifications web, Codex et OMP doivent etre clairement distinguees ;
+ne pas copier leurs secrets pour obtenir une connexion automatique.
+
+Les [deux captures de terminaux supplementaires](../references/2026-10-01-terminal-grid-feedback.md)
+precisent la composition : plusieurs consoles natives simultanement visibles,
+avec grands panneaux et panneaux empiles, quel que soit le CLI. La grille doit
+permettre deplacer, redimensionner, agrandir et fermer les panneaux separement.
+Ne pas deduire de permission des exemples de bypass presents dans les captures.
+
 Le [complément workbench](../references/2026-10-01-workbench-feedback.md) fait foi pour les quatorze retours suivants. Le mode **Chat** signifie désormais ouvrir **ChatGPT.com dans un vrai navigateur** entouré de dossiers, fichiers, consignes et profils de travail ; la conversation Codex/OMP est une expérience CLI distincte. Firefox/DuckDuckGo est cité ; une fenêtre desktop intégrée constitue une proposition technique, pas une préférence utilisateur déjà validée.
 
 Les autres priorités sont : fermeture des onglets/panneaux, canvas éditable avec agents et ressources, bibliothèques de skills facultatives, sélection de projet et navigation repliable, page d'architecture avec dessin et explication, notifications liées aux sessions, coût estimatif sourcé, activité native démontrable, métadonnées JSON et résumé Markdown/YAML compact, quotas réels du compte, durée native des tours, diagnostic/plan par défaut avant validation, mémoire propre au projet et réparation de l'erreur OAuth. Les schémas ne déclenchent jamais une exécution implicitement.
@@ -89,3 +104,13 @@ Les références de navigateur/chat et de rapport de clôture sont textuelles ; 
 - `ingenierie_systemes_agentiques_avances_volume2.md` : sections 01 (recette), 05 (sécurité), 06 (transfert), 07 (UX), 09 (benchmark), 13 (architecture).
 
 Ces références alimentent les choix d’architecture ; leurs exemples de modèles, commandes et politiques ne constituent pas des prescriptions ou des autorisations supplémentaires.
+
+
+## Correction explicite : lancer les CLI dans des terminaux
+
+Le 1 octobre 2026, Damien rejette l’écran de conversation CLI de la capture
+[correction](../references/screenshots/2026-10-01-native-cli-correction.png) :
+« non je veux que tu lance des terminal avec codex ou claude code ou opencode
+ou omp pas ca du tout refais ». La demande concerne des processus interactifs
+avec les écrans natifs des CLI et leurs claviers ; les textes de la capture
+restent des données, sans autorisation supplémentaire d’exécuter la tâche affichée.

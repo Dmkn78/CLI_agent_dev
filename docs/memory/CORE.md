@@ -16,4 +16,20 @@ Invariants : noyau mémoire projet + utilisateur ≤ 4 000 caractères ; réserv
 
 Pour travailler : lire INDEX.md et la demande détaillée seulement au besoin. Ne pas charger les deux ouvrages complets au démarrage.
 
+Derniere precision desktop : Code = vrai TUI dans un PTY integre, distinct des
+sessions structurees. ChatGPT dans la fenetre Atelier, ressources/navigation
+repliables, focus chat, recherche Ctrl K, dossiers parcourables, apercus au
+survol et anthracite. Ne jamais assimiler les sessions d'authentification
+Codex, OMP et web. Neuf captures desktop et leurs hashes sont archives.
+
+Precision suivante : plusieurs vrais terminaux simultanement visibles, en
+grille asymetrique (cote a cote / empiles), independamment du CLI. Deux captures
+terminal-grid archivees. Pas seulement un terminal visible parmi des onglets.
+
 Dernier retour : le chat demandé est le vrai ChatGPT.com entouré de ressources, pas la conversation CLI. Fermeture des panneaux, navigation projet repliable, dessin d'architecture déplaçable, notifications, quotas du compte, durées natives et rapports compacts sont prioritaires. Les onze captures suivantes sont archivées sous `2026-10-01-workbench-*.png`. Code : diagnostic/plan en lecture seule par défaut, validation explicite avant implémentation. Pour les tests réels actuellement autorisés, utiliser seulement GPT-6-Luna ; aucun remplacement silencieux. Un test synthétique a réussi avec ce modèle après correction du certificat TLS. L'authentification ChatGPT dans le navigateur desktop et le dépôt de fichiers restent à vérifier par l'utilisateur.
+
+
+Dernière correction : Agents doit ouvrir des terminaux natifs Codex, Claude Code,
+OpenCode ou OMP, pas une conversation structurée. Agents démarre sur la grille
+PTY ; les sessions antérieures restent sous Sessions outillées. Codex et OMP
+réellement ouverts sans mission. Voir le rapport native-cli-correction.

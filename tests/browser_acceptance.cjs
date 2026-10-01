@@ -28,7 +28,13 @@ async function main() {
     }
     await page.screenshot({path:path.join(directory,'consumption-fixture.png'),fullPage:true});
     await page.locator('[data-action="navigate"][data-view="agents"]').click();
-    await page.locator('[data-action="new-agent"]').first().click();
+    assert.equal(await page.locator('#native-terminal').count(),1);
+    await page.getByRole('button',{name:'OpenCode',exact:true}).click();
+    assert.equal(await page.locator('[name="cli"]').inputValue(),'opencode');
+    assert.equal(await page.locator('[name="native_model"]').count(),0);
+    await page.getByRole('button',{name:'Annuler',exact:true}).click();
+    await page.getByRole('button',{name:'Sessions outillées',exact:true}).click();
+    await page.locator('[data-action="new-session"]').first().click();
     await page.locator('[name="mode"][value="orchestration"]').check();
     await page.locator('[name="name"]').fill('Équipe créée par recette');
     await page.locator('[name="mission"]').fill('Mission de fournisseur fictif');
@@ -102,10 +108,9 @@ async function main() {
     await page.locator('[data-action="dismiss"]').click();
     await page.locator('[data-action="navigate"][data-view="overview"]').click();
     await page.locator('[data-action="terminal"]').click();
-    assert.equal(await page.locator('[name="runtime"]').inputValue(),'codex');
-    await page.getByRole('button',{name:'Préparer le terminal'}).click();
-    assert.match(await page.locator('#terminal-command').textContent(),/on-request/);
-    await page.locator('[data-action="dismiss"]').click();
+    assert.equal(await page.locator('[name="cli"]').inputValue(),'codex');
+    assert.ok(await page.getByRole('button',{name:'Ouvrir Atelier desktop'}).count());
+    await page.locator('[data-action="dismiss"]').first().click();
     await page.locator('[data-action="navigate"][data-view="tasks"]').click();
     await page.locator('[data-action="new-task"]').first().click();
     await page.locator('[name="title"]').fill('TODO prise par agent fictif');
@@ -147,6 +152,9 @@ async function main() {
     assert.deepEqual(errors,[]);
     fs.writeFileSync(path.join(directory,'result.json'),JSON.stringify({status:'passed',fixture:true,viewports:[1600,900,390,300],errors},null,2));
     console.log('Browser acceptance passed: dynamic workers, role removal, reconfiguration, chat/context/skills/tokens, TODO assignment, Codex/OMP terminals, providers, graph; 10 views and chat / 4 widths. No real inference or terminal launch.');
+  } catch (error) {
+    console.error(await page.evaluate(() => ({view,agentLayout,toasts:document.querySelector('#toasts')?.textContent,session:state.sessions.filter(session => session.name === 'Chat de recette fictive').map(session => ({status:session.status,error:session.error}))})));
+    throw error;
   } finally { await browser.close(); }
 }
 main().catch(error => {console.error(error); process.exitCode = 1;});

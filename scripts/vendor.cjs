@@ -9,3 +9,5 @@ for (const [input, output] of [['index.css','logicflow.css']]) {
   fs.copyFileSync(path.join(source, input), path.join(target, output));
 }
 esbuild.buildSync({entryPoints:[path.join(root,'node_modules/@logicflow/core/es/index.js')],bundle:true,format:'iife',globalName:'Core',minify:true,outfile:path.join(target,'logicflow.js'),legalComments:'linked'});
+fs.copyFileSync(path.join(root,'node_modules/@xterm/xterm/css/xterm.css'),path.join(target,'xterm.css'));
+esbuild.buildSync({entryPoints:[path.join(root,'desktop/terminal-renderer.cjs')],bundle:true,format:'iife',globalName:'TerminalEngine',minify:true,outfile:path.join(target,'xterm.js'),legalComments:'linked'});

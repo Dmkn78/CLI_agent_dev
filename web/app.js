@@ -4,10 +4,10 @@ const actions = {
   'graph-page': (el) => { graphPage = Math.max(0, graphPage + Number(el.dataset.direction)); selectedGraphNode = null; render(); },
   'usage-group': (el) => { usageGrouping = el.dataset.group; render(); },
   'terminal-omp': () => terminalModal('omp'),
-  'terminal': () => terminalModal(),
+  'terminal': () => { route('terminal'); newNativeTerminalModal(); },
   'new-chat': () => route('webchat'),
   'new-cli-chat': () => newAgent('classic','chat'),
-  'open-chat': async (el) => { selectedChatId = el.dataset.id; agentLayout = 'chat'; route('agents'); await loadChatFiles(el.dataset.id); },
+  'open-chat': async (el) => { $('#modal').close(); selectedChatId = el.dataset.id; agentLayout = 'chat'; route('agents'); await loadChatFiles(el.dataset.id); },
   'session-context': (el) => sessionContextModal(el.dataset.id),
   'toggle-work': async (el) => { await api('sessions/work',{id:el.dataset.id,enabled:el.dataset.enabled === 'true'}); await refresh(true); },
   'add-worker': () => {
@@ -31,9 +31,10 @@ const actions = {
     await navigator.clipboard.writeText($('#terminal-command').textContent);
     toast('Commande copiée.');
   },
-  navigate: (el) => route(el.dataset.view),
+  navigate: (el) => { if (el.dataset.view === 'agents') agentLayout='terminals'; route(el.dataset.view); },
   dismiss: () => $("#modal").close(),
-  "new-agent": (el) => newAgent(el.dataset.mode || "classic"),
+  "new-agent": () => newNativeTerminalModal(),
+  "new-session": (el) => newAgent(el.dataset.mode || "classic"),
   "new-workflow": () => newAgent("orchestration"),
   'configure-team': (el) => { const workflow = state.workflows.find(workflow => workflow.id === el.dataset.id); return newAgent(workflow.mode,'code',workflow); },
   "new-task": (el) => taskModal(null, el.dataset.status),
@@ -47,7 +48,7 @@ const actions = {
     agentLayout = el.dataset.layout;
     if (agentLayout === "panes" && !selectedAgents.length && sessions().length)
       selectedAgents = [sessions()[0].id];
-    render();
+    route('agents');
     if (agentLayout === 'chat' && selectedChatId) await loadChatFiles(selectedChatId);
   },
   "open-agent": (el) => {
@@ -72,7 +73,7 @@ const actions = {
         .map((s) => agentRow(s))
         .join(
           "",
-        )}${btn("new-agent", "Nouvel agent", "plus", "secondary full")}</div>`,
+        )}${btn("new-session", "Nouvelle session", "plus", "secondary full")}</div>`,
     ),
   "memory-scope": (el) => {
     memoryScope = el.dataset.scope;
@@ -88,9 +89,12 @@ const actions = {
     render();
   },
   "open-memory": (el) => {
+    $('#modal').close();
+    memoryScope = state.memories.find(memory => memory.id === el.dataset.id)?.scope || 'project'; memoryFilter = 'tous'; memoryQuery = '';
     selectedMemory = el.dataset.id;
     route("memory");
   },
+  'open-task': (el) => { $('#modal').close(); route('tasks'); requestAnimationFrame(() => { const card=document.querySelector(`.task-card[data-id="${CSS.escape(el.dataset.id)}"]`); card?.scrollIntoView({block:'center',behavior:'smooth'}); card?.classList.add('search-highlight'); }); },
   "open-file": (el) => openFile(el.dataset.path),
   "file-root": () => loadFiles(""),
   "file-up": () => loadFiles(filePath.split("/").slice(0, -1).join("/")),
@@ -572,6 +576,7 @@ function quickSearch() {
     `<div class="modal-body"><label class="search-field">${icon("search")}<input id="quick-search-input" placeholder="Que cherchez-vous ?" autofocus></label><div id="quick-search-results"></div></div>`,
   );
   quickSearchResults("");
+  $('#modal').classList.add('command-palette');
   setTimeout(() => $("#quick-search-input")?.focus(), 20);
 }
 function quickSearchResults(query) {
@@ -593,7 +598,7 @@ function quickSearchResults(query) {
       id: t.id,
       title: t.title,
       type: "Tâche",
-      action: "edit-task",
+      action: "open-task",
     })),
   ]
     .filter((o) => o.title.toLowerCase().includes(q))
@@ -602,7 +607,7 @@ function quickSearchResults(query) {
     values
       .map(
         (v) =>
-          `<button class="quick-result" data-action="${v.action}" data-id="${esc(v.id)}"><span>${esc(v.title)}</span><small>${v.type}</small>${icon("arrow")}</button>`,
+          `<button class="quick-result" data-action="${v.action}" data-id="${esc(v.id)}">${icon(v.type === 'Souvenir' ? 'memory' : v.type === 'Tâche' ? 'tasks' : 'agents')}<span>${esc(v.title)}<small>${v.type}</small></span>${icon("arrow")}</button>`,
       )
       .join("") || '<p class="muted panel-description">Aucun résultat.</p>';
 }
@@ -621,7 +626,7 @@ $("#add-project").addEventListener("click", () =>
   modal(
     "Ajouter un projet",
     "Choisis un dossier existant sur cet ordinateur.",
-    `<form data-form="project"><div class="modal-body">${field("Nom du projet", "name", "", "text", "required")}${field("Chemin absolu du dossier", "path", "", "text", 'required placeholder="/Users/vous/Projets/mon-projet"')}<p class="muted small">Ce dossier devient le périmètre des agents et de l’explorateur pour ce projet.</p></div>${formFooter("Ajouter le projet")}</form>`,
+    `<form data-form="project"><div class="modal-body">${field("Nom du projet", "name", "", "text", "required")}<div class="project-folder-field">${field("Dossier du projet", "path", "", "text", 'required placeholder="Chemin absolu du dossier"')}${btn('pick-project-folder','Parcourir','folder','secondary')}</div><p class="muted small">Ce dossier devient le périmètre des agents et de l’explorateur pour ce projet.</p></div>${formFooter("Ajouter le projet")}</form>`,
   ),
 );
 $("#modal").addEventListener("click", (event) => {
@@ -643,5 +648,7 @@ view = nav.some((n) => n[0] === location.hash.slice(1))
 installWorkbenchActions();
 installDesignActions();
 installWebChatActions();
+installTerminalActions();
+installShellActions();
 refresh(true);
 setInterval(() => refresh(), 1800);

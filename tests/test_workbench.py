@@ -12,6 +12,34 @@ from server.tariffs import save_tariff
 
 
 class WorkbenchTests(unittest.TestCase):
+    def test_powershell_arguments_preserve_typographic_apostrophes(self):
+        import base64
+        import os
+        import subprocess
+        from server.terminal import powershell_literal
+        argument = "l’utilisateur ‘projet’ d'Atelier; $(Write-Output surprise)"
+        quoted = powershell_literal(argument)
+        self.assertIn('l’’utilisateur', quoted)
+        if os.name == 'nt':
+            script = 'ConvertTo-Json -Compress -InputObject ' + quoted
+            encoded = base64.b64encode(script.encode('utf-16-le')).decode('ascii')
+            result = subprocess.run(['powershell.exe', '-NoProfile', '-EncodedCommand', encoded],
+                                    capture_output=True, text=True, check=True)
+            self.assertEqual(json.loads(result.stdout), argument)
+
+    def test_opencode_terminal_starts_native_plan_without_prompt(self):
+        from server.terminal import prepare_opencode
+        with patch('server.terminal.shutil.which', return_value='opencode'):
+            plan = self.app.terminal_plan({'runtime': 'opencode', 'sandbox': 'read-only'})
+            self.assertEqual(plan['argv'], ['opencode', '--agent', 'plan'])
+            self.assertFalse(plan['tracked'])
+            self.assertEqual(plan['cwd'], str(self.app.root))
+            with self.assertRaises(ValueError):
+                prepare_opencode(self.app.root, {'sandbox': 'workspace-write'})
+        with patch('server.terminal.shutil.which', return_value=None):
+            with self.assertRaisesRegex(ValueError, 'absent du PATH'):
+                prepare_opencode(self.app.root, {})
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.app = Application(Path(self.temp.name))
@@ -77,6 +105,38 @@ class WorkbenchTests(unittest.TestCase):
         self.app.on_provider_event({'method': 'account/rateLimits/updated', 'params': {
             'rateLimits': {'limitId': 'codex', 'primary': {'usedPercent': 42}}}})
         self.assertEqual(self.app.provider['limits']['rateLimits']['primary']['usedPercent'], 42)
+
+    def test_partial_account_event_does_not_clear_authentication_or_quotas(self):
+        self.app.provider.update(connected=True, authType='chatgpt', plan='pro', limits={'observed': True})
+        self.app.on_provider_event({'method': 'account/updated', 'params': {'planType': 'pro'}})
+        self.assertTrue(self.app.provider['connected'])
+        self.assertEqual(self.app.provider['authType'], 'chatgpt')
+        self.assertEqual(self.app.provider['limits'], {'observed': True})
+        self.app.on_provider_event({'method': 'account/updated', 'params': {'authMode': None}})
+        self.assertFalse(self.app.provider['connected'])
+        self.assertIsNone(self.app.provider['limits'])
+
+    def test_claude_terminal_plan_has_no_prompt_and_rejects_write_profile(self):
+        from server.terminal import prepare_claude
+        with patch('server.terminal.shutil.which', return_value='claude'):
+            plan = prepare_claude(self.app.root, {'sandbox': 'read-only'})
+            self.assertEqual(plan['argv'], ['claude', '--permission-mode', 'plan'])
+            self.assertFalse(plan['tracked'])
+            with self.assertRaises(ValueError):
+                prepare_claude(self.app.root, {'sandbox': 'workspace-write'})
+
+    def test_desktop_launch_is_literal_local_and_clears_node_mode(self):
+        from server.desktop import open_desktop
+        with patch('server.desktop.Path.is_file', return_value=True), patch('server.desktop.subprocess.Popen') as launch:
+            launch.return_value.pid = 123
+            with patch.dict('os.environ', {'ELECTRON_RUN_AS_NODE': '1'}):
+                result = open_desktop(self.app.root, 4320, 'code')
+            self.assertEqual(result['mode'], 'code')
+            self.assertEqual(launch.call_args.kwargs['env']['ATELIER_URL'], 'http://127.0.0.1:4320/')
+            self.assertNotIn('ELECTRON_RUN_AS_NODE', launch.call_args.kwargs['env'])
+            self.assertEqual(launch.call_args.args[0][-1], '--atelier-code')
+            with self.assertRaises(ValueError):
+                open_desktop(self.app.root, 4320, 'code; command')
 
     def test_todo_plan_holds_claim_until_approval_then_requests_review(self):
         task = self.app.upsert('task', {'title': 'Un bug'})

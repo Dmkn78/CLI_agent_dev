@@ -12,6 +12,10 @@
 | Livraison chat/contexte, composition d'équipe et file TODO | [../audit/2026-10-01-chat-teams-todo.md](../audit/2026-10-01-chat-teams-todo.md) |
 | Vrai ChatGPT, canvas, notifications, rapports compacts et diagnostic TLS | [../audit/2026-10-01-workbench.md](../audit/2026-10-01-workbench.md) |
 | Les quatorze nouveaux retours et leurs onze captures | [../references/2026-10-01-workbench-feedback.md](../references/2026-10-01-workbench-feedback.md) |
+| Terminal natif, chat dans Atelier, navigation et sept retours desktop | [../references/2026-10-01-desktop-feedback.md](../references/2026-10-01-desktop-feedback.md) |
+| Livraison PTY, navigation et connexions distinctes | [../audit/2026-10-01-desktop-terminals.md](../audit/2026-10-01-desktop-terminals.md) |
+| Precision : grille de vrais terminaux et deux captures | [../references/2026-10-01-terminal-grid-feedback.md](../references/2026-10-01-terminal-grid-feedback.md) |
+| Correction Agents : vrais CLI et activation locale | [../audit/2026-10-01-native-cli-correction.md](../audit/2026-10-01-native-cli-correction.md) |
 | Orchestration, logs, handoffs, memory | [../references/multi-agent-audit.txt](../references/multi-agent-audit.txt) |
 | Coûts, benchmark, onboarding | [../references/ingenierie_agentique_cout_benchmark_onboarding.md](../references/ingenierie_agentique_cout_benchmark_onboarding.md) |
 | Recette, sécurité, ressources, transfert | [../references/ingenierie_systemes_agentiques_avances_volume2.md](../references/ingenierie_systemes_agentiques_avances_volume2.md) |

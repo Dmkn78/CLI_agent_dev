@@ -8,7 +8,11 @@ import subprocess
 
 
 def powershell_literal(value):
-    return "'" + str(value).replace("'", "''") + "'"
+    literal = str(value)
+    # PowerShell treats typographic apostrophes as string delimiters too.
+    for apostrophe in ("'", '\u2018', '\u2019'):
+        literal = literal.replace(apostrophe, apostrophe + apostrophe)
+    return "'" + literal + "'"
 
 
 def terminal_plan(cwd, command, sandbox, runtime):
@@ -21,7 +25,7 @@ def terminal_plan(cwd, command, sandbox, runtime):
 
 
 def prepare_codex(cwd, settings, models):
-    executable = shutil.which('codex')
+    executable = os.environ.get('ATELIER_CODEX_EXECUTABLE') or shutil.which('codex')
     if not executable:
         raise ValueError('Codex est absent du PATH.')
     model = next((entry for entry in models if entry['model'] == settings.get('model')), None)
@@ -35,6 +39,24 @@ def prepare_codex(cwd, settings, models):
                '-c', 'model_reasoning_effort=' + json.dumps(settings['effort']), '-c', 'features.multi_agent=false',
                '-c', 'developer_instructions=' + json.dumps(instructions, ensure_ascii=False)]
     return terminal_plan(cwd, command, sandbox, 'codex')
+
+
+def prepare_claude(cwd, settings):
+    executable = shutil.which('claude')
+    if not executable:
+        raise ValueError('Claude Code est absent du PATH.')
+    if settings.get('sandbox', 'read-only') != 'read-only':
+        raise ValueError('Claude Code : mode plan uniquement dans ce parcours initial.')
+    return terminal_plan(cwd, [executable, '--permission-mode', 'plan'], 'read-only', 'claude')
+
+
+def prepare_opencode(cwd, settings):
+    executable = shutil.which('opencode')
+    if not executable:
+        raise ValueError('OpenCode est absent du PATH.')
+    if settings.get('sandbox', 'read-only') != 'read-only':
+        raise ValueError('OpenCode : mode plan uniquement dans ce parcours initial.')
+    return terminal_plan(cwd, [executable, '--agent', 'plan'], 'read-only', 'opencode')
 
 
 def prepare_omp(cwd, settings, models):

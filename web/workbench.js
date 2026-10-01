@@ -35,7 +35,11 @@ function mountWorkbench() {
   if (view === 'overview') $('.page-heading .heading-actions').insertAdjacentHTML('beforeend',btn('edit-design','Éditer le dessin','network'));
   if (view === 'usage') $('.page-heading').insertAdjacentHTML('afterend',quotaWorkbenchView());
   if (view === 'settings' && provider().loginError) $('.page-heading').insertAdjacentHTML('afterend',`<div class="inline-error">Connexion : ${esc(provider().loginError)}</div>`);
-  if (view === 'agents') $('.view-toolbar').insertAdjacentHTML('beforeend',btn('process-inventory','Processus locaux','terminal','quiet'));
+  if (view === 'settings') {
+    const codex=provider(), ompLogin=(provider('omp').loginProviders || []).find(login => login.id === 'openai-codex');
+    $('.connection-engines').insertAdjacentHTML('beforebegin',`<section class="auth-scopes"><div><strong>Codex · abonnement ChatGPT</strong><span>${codex.connected ? 'Connecté dans Codex' : 'Non connecté dans Codex'}</span></div><div><strong>Oh My Pi · accès OpenAI</strong><span>${ompLogin ? ompLogin.authenticated ? 'Connecté dans OMP' : 'Connexion OMP séparée requise' : 'État OMP non communiqué'}</span></div><div><strong>ChatGPT · site web</strong><span>Connexion dans le navigateur Atelier · non vérifiée ici</span></div></section>`);
+  }
+  if (view === 'settings') $('#main').insertAdjacentHTML('beforeend',btn('process-inventory','Diagnostic des CLI externes','terminal','quiet','title="Inventaire technique ; pas une preuve de travail en cours"'));
   syncBrowserPanel();
 }
 

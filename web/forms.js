@@ -1,4 +1,5 @@
 function modal(title, subtitle, body, wide = false) {
+  $('#modal').classList.remove('command-palette');
   $("#modal-content").innerHTML =
     `<header class="modal-header"><div><span class="eyebrow">ATELIER</span><h2>${title}</h2><p>${subtitle}</p></div><button class="icon-btn" data-action="dismiss" aria-label="Fermer la fenêtre">${icon("close")}</button></header>${body}`;
   $("#modal").classList.toggle("wide", wide);

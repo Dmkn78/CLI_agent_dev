@@ -15,7 +15,7 @@ La plateforme intègre Codex app-server et Oh My Pi RPC. Le cockpit charbon/cyan
 | Bibliothèque de skills | Bibliothèque du projet, sélection de `SKILL.md`, validation des chemins | Pas de chargement automatique de tous les skills personnels |
 | Tokens et graphes | Mesures par fournisseur/consommateur/tâche/modèle/requête, CSV ; quotas du compte Codex, tarifs saisis/sourcés et estimation USD | Factures, tarifs publics automatiques, devises et comptes multiples non importés |
 | Connexions | Codex/ChatGPT ; fournisseurs OAuth/API découverts par OMP et login dans son terminal natif | Aucun secret dans le formulaire web ; succès d’inférence non vérifié |
-| Terminaux | Choix Codex/OMP, rôle/modèle/effort, sandbox Codex explicite, variantes OMP, aperçu et confirmation | Externe non suivi ; OMP lecture seule ; aucun prompt automatique, pas de PTY intégré |
+| Terminaux | PTY node-pty/xterm integre au desktop : Codex, Claude Code, OMP, clavier, resize, onglets fermables ; sessions structurees conservees | Pas de tokens/historique/temps de tour importes du PTY ; Claude en plan, OMP outils de lecture, lancement explicite sans prompt |
 | Chat/contexte | Vrai ChatGPT dans shell desktop optionnel, ressources/consignes/copie/drag ; conversations CLI distinctes avec contexte observé | Login/upload ChatGPT à valider humainement ; Chromium, pas Firefox ; profils SQL/CIW à ajouter ; pas de tokens/historique du site importés |
 | Fichiers | Navigation, source numérotée, images, lecture seule, contrôle des chemins | Écriture/édition et diff IDE à ajouter |
 | Multi-agent | 1 à 8 sous-agents ajoutables/supprimables, noms/rôles/consignes/modèles indépendants, review/synthèse facultatives ; max 20 tâches, graphe et handoffs | Séquentiel ; reconfiguration pour nouveau lancement ; worktrees par sous-tâche/parallélisme/budgets à ajouter |
@@ -46,7 +46,32 @@ La plateforme intègre Codex app-server et Oh My Pi RPC. Le cockpit charbon/cyan
 
 ## Vérifications Actuelles
 
-52 tests backend exécutés : 51 réussis, 1 saut symlink Windows. Syntaxe JS/CJS et calculs vérifiés. Recettes navigateur précédente et workbench réussies ; recette desktop fictive réussie avec isolation du navigateur, bounds, masque de modal et fermeture. Aucun login ChatGPT ou upload réel automatisé. Audit npm : aucune vulnérabilité signalée au contrôle. Voir le rapport courant pour la matrice et les limites.
+55 tests backend executes : 54 reussis, 1 saut symlink Windows. Syntaxe JS/CJS
+et calculs verifies. Recettes navigateur, workbench et desktop fictif : navigateur
+isole, bounds, masque au survol, fermeture, vrai processus PTY avec echo clavier
+et sortie/fin observes. Aucun login ChatGPT, upload reel ou inference dans cette
+livraison. Details et limites : audit desktop-terminals.
+
+La navigation entiere et les ressources se masquent/restaurent ; le chat dispose
+de back/forward/reload/home et focus. Le site utilise un WebContentsView isole,
+pas un iframe. Le bouton depuis un navigateur ouvre Atelier desktop avec le chat
+dans cette fenetre ; le popup externe ChatGPT a ete retire. Le profil web prive
+est persistant ; connexion humaine initiale requise. Recherche et apercus ont
+ete revises, les liens de memoire/tache corriges, et l'ajout de projet a un
+selecteur natif de dossier. La palette par defaut est anthracite.
+
+Vue Code : grille de PTY par defaut, une a trois colonnes, deplacement entre
+colonnes, hauteurs ajustees par separateur, agrandissement/restauration et
+fermeture separee. Onglets en option. Sept panneaux simultanes testes avec
+processus PowerShell fictifs, sans chevauchement, drag et resize observes.
+Sous 800 pixels, panneaux empiles et page defilante. Les sorties/processus ne
+sont pas recrees lors d'un changement de vue ; preferences de mode/colonnes
+locales, position/tailles detaillees en memoire seulement.
+
+Un evenement `account/updated` partiel sans `authMode` ne deconnecte plus Codex.
+Les vues Connexions et Consommation partagent le rendu des quotas ; Connexions
+distingue explicitement Codex, OMP et le site web. Aucune connexion fictive n'est
+affichee pour masquer le besoin de connexion independante OMP.
 
 Le dernier test réel autorisé GPT-6-Luna a terminé en 3 725 ms avec réponse et mesures natives de tokens, après configuration du CA Windows. Connexion et quotas réellement lus, aucun secret copié. Le test n'établit pas la recette humaine du nouvel OAuth ni l'accès aux autres modèles. Le catalogue courant contient dix entrées à cette vérification (Codex 0.159.2) ; les nombres des livraisons précédentes sont historiques.
 
@@ -69,7 +94,8 @@ TODO prioritaire ajoutée à la demande explicite de Damien : compléter/vérifi
 Après redémarrage de cette livraison : 11 entrées Codex, dont 6 masquées, contre 5 visibles avant correctif. Vérification limitée aux métadonnées, sans inférence. Les modèles absents ne sont pas ajoutés artificiellement.
 
 1. Effectuer une recette réelle explicitement autorisée par moteur/fournisseur ; vérifier quotas et accès effectif sans supposer que le catalogue est une entitlement.
-2. Décider du packaging desktop et du terminal PTY si l’expérience TUI complète est prioritaire.
+2. Valider le login/upload ChatGPT desktop et les CLI natifs humainement ;
+   packaging distribue, profils SQL/CIW, observabilite du PTY et theme configurable restent ouverts.
 3. Ajouter des oracles de benchmark exécutables : tests de code dans un workspace isolé, artefacts de build, captures/runtime UI et score de review explicitement séparé.
 4. Introduire un scheduler par ressource et des worktrees par sous-tâche avant d’autoriser les écritures parallèles.
 5. Ajouter une grille tarifaire/FX versionnée et une importation explicite des dépenses réelles.
@@ -83,3 +109,29 @@ Ces unités correspondent aux demandes initiales encore ouvertes. Aucune permiss
 Un test unique de streaming et de recherche mémoire avec GPT‑5.6‑Sol a été préparé. La revue automatique a rejeté l’envoi, car il transmettrait à OpenAI le noyau et un extrait de mémoire du projet sans autorisation explicite pour ces données et cette destination. Aucun tour réel n’a été envoyé. Une demande d’autorisation a été présentée à Damien ; tant qu’il ne répond pas, le test reste non vérifié.
 
 Le service a été redémarré après finalisation ; la session préparée reste conservée en état arrêté, reprenable.
+
+
+## Correction : Agents ouvre les CLI natifs
+
+Retour du 1 octobre 2026 : la capture de conversation structurée ne correspond
+pas au résultat demandé. Agents arrive désormais sur les vrais terminaux ;
+Nouvel agent ouvre le lanceur natif, avec Codex, Claude Code, OpenCode et OMP.
+Les anciennes sessions restent consultables via Sessions outillées. Desktop :
+PTY intégrés en grille ; navigateur : terminal système avec le CLI choisi.
+OpenCode est préparé avec `--agent plan`, sans prompt ni modèle artificiel ;
+Claude Code utilise son mode plan. Ces profils natifs ne sont pas une sandbox OS.
+Le profil d’écriture reste disponible uniquement pour Codex dans ce parcours.
+
+Correction PowerShell : les apostrophes ASCII et typographiques sont échappées
+sans modifier les arguments, y compris dans les consignes de démarrage. Le PTY
+reçoit explicitement la taille du panneau après sa création ; un nouveau panneau
+occupe la colonne la moins remplie. Electron renouvelle son jeton HTTP local
+après un redémarrage serveur, uniquement après le refus avant exécution.
+
+Validation : 57 tests backend, 56 réussis et 1 symlink ignoré sur Windows ;
+recettes navigateur et desktop avec fournisseur fictif, sept PTY simultanés (CMD léger pour la recette Windows).
+Codex et OMP réellement ouverts et laissés côte à côte, sans mission ni inférence.
+Le premier démarrage Codex a échoué par allocation mémoire pendant les contrôles
+concurrents ; le second affiche le TUI et reste actif. Claude Code n’est pas
+détecté dans le PATH ; lancement réel d’OpenCode non vérifié. Rapport :
+[CLI natifs](../audit/2026-10-01-native-cli-correction.md).

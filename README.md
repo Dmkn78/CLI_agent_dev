@@ -19,7 +19,7 @@ npm ci
 npm run vendor
 ```
 
-Après démarrage du service, `npm run desktop` ouvre le shell **Atelier** avec ChatGPT.com intégré et les ressources autour. `ATELIER_URL` permet de choisir un autre port local. Ce navigateur est Chromium, pas Firefox ; dans un navigateur web ordinaire, ChatGPT s'ouvre dans une fenêtre séparée. Aucune iframe ni automatisation de compte. La connexion et l'envoi d'un fichier sont à vérifier manuellement. Le profil de connexion desktop reste privé dans `.atelier/desktop-profile/`.
+Après démarrage du service, `npm run desktop` ouvre **Atelier desktop** avec ChatGPT.com intégré et les ressources autour. `ATELIER_URL` permet de choisir un autre port local. Depuis la page web, Nouveau chat ouvre cette même application desktop, pas un popup ChatGPT. Ce navigateur est Chromium, pas Firefox ; aucune iframe ni copie de compte. La connexion web initiale et l'envoi d'un fichier sont à vérifier manuellement. Le profil de connexion desktop reste privé dans `.atelier/desktop-profile/`.
 
 Sur macOS, vous pouvez aussi ouvrir **Lancer Atelier.command**. Le service écoute exclusivement sur [127.0.0.1:4317](http://127.0.0.1:4317). Fermez-le avec `Ctrl+C` dans son terminal.
 
@@ -54,11 +54,17 @@ Une seule instance doit utiliser le même dossier de données. `--data /chemin/v
 
 ## Périmètre de cette version
 
-Les sessions sont des conversations outillées Codex, avec un affichage de console structuré. Ce n’est pas encore un terminal PTY avec toute l’interface TUI de Codex.
+Les sessions restent des conversations outillées, avec mémoire et preuves structurées. La vue **Code** du desktop est désormais un véritable terminal PTY (node-pty / xterm) : Codex, Claude Code ou OMP, clavier, redimensionnement et onglets fermables. Aucun prompt n'est envoyé au lancement. Claude démarre en plan ; Codex garde son sandbox choisi et on-request ; OMP ne propose que les outils de lecture. Les tokens, durées de tour, TODO et rapports du terminal brut ne sont pas importés dans les sessions structurées. Fermer son onglet termine le processus ; les données natives du CLI restent conservées.
+
+Plusieurs terminaux restent visibles simultanément dans la grille Code : une à
+trois colonnes, déplacement par le titre, séparateurs redimensionnables,
+agrandissement/restauration et fermeture individuelle. La vue Onglets reste
+disponible ; sur mobile les consoles s'empilent. Les changements de disposition
+ne relancent pas les CLI et ne perdent pas leur sortie.
 
 Les sessions OMP intégrées ne disposent que de la lecture locale et, si autorisée, de l’écriture confirmée dans Atelier. Ni shell ni outils natifs, donc pas de tests de code exécutables par cet adaptateur. Le terminal OMP externe est en lecture seule, sans suivi importé ni sandbox OS garanti ; il n’envoie pas automatiquement la mission. La réserve mémoire MCP reste propre à Codex. Les connexions disponibles dépendent du CLI installé et des comptes effectivement configurés, pas d’une liste de modèles codée en dur.
 
-Claude Code et Ollama sont détectés ; leurs adaptateurs de session ne sont pas encore implémentés. Les benchmarks évaluent des réponses textuelles. Une review par modèle est un avis, pas une preuve de compilation ni une certification de sécurité. Les oracles de code et les recettes visuelles sont à ajouter.
+Claude Code est accessible dans le terminal natif ; son adaptateur de session structurée et celui d'Ollama ne sont pas encore implémentés. Les benchmarks évaluent des réponses textuelles. Une review par modèle est un avis, pas une preuve de compilation ni une certification de sécurité. Les oracles de code et les recettes visuelles sont à ajouter.
 
 GitHub est optionnel, en lecture. Création/merge de PR, scheduler par sous-tâche, worktrees parallèles et packaging d'installation desktop restent à développer. Le shell desktop de développement est disponible ; il n'importe pas les conversations ChatGPT ni `/mnt/data`. Les ressources locales ne sont transmises au site que par une action de l'utilisateur. Le contexte natif et sa compaction ne sont pas entièrement exposés. La jauge CLI concerne le dernier appel, l'estimation caractères/4 ne vaut pas token facturé. L'inventaire des processus externes ne démontre pas une activité du modèle. Voir les [limites et TODO](docs/audit/2026-10-01-workbench.md).
 
@@ -82,7 +88,7 @@ Sous Windows : `$env:PYTHONDONTWRITEBYTECODE='1'; python -m unittest discover -s
 
 Recette navigateur isolée : lancer `python -B tests/browser_fixture.py`, puis `node tests/browser_acceptance.cjs` avec Playwright disponible. `ATELIER_BROWSER_CHANNEL=chrome` utilise Chrome installé. Le serveur fictif utilise le port 4320 et ses données/evidences privées sous `.atelier/`, sans modifier les sessions réelles. `python -B scripts/check_omp.py` vérifie seulement les métadonnées et les outils hôtes OMP, sans prompt.
 
-`node tests/workbench_acceptance.cjs` vérifie les nouvelles vues ; `node tests/desktop_acceptance.cjs` vérifie le shell avec une page distante fictive, sans login ni upload réel. Le script `scripts/probe-provider.py` ne fait que lire les métadonnées par défaut. Ne pas lui passer `--model` sans autorisation de consommer du quota.
+`node tests/workbench_acceptance.cjs` vérifie les nouvelles vues ; `node tests/desktop_acceptance.cjs` vérifie le navigateur isolé et un vrai processus PowerShell avec echo clavier et fin native, sans CLI de modèle, login ni upload réel. Exécuter les recettes séquentiellement sur un serveur fictif neuf, car elles modifient leurs données de recette. Le script `scripts/probe-provider.py` ne fait que lire les métadonnées par défaut. Ne pas lui passer `--model` sans autorisation de consommer du quota.
 
 La carte du projet et les références visuelles sont dans [docs/memory/INDEX.md](docs/memory/INDEX.md). Le contrat de cette version est dans [docs/memory/IMPLEMENTATION.md](docs/memory/IMPLEMENTATION.md).
 

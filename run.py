@@ -16,6 +16,7 @@ from server.store import redact
 from server.canvas import save_canvas
 from server.tariffs import save_tariff
 from server.processes import process_inventory
+from server.desktop import open_desktop, pick_directory
 
 ROOT = Path(__file__).resolve().parent
 
@@ -103,7 +104,7 @@ def make_handler(app, token):
                 elif route in ('/', '/index.html'):
                     content = (ROOT / 'web/index.html').read_text().replace('__ATELIER_TOKEN__', token)
                     self.reply(content.encode(), mime='text/html; charset=utf-8')
-                elif route in ('/app.js', '/core.js', '/views.js', '/cockpit.js', '/chat.js', '/forms.js', '/workbench.js', '/design.js', '/webchat.js', '/style.css', '/icon.svg', '/vendor/logicflow.js', '/vendor/logicflow.css'):
+                elif route in ('/app.js', '/core.js', '/views.js', '/cockpit.js', '/chat.js', '/forms.js', '/workbench.js', '/design.js', '/webchat.js', '/shell.js', '/terminal.js', '/style.css', '/icon.svg', '/vendor/logicflow.js', '/vendor/logicflow.css', '/vendor/xterm.js', '/vendor/xterm.css'):
                     path = ROOT / 'web' / route[1:]
                     self.reply(path.read_bytes(), mime=mimetypes.guess_type(path.name)[0] or 'text/plain')
                 elif route == '/favicon.ico':
@@ -134,6 +135,10 @@ def make_handler(app, token):
                     result = app.refresh_limits()
                 elif route == '/api/terminal/prepare':
                     result = app.terminal_plan(data)
+                elif route == '/api/desktop/open':
+                    result = open_desktop(app.root, self.server.server_port, data.get('mode', 'chat'))
+                elif route == '/api/projects/pick':
+                    result = pick_directory()
                 elif route == '/api/terminal/open':
                     result = app.open_terminal(data)
                 elif route == '/api/sessions':

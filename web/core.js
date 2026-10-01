@@ -47,6 +47,7 @@ const icon = (name, cls = "") =>
   `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name] || paths.grid}"/></svg>`;
 const nav = [
   ["overview", "Vue d’ensemble", "grid"],
+  ["terminal", "Code", "terminal"],
   ["agents", "Agents", "agents"],
   ["webchat", "ChatGPT", "agents"],
   ["design", "Architecture", "network"],
@@ -74,7 +75,7 @@ let state = {
 };
 let view = "overview",
   projectId = localStorage.getItem("atelier-project") || "atelier",
-  agentLayout = "grid",
+  agentLayout = "terminals",
   memoryScope = "project",
   memoryFilter = "tous",
   memoryQuery = "",
@@ -179,7 +180,7 @@ async function refresh(force = false) {
     const hash = JSON.stringify(next);
     if (force || hash !== lastStateHash) {
       lastStateHash = hash;
-      if (!force && view === 'design' && $('#design-canvas')) $('#notifications-button').innerHTML=notificationBell();
+      if (!force && ((view === 'design' && $('#design-canvas')) || $('#native-terminal'))) $('#notifications-button').innerHTML=notificationBell();
       else render();
     }
   } catch (e) {
@@ -225,7 +226,7 @@ function render() {
   $("#main")
     .querySelectorAll("input,textarea,select")
     .forEach((el) => {
-      if (renderedProjectId === projectId && el.id && !['design-page','design-title','design-explanation','design-node-label','browser-resource-text','browser-instructions'].includes(el.id)) values[el.id] = el.value;
+      if (renderedProjectId === projectId && el.id && !['design-page','design-title','design-explanation','design-node-label','browser-resource-text','browser-instructions','terminal-columns'].includes(el.id)) values[el.id] = el.value;
     });
   const scrolls = {};
   $("#main")
@@ -239,6 +240,7 @@ function render() {
   $("#main").className = "view-" + view;
   $("#main").innerHTML = {
     overview: cockpitView,
+    terminal: terminalView,
     agents: agentsView,
     webchat: webChatView,
     design: designView,
@@ -253,6 +255,8 @@ function render() {
   }[view]();
   renderedProjectId = projectId;
   mountWorkbench();
+  mountNativeTerminal();
+  applyShellLayout();
   Object.entries(values).forEach(([key, val]) => {
     const el = document.getElementById(key);
     if (el && el.tagName !== "BUTTON") el.value = val;
