@@ -24,12 +24,12 @@ function terminalView() {
   if (!tabs.some(tab => tab.id === zoomedNativeTerminal)) zoomedNativeTerminal=null;
   const visible=zoomedNativeTerminal ? tabs.filter(tab => tab.id === zoomedNativeTerminal) : nativeTerminalLayout === 'tabs' ? tabs.filter(tab => tab.id === activeNativeTerminal) : tabs;
   const columns=zoomedNativeTerminal || nativeTerminalLayout === 'tabs' ? 1 : Math.min(nativeTerminalColumns,Math.max(1,tabs.length));
-  const launchers=`<div class="terminal-launchers">${[['codex','Codex'],['claude','Claude Code'],['opencode','OpenCode'],['omp','OMP']].map(([runtime,label]) => btn('launch-cli',label,'terminal','secondary',`data-runtime="${runtime}"`)).join('')}</div>`;
+  const launchers=`<div class="terminal-launchers">${[['codex','Codex'],['claude','Claude Code'],['opencode','OpenCode'],['omp','OMP'],['omlx','oMLX · local'],['splash','Splash · local']].map(([runtime,label]) => btn('launch-cli',label,'terminal','secondary',`data-runtime="${runtime}"`)).join('')}</div>`;
   const toolbar=`<div class="terminal-view-toolbar"><div class="segmented">${[['grid','Grille','grid'],['tabs','Onglets','terminal']].map(([layout,title,symbol]) => `<button class="${nativeTerminalLayout === layout ? 'selected' : ''}" data-action="terminal-layout" data-layout="${layout}">${icon(symbol)} ${title}</button>`).join('')}</div><label>Colonnes <select id="terminal-columns" aria-label="Nombre de colonnes" ${nativeTerminalLayout === 'tabs' ? 'disabled' : ''}>${[1,2,3].map(count => `<option ${count === nativeTerminalColumns ? 'selected' : ''}>${count}</option>`).join('')}</select></label><span>${tabs.length} terminal${tabs.length > 1 ? 's' : ''}</span></div>`;
   const board=tabs.length ? Array.from({length:columns},(_,column) => {
     const panels=visible.filter(tab => columns === 1 || tab.column % columns === column);
     return `<div class="terminal-column" data-terminal-column="${column}">${panels.map((tab,index) => `${index ? `<div class="terminal-splitter" role="separator" aria-orientation="horizontal" aria-label="Redimensionner les terminaux" tabindex="0" data-terminal-before="${panels[index-1].id}" data-terminal-after="${tab.id}"></div>` : ''}${nativeTerminalPane(tab)}`).join('')}</div>`;
-  }).join('') : `<div class="terminal-empty">${icon('terminal')}<h2>Codex · Claude Code · OpenCode · OMP</h2><p class="muted">Choisis un CLI ci-dessus pour ouvrir son terminal.${window.atelierDesktop ? '' : ' Pour une grille intégrée, ouvre Atelier desktop.'}</p>${window.atelierDesktop ? '' : btn('launch-desktop','Ouvrir Atelier desktop','external','primary','data-mode="code"')}</div>`;
+  }).join('') : `<div class="terminal-empty">${icon('terminal')}<h2>Codex · Claude Code · OpenCode · OMP · oMLX · Splash</h2><p class="muted">Choisis un CLI ci-dessus pour ouvrir son terminal.${window.atelierDesktop ? '' : ' Pour une grille intégrée, ouvre Atelier desktop.'}</p>${window.atelierDesktop ? '' : btn('launch-desktop','Ouvrir Atelier desktop','external','primary','data-mode="code"')}</div>`;
   return `${heading('TERMINAUX',view === 'agents' ? 'Agents' : 'Code','Terminaux interactifs',btn('agent-layout','Sessions outillées','agents','quiet','data-layout="grid"')+btn('new-native-terminal','Nouveau terminal','plus','primary'))}${launchers}${toolbar}${nativeTerminalLayout === 'tabs' && !zoomedNativeTerminal ? `<div class="browser-tabbar">${tabs.map(tab => `<div class="browser-tab ${tab.id === activeNativeTerminal ? 'selected' : ''}"><button data-action="select-native-terminal" data-id="${tab.id}">${esc(tab.title)}</button></div>`).join('')}</div>` : ''}<div id="native-terminal" class="native-terminal-board" style="--terminal-columns:${columns}">${board}</div>`;
 }
 
@@ -52,9 +52,14 @@ function fitNativeTerminals() {
   for (const tab of currentNativeTerminals()) if (document.getElementById('native-terminal-'+tab.id)?.clientWidth > 20) tab.fit.fit();
 }
 
+function nativeRuntimeFields(runtime) {
+  if (['omlx','splash'].includes(runtime)) return `${field('Port du serveur local','localPort',runtime === 'omlx' ? 8000 : 8001,'number','min="1" max="65535" required')}<p class="muted small">Codex se connecte à ce serveur sur 127.0.0.1. Le lanceur natif découvre le modèle. oMLX utilise son authentification native ; Splash demande sa clé dans le terminal si nécessaire, sans l’enregistrer. Aucun message envoyé au lancement.</p>`;
+  return ['codex','omp'].includes(runtime) ? modelFields(runtime,'native_') : '';
+}
+
 function newNativeTerminalModal(runtime='codex') {
-  modal('Ouvrir un terminal',project().path,`<form data-form="native-terminal"><div class="modal-body">${field('Nom du terminal','terminalName')}${select('CLI','cli',[['codex','Codex'],['claude','Claude Code'],['opencode','OpenCode'],['omp','OMP · Oh My Pi']],runtime)}<div id="native-model-fields">${['codex','omp'].includes(runtime) ? modelFields(runtime,'native_') : ''}</div>${select('Permissions','sandbox',[['read-only','Lecture seule / plan'],['workspace-write','Écriture projet · Codex']],'read-only')}<p class="muted small">Interface native du CLI. Le CLI démarre dans le dossier du projet, avec son écran et son clavier natifs. Claude Code et OpenCode démarrent en mode plan. Saisis ta mission directement dans le terminal.</p></div>${formFooter(window.atelierDesktop ? 'Ouvrir ici' : 'Ouvrir le terminal système')}</form>`);
-  $('#modal [name="sandbox"]').options[1].disabled=runtime !== 'codex';
+  modal('Ouvrir un terminal',project().path,`<form data-form="native-terminal"><div class="modal-body">${field('Nom du terminal','terminalName')}${select('CLI','cli',[['codex','Codex'],['claude','Claude Code'],['opencode','OpenCode'],['omp','OMP · Oh My Pi'],['omlx','oMLX · Codex local'],['splash','Splash · Codex local']],runtime)}<div id="native-model-fields">${nativeRuntimeFields(runtime)}</div>${select('Permissions','sandbox',[['read-only','Lecture seule / plan'],['workspace-write','Écriture projet · Codex / local']],'read-only')}<p class="muted small">Interface native du CLI. Le CLI démarre dans le dossier du projet, avec son écran et son clavier natifs. Claude Code et OpenCode démarrent en mode plan. Saisis ta mission directement dans le terminal.</p></div>${formFooter(window.atelierDesktop ? 'Ouvrir ici' : 'Ouvrir le terminal système')}</form>`);
+  $('#modal [name="sandbox"]').options[1].disabled=!['codex','omlx','splash'].includes(runtime);
 }
 
 async function createNativeTerminal(settings) {
@@ -63,7 +68,7 @@ async function createNativeTerminal(settings) {
   const id=crypto.randomUUID();
   const terminal=new TerminalEngine.Terminal({cursorBlink:true,fontSize:14,fontFamily:'Consolas, monospace',scrollback:3000,theme:{background:'#24272b',foreground:'#e5e9ee',cursor:'#77d6ff'}});
   const fit=new TerminalEngine.FitAddon(); terminal.loadAddon(fit);
-  const cli={codex:'Codex',claude:'Claude Code',opencode:'OpenCode',omp:'OMP · Oh My Pi'}[settings.runtime];
+  const cli={codex:'Codex',claude:'Claude Code',opencode:'OpenCode',omp:'OMP · Oh My Pi',omlx:'oMLX · Codex',splash:'Splash · Codex'}[settings.runtime];
   const columnCounts=Array(nativeTerminalColumns).fill(0);
   for (const existing of currentNativeTerminals()) columnCounts[existing.column % nativeTerminalColumns]++;
   const column=columnCounts.indexOf(Math.min(...columnCounts));
@@ -101,9 +106,9 @@ document.addEventListener('change',event => {
   const form=event.target.closest('[data-form="native-terminal"]');
   if (!form) return;
   if (event.target.name === 'cli') {
-    $('#native-model-fields').innerHTML=['claude','opencode'].includes(event.target.value) ? '' : modelFields(event.target.value,'native_');
-    if (event.target.value !== 'codex') form.elements.sandbox.value='read-only';
-    form.elements.sandbox.options[1].disabled=event.target.value !== 'codex';
+    $('#native-model-fields').innerHTML=nativeRuntimeFields(event.target.value);
+    if (!['codex','omlx','splash'].includes(event.target.value)) form.elements.sandbox.value='read-only';
+    form.elements.sandbox.options[1].disabled=!['codex','omlx','splash'].includes(event.target.value);
   }
   if (event.target.name === 'native_model') {
     const entry=(provider(form.elements.cli.value).models || []).find(model => model.model === event.target.value);
@@ -115,7 +120,7 @@ document.addEventListener('submit',async event => {
   if (!form) return;
   event.preventDefault();
   const values=Object.fromEntries(new FormData(form));
-  try { await createNativeTerminal({projectId,name:values.terminalName,runtime:values.cli,model:values.native_model,effort:values.native_effort,sandbox:values.sandbox,role:'developer'}); }
+  try { await createNativeTerminal({projectId,name:values.terminalName,runtime:values.cli,model:values.native_model,effort:values.native_effort,sandbox:values.sandbox,port:values.localPort,role:'developer'}); }
   catch (error) { toast(error.message,true); }
 });
 

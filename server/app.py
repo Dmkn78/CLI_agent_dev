@@ -14,7 +14,8 @@ from .memory_mcp import search_memories
 from .store import Store, now, redact, uid
 from .omp import OmpClient, discover_models
 from .omp_session import OmpSession, workspace_file
-from .terminal import prepare_omp, prepare_codex, prepare_claude, prepare_opencode, launch_terminal
+from .terminal import prepare_omp, prepare_codex, prepare_claude, prepare_opencode, prepare_local, launch_terminal
+from .local_providers import local_providers
 from .task_queue import TaskQueue
 from .context import read_context_files, context_prompt, session_context
 from .session_report import build_report
@@ -34,6 +35,7 @@ class Application:
         self.lock = threading.RLock()
         self.discovery = None
         self.task_queue = TaskQueue(self)
+        self.local_providers = local_providers()
         self.omp_provider = {'id': 'omp', 'name': 'Oh My Pi', 'installed': bool(shutil.which('omp')),
                              'models': [], 'connected': False, 'status': 'unchecked'}
         self.provider = {'id': 'codex', 'name': 'OpenAI Codex', 'installed': bool(shutil.which('codex')),
@@ -112,6 +114,7 @@ class Application:
                 if client:
                     client.close()
         self.omp_provider.update(connected=bool(self.omp_provider['models']), status='ready' if self.omp_provider['models'] else 'unchecked')
+        self.local_providers = local_providers(probe=True)
         return self.provider
 
     def notify(self, key, title, session_id=None, project_id=None, detail=None):
@@ -163,6 +166,7 @@ class Application:
         state = {('memories' if kind == 'memory' else kind + 's'): self.store.all(kind) for kind in ('project', 'session', 'task', 'memory', 'sprint', 'benchmark', 'workflow', 'request', 'notification', 'design', 'tariff')} | {
             'providers': [self.provider,
                           self.omp_provider,
+                          *self.local_providers,
                           {'id': 'claude', 'name': 'Claude Code', 'installed': bool(shutil.which('claude')), 'supported': False},
                           {'id': 'local', 'name': 'Modèles locaux', 'installed': bool(shutil.which('ollama')), 'supported': False}],
             'events': self.store.latest_events(), 'root': str(self.root)}
@@ -175,6 +179,8 @@ class Application:
 
     def terminal_plan(self, data):
         project = self.project(data.get('projectId', 'atelier'))
+        if data.get('runtime') in ('omlx', 'splash'):
+            return prepare_local(project['path'], data)
         if data.get('runtime') == 'opencode':
             return prepare_opencode(project['path'], data)
         if data.get('runtime') == 'claude':

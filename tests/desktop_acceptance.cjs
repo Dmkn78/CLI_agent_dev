@@ -3,6 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 async function main() {
+  fs.mkdirSync('.atelier/browser-evidence',{recursive:true});
   const env={...process.env,ATELIER_URL:'http://127.0.0.1:4320/',ATELIER_DESKTOP_TEST:'1'};
   delete env.ELECTRON_RUN_AS_NODE;
   const application=await electron.launch({executablePath:require('electron'),args:[path.resolve('desktop/main.cjs')],env});
@@ -44,7 +45,16 @@ async function main() {
     assert.equal(await page.locator('.session-pane').count(),0);
     await application.evaluate(({ipcMain}) => { globalThis.terminalResizes=[]; ipcMain.on('terminal:resize',(_event,id,cols,rows) => globalThis.terminalResizes.push({id,cols,rows})); });
     await page.getByRole('button',{name:'Nouveau terminal',exact:true}).click();
-    assert.deepEqual(await page.locator('[name="cli"] option').evaluateAll(options => options.map(option => option.value)),['codex','claude','opencode','omp']);
+    assert.deepEqual(await page.locator('[name="cli"] option').evaluateAll(options => options.map(option => option.value)),['codex','claude','opencode','omp','omlx','splash']);
+    for (const [runtime,port] of [['omlx','8000'],['splash','8001']]) {
+      await page.locator('[name="cli"]').selectOption(runtime);
+      assert.equal(await page.locator('[name="localPort"]').inputValue(),port);
+      assert.equal(await page.locator('[name="native_model"]').count(),0);
+      assert.equal(await page.locator('[name="sandbox"] option[value="workspace-write"]').evaluate(option => option.disabled),false);
+    }
+    await page.locator('[name="cli"]').selectOption('omp');
+    assert.equal(await page.locator('[name="sandbox"] option[value="workspace-write"]').evaluate(option => option.disabled),true);
+    await page.locator('[name="cli"]').selectOption('codex');
     await page.getByRole('button',{name:'Ouvrir ici',exact:false}).click();
     await page.waitForFunction(() => [...nativeTerminals.values()][0]?.terminal.buffer.active.getLine(0) && [...Array(nativeTerminals.values().next().value.terminal.buffer.active.length)].some((_,index) => nativeTerminals.values().next().value.terminal.buffer.active.getLine(index)?.translateToString().includes('ATELIER_PTY_READY')));
     await page.evaluate(() => window.atelierDesktop.writeTerminal(activeNativeTerminal,'terminal-test\r'));

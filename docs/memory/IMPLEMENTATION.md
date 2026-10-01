@@ -135,3 +135,16 @@ Le premier démarrage Codex a échoué par allocation mémoire pendant les contr
 concurrents ; le second affiche le TUI et reste actif. Claude Code n’est pas
 détecté dans le PATH ; lancement réel d’OpenCode non vérifié. Rapport :
 [CLI natifs](../audit/2026-10-01-native-cli-correction.md).
+
+
+## Lancement macOS et serveurs locaux — 1 octobre 2026
+
+Atelier a été relancé sur `127.0.0.1:4317` et sa fenêtre Electron ouverte dans la vue Code. Les données existantes sont conservées ; les deux sessions antérieures étaient clôturée/arrêtée avant le remplacement de l'ancien serveur. Dépendances épinglées installées et assets locaux générés sur ce Mac.
+
+Agents/Code et Connexions proposent maintenant **oMLX** et **Splash** via leurs lanceurs natifs Codex. Ports proposés 8000/8001, modifiables au lancement, hôte fixé à 127.0.0.1. Permissions explicites lecture seule/écriture projet et `on-request`, délégation désactivée, aucun prompt initial. Les modèles sont découverts par les lanceurs. Aucun credential Codex lu/copied et aucune configuration globale Codex modifiée. Splash peut demander sa clé dans le PTY, masquée et seulement transmise à l'environnement du processus.
+
+Les deux services existants ont répondu HTTP 401 au catalogue sans clé. Atelier expose cette authentification requise sans prétendre être connecté. L'accès authentifié, l'inférence et les mesures de consommation de ces terminaux restent non vérifiés/non importés. Le diagnostic utilise les ports proposés, sans suivre les ports personnalisés des terminaux.
+
+Correction macOS : `npm run vendor` rétablit le bit exécutable du `spawn-helper` de node-pty. La recette desktop crée elle-même son dossier de preuves ; elle teste aussi le changement oMLX/Splash/OMP/Codex, les ports proposés et les permissions disponibles.
+
+Validation : **61 tests backend réussis**, syntaxe JS/CJS, calculs cockpit et recette Electron avec fournisseur fictif (echo clavier, sortie, sept PTY, drag/resize/zoom/onglets/mobile/fermeture). Pas d'inférence réelle, ni de login ou dépôt ChatGPT. Voir [rapport local macOS](../audit/2026-10-01-macos-local-providers.md).

@@ -2,6 +2,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const esbuild = require('esbuild');
 const root = path.resolve(__dirname, '..');
+// node-pty ships this helper without its executable bit in some npm archives.
+if (process.platform !== 'win32') {
+  for (const folder of [`prebuilds/${process.platform}-${process.arch}`, 'build/Release']) {
+    const helper = path.join(root, 'node_modules/node-pty', folder, 'spawn-helper');
+    if (fs.existsSync(helper)) fs.chmodSync(helper, fs.statSync(helper).mode | 0o111);
+  }
+}
 const source = path.join(root, 'node_modules', '@logicflow', 'core', 'dist');
 const target = path.join(root, 'web', 'vendor');
 fs.mkdirSync(target, {recursive: true});

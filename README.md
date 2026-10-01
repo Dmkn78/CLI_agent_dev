@@ -31,6 +31,14 @@ python3 run.py --no-open --port 4318
 
 Une seule instance doit utiliser le même dossier de données. `--data /chemin/vers/des-donnees` permet un espace indépendant.
 
+## Modèles locaux sur ce Mac : oMLX et Splash
+
+Dans **Agents / Code**, choisissez **oMLX · local** ou **Splash · local** (également accessibles dans **Connexions**), puis ouvrez le terminal. Codex se connecte au serveur local via son lanceur natif. Ports proposés : oMLX **8000**, Splash **8001**, modifiables au lancement. Les serveurs doivent déjà tourner ; Atelier ne télécharge ni ne charge de modèle automatiquement.
+
+Le modèle vient du serveur : oMLX propose sa sélection native ; Splash utilise le modèle servi. oMLX gère sa propre authentification. Si Splash refuse l'accès, le terminal demande sa clé API avec saisie masquée ; elle reste dans l'environnement du processus, sans formulaire web ni enregistrement Atelier. La configuration de connexion est limitée au processus, sans modifier la connexion habituelle Codex/ChatGPT. Lecture seule par défaut, écriture projet sur choix explicite et `on-request` conservé. Aucune mission envoyée au lancement.
+
+Ces terminaux ne remontent pas encore leurs tokens, coûts ou résultats dans les sessions Atelier. Le diagnostic des connexions sonde uniquement `/v1/models` sans clé : « Authentification requise » prouve une réponse HTTP protégée, pas l'échec du lanceur natif ni le succès d'une inférence. Le diagnostic affiche les ports proposés ; un autre port choisi dans le terminal n'est pas mémorisé dans cette carte.
+
 ## Ce qui fonctionne
 
 - Catalogue Codex paginé et étendu (`includeHidden`), choix du modèle et de son effort de raisonnement ; accès réel distinct du catalogue.

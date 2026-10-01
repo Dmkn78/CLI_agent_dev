@@ -5,6 +5,8 @@ import os
 import shlex
 import shutil
 import subprocess
+import sys
+from pathlib import Path
 
 
 def powershell_literal(value):
@@ -48,6 +50,23 @@ def prepare_claude(cwd, settings):
     if settings.get('sandbox', 'read-only') != 'read-only':
         raise ValueError('Claude Code : mode plan uniquement dans ce parcours initial.')
     return terminal_plan(cwd, [executable, '--permission-mode', 'plan'], 'read-only', 'claude')
+
+
+def prepare_local(cwd, settings):
+    runtime = settings.get('runtime')
+    if runtime not in ('omlx', 'splash'):
+        raise ValueError('Serveur local non pris en charge.')
+    if not shutil.which(runtime) or not shutil.which('codex'):
+        raise ValueError('Le lanceur local et Codex doivent être installés dans le PATH.')
+    sandbox = settings.get('sandbox', 'read-only')
+    if sandbox not in ('read-only', 'workspace-write'):
+        raise ValueError('Profil de permissions invalide.')
+    port = settings.get('port', 8000 if runtime == 'omlx' else 8001)
+    if isinstance(port, bool) or not str(port).isdigit() or not 1 <= int(port) <= 65535:
+        raise ValueError('Port local invalide.')
+    command = [sys.executable, '-B', str(Path(__file__).resolve().parents[1] / 'scripts/local-agent.py'),
+               runtime, '--port', str(int(port)), '--sandbox', sandbox]
+    return terminal_plan(cwd, command, sandbox, runtime)
 
 
 def prepare_opencode(cwd, settings):
