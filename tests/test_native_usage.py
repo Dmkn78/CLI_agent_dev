@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -20,11 +21,11 @@ class NativeUsageTests(unittest.TestCase):
         self.app.store.db.close()
         self.temporary.cleanup()
 
-    def rollout(self, identifier, source='cli', usage=True, parent=None):
+    def rollout(self, identifier, source='cli', usage=True, parent=None, cwd=None):
         timestamp = datetime.now(timezone.utc).isoformat()
         directory = self.reader.directory / datetime.now(timezone.utc).strftime('%Y/%m/%d')
         directory.mkdir(parents=True, exist_ok=True)
-        records = [{'type': 'session_meta', 'payload': {'id': identifier, 'cwd': str(self.root), 'timestamp': timestamp,
+        records = [{'type': 'session_meta', 'payload': {'id': identifier, 'cwd': str(cwd or self.root), 'timestamp': timestamp,
                     'source': source, 'base_instructions': 'PRIVATE TEXT DO NOT IMPORT'}},
                    {'type': 'turn_context', 'payload': {'model': 'fixture-native'}}]
         if parent:
@@ -58,6 +59,33 @@ class NativeUsageTests(unittest.TestCase):
         self.assertEqual(saved['nativeThreadId'], 'first')
         self.assertEqual(saved['usage']['total']['totalTokens'], 150)
         self.assertEqual(saved['association'], 'unique-workspace-start')
+
+    def test_workspace_symlink_is_associated_with_the_resolved_project(self):
+        workspace_alias = self.root / 'workspace-alias'
+        try:
+            workspace_alias.symlink_to(self.root.resolve(), target_is_directory=True)
+        except OSError as error:
+            if os.name == 'nt' and error.winerror == 1314:
+                self.skipTest('Directory symlinks require an unavailable Windows privilege.')
+            raise
+        self.register('terminal-one')
+        self.rollout('first', cwd=workspace_alias)
+
+        self.reader.refresh()
+
+        saved = self.app.store.get('nativeSession', 'terminal-one')
+        self.assertEqual(saved['nativeThreadId'], 'first')
+        self.assertEqual(saved['usage']['total']['totalTokens'], 150)
+        self.assertEqual(saved['association'], 'unique-workspace-start')
+
+    def test_missing_workspace_paths_keep_lexical_equivalence_and_distinction(self):
+        workspace = self.root / 'not-created'
+        self.assertFalse(workspace.exists())
+        equivalent = workspace / 'child' / '..'
+        different = self.root / 'other-not-created'
+
+        self.assertTrue(NativeUsage._same_workspace(workspace, equivalent))
+        self.assertFalse(NativeUsage._same_workspace(workspace, different))
 
     def test_concurrent_terminals_require_explicit_binding(self):
         self.register('one')

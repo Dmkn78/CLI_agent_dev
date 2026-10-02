@@ -104,19 +104,28 @@ function workspaceFilesContent() {
   const files=workspaceFileStates.get(projectId);
   const path=files?.path || '';
   const entries=(files?.entries || []).map(file => `<button class="file-entry" data-action="panel-file" data-path="${esc(file.path)}" draggable="true">${icon(file.directory ? 'folder' : 'code')}<span>${esc(file.name)}</span></button>`).join('');
-  return `<section class="workspace-files"><div class="resource-navigation">${btn('panel-file','','folder','icon-btn','data-path="" aria-label="Racine du projet" title="Racine du projet"')}${btn('panel-file','','chevron','icon-btn',`data-path="${esc(path.replaceAll('\\','/').split('/').slice(0,-1).join('/'))}" aria-label="Dossier parent" title="Dossier parent" ${path ? '' : 'disabled'}`)}<span>${esc(path || project().name)}</span></div><div class="workspace-file-list">${entries || '<p class="muted small">'+(files ? 'Ce dossier est vide.' : 'Chargement…')+'</p>'}</div>${files?.content != null ? `<article class="workspace-file-preview"><strong>${esc(files.filePath)}</strong><small>Lecture seule</small><pre>${esc(files.content)}</pre></article>` : ''}</section>`;
+  return `<section class="workspace-files"><div class="resource-navigation">${btn('panel-file','','folder','icon-btn','data-path="" aria-label="Racine du projet" title="Racine du projet"')}${btn('panel-file','','chevron','icon-btn',`data-path="${esc(path.replaceAll('\\','/').split('/').slice(0,-1).join('/'))}" aria-label="Dossier parent" title="Dossier parent" ${path ? '' : 'disabled'}`)}<span>${esc(path || project().name)}</span></div><div class="workspace-file-list">${files?.error ? `<p class="muted small">${esc(files.error)}</p>` : entries || '<p class="muted small">'+(!files || files.loading ? 'Chargement…' : 'Ce dossier est vide.')+'</p>'}</div>${files?.content != null ? `<article class="workspace-file-preview"><strong>${esc(files.filePath)}</strong><small>Lecture seule</small><pre>${esc(files.content)}</pre></article>` : ''}</section>`;
 }
 
 async function loadWorkspaceFiles(path='') {
   const requestedProject=projectId, previous=workspaceFileStates.get(projectId) || {path:'',entries:[]};
   const generation=(previous.generation || 0)+1;
-  workspaceFileStates.set(requestedProject,{...previous,generation});
-  const result=await api('files?project='+encodeURIComponent(requestedProject)+'&path='+encodeURIComponent(path));
-  if (projectId !== requestedProject || workspaceFileStates.get(requestedProject)?.generation !== generation) return;
-  const files=result.entries ? {path,entries:result.entries,generation} : {...previous,filePath:result.path,content:result.content,generation};
+  workspaceFileStates.set(requestedProject,{...previous,generation,loading:true,error:null});
+  let result;
+  try {result=await api('files?project='+encodeURIComponent(requestedProject)+'&path='+encodeURIComponent(path));}
+  catch (error) {
+    if (workspaceFileStates.get(requestedProject)?.generation === generation) workspaceFileStates.set(requestedProject,{...previous,generation,loading:false,error:error.message});
+    if (projectId === requestedProject && workspaceMode() && workspaceTools().active === 'files') {
+      const host=document.querySelector('.workspace-tool-content');
+      if (host) host.innerHTML=workspaceFilesContent();
+    }
+    throw error;
+  }
+  if (workspaceFileStates.get(requestedProject)?.generation !== generation) return;
+  const files=result.entries ? {path,entries:result.entries,generation} : {...previous,filePath:result.path,content:result.content,generation,loading:false,error:null};
   workspaceFileStates.set(requestedProject,files);
   const host=document.querySelector('.workspace-tool-content');
-  if (host && workspaceTools().active === 'files') host.innerHTML=workspaceFilesContent();
+  if (projectId === requestedProject && workspaceMode() && host && workspaceTools().active === 'files') host.innerHTML=workspaceFilesContent();
 }
 
 function floatingViewport() {

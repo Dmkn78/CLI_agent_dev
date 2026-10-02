@@ -244,8 +244,10 @@ class NativeUsage:
             return self.store.get('nativeSession', terminal_id)
 
     @staticmethod
-    def _same_workspace(first: str, second: str) -> bool:
-        return os.path.normcase(os.path.abspath(first)) == os.path.normcase(os.path.abspath(second))
+    def _same_workspace(first: str | os.PathLike[str], second: str | os.PathLike[str]) -> bool:
+        first_workspace = os.path.normcase(os.path.realpath(os.fspath(first)))
+        second_workspace = os.path.normcase(os.path.realpath(os.fspath(second)))
+        return first_workspace == second_workspace
 
     @staticmethod
     def _near_start(first: str, second: str) -> bool:

@@ -4,6 +4,7 @@ Version préparée : **0.3.0-beta.1**, depuis `branch_dev_laptop` du dépôt
 [Dmkn78/CLI_agent_dev](https://github.com/Dmkn78/CLI_agent_dev).
 Les preuves de build, tests et publication sont consignées dans le
 [rapport de livraison](audit/2026-10-02-desktop-release.md).
+L'[aperçu du système](SYSTEM.md) décrit les composants et leurs frontières.
 
 ## Installer et se connecter
 
@@ -16,6 +17,11 @@ Un brouillon n'est pas public et ne déclenche aucune mise à jour.
 | Windows x64 | `Atelier-0.3.0-beta.1-win-x64.exe` | Ouvrir l'installateur, choisir le dossier, puis lancer Atelier depuis le menu Démarrer. |
 | macOS Apple Silicon / arm64 | `Atelier-0.3.0-beta.1-mac-arm64.dmg` | Ouvrir le DMG et copier Atelier dans Applications. Le ZIP accompagne les mises à jour. |
 | Linux x64 | `Atelier-0.3.0-beta.1-linux-x64.AppImage` | Autoriser l'exécution dans les propriétés du fichier, puis l'ouvrir depuis un dossier utilisateur accessible en écriture. |
+
+Ces formats sont les cibles de livraison. Les fichiers macOS/Linux deviennent
+disponibles après réussite de leurs builds natifs ; le tableau n'atteste pas
+leur publication. L'installateur Windows a été construit localement et le
+desktop empaqueté a passé sa recette avec Python et Node.js retirés du PATH.
 
 Atelier embarque Electron, le service Python figé et le CLI Codex natif.
 **Python, Node.js et npm ne sont pas requis sur le poste utilisateur.**
@@ -91,6 +97,11 @@ neuf ou vide. `npm run pack` produit seulement l'application décompactée.
 `npm run dist` produit les formats du système courant avec `--publish never`.
 Codex est mis à jour avec les dépendances puis redistribué avec Atelier.
 
+Les commandes `pack` et `dist` préparent explicitement le runtime Electron.
+Avec npm 11.19 utilisé par la CI, les scripts de construction sont approuvés
+uniquement pour `node-pty` et `esbuild`, puis exécutés par `npm rebuild`.
+Cette sélection concerne les versions déjà épinglées dans le lockfile.
+
 ## CI et publication
 
 Le [workflow desktop-release.yml](../.github/workflows/desktop-release.yml)
@@ -101,7 +112,9 @@ sur cette branche. Il refuse une autre branche, exige que le commit appartienne
 La matrice construit Windows x64, macOS arm64 et Linux x64 sur leurs runners
 natifs. Chaque job vérifie la syntaxe JS, les tests backend à fournisseurs
 fictifs, le contrôleur de mise à jour, le service figé hors checkout et son MCP,
-puis les installateurs. Playwright ouvre l'application empaquetée, vérifie les
+puis les installateurs. Windows installe et désinstalle réellement NSIS sur le
+runner, vérifie le desktop sans Python/Node dans le PATH et la conservation d'un
+marqueur du profil. Playwright ouvre l'application empaquetée, vérifie les
 préférences et un PTY fictif ; Linux utilise Xvfb. Aucun prompt n'est envoyé à
 un fournisseur de modèle pour ces tests.
 

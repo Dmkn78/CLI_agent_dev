@@ -39,5 +39,6 @@ function structureDuplicaInstruction() {
     '<demande>\n# Objectif\n\n\n## Travail attendu\n\n- \n\n## Critères de réussite\n\n- \n</demande>';
   if(structured.length > draft.maxLength) {toast('Cette consigne dépasse 16 000 caractères.',true);return;}
   draft.value=structured;
+  rememberDuplicaDraft(structured);
   draft.focus();draft.setSelectionRange(draft.value.indexOf('\n\n')+2,draft.value.indexOf('\n\n')+2);
 }

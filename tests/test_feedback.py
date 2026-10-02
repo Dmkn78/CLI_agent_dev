@@ -159,6 +159,20 @@ class FeedbackTests(unittest.TestCase):
             self.app.duplica.discussion.send({'text': '/inconnue rien'})
         self.assertEqual(len(self.app.store.all('duplicaChatDelivery')), 1)
 
+    def test_slash_catalog_includes_project_agent_skills_without_other_hidden_resources(self):
+        for folder, text in (('.agents/skills/agent-skill', 'Skill du projet explicitement choisi.'),
+                             ('.agents/private/hidden-skill', 'Ressource privée.'),
+                             ('.other/hidden-skill', 'Ressource cachée.')):
+            skill = self.root / folder
+            skill.mkdir(parents=True)
+            (skill / 'SKILL.md').write_text(text, encoding='utf-8')
+        catalog = self.app.commands.catalog('atelier')
+        self.assertEqual([command['name'] for command in catalog], ['agent-skill'])
+        self.assertEqual(catalog[0]['path'], '.agents/skills/agent-skill/SKILL.md')
+        self.assertIn('Skill du projet explicitement choisi.', self.app.commands.expand('atelier', '/agent-skill mon cas'))
+        with self.assertRaises(ValueError):
+            self.app.commands.expand('atelier', '/hidden-skill')
+
     def test_remove_and_restore_preserve_proofs_and_reject_active_sessions(self):
         session = self.app.new_session({'model': 'fixture', 'name': 'Ancien agent', 'planMode': False}, start=False)
         with self.assertRaises(ValueError):

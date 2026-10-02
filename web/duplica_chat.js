@@ -25,7 +25,7 @@ function duplicaView() {
     ${messages.length ? messages.map(message => `<article class="duplica-chat-message ${esc(message.role)}"><small>${message.role === 'user' ? message.source === 'telegram' ? 'Vous · Telegram' : 'Vous' : 'Duplica'}</small><div class="message-markdown">${messageMarkdown(message.text)}</div>${message.attachments?.length ? `<div class="chat-attachments">${attachmentMarkup(message.attachments)}</div>` : ''}</article>`).join('') : `<div class="duplica-chat-welcome"><span>${icon('spark')}</span><h2>Que souhaitez-vous faire avancer ?</h2><p>Parlez du projet ${esc(project().name)}. Ajoutez vos fichiers, images ou dossiers ; tapez / pour choisir une commande.</p></div>`}
     ${pending}${busy ? '<p class="duplica-chat-progress">Duplica réfléchit…</p>' : ''}${delivery && ['failed','interrupted'].includes(delivery.status) ? `<p class="inline-error">${esc(delivery.error || 'Discussion interrompue. Vous pouvez écrire à nouveau.')}</p>` : ''}${session && ['failed','stopped','closed'].includes(session.status) ? btn('resume','Reprendre la discussion','arrow','quiet',`data-id="${esc(session.id)}"`) : ''}${approvals.map(approvalCard).join('')}</div>
     <form data-form="duplica-chat" class="duplica-chat-composer">${attachmentComposer()}
-      <textarea id="duplica-message" name="text" aria-label="Message à Duplica" placeholder="Écrivez en Markdown ; Entrée pour une nouvelle ligne…" rows="3" maxlength="16000"></textarea>
+      <textarea id="duplica-message" name="text" aria-label="Message à Duplica" placeholder="Écrivez en Markdown ; Entrée pour une nouvelle ligne…" rows="3" maxlength="16000">${esc(duplicaDraftText.get(projectId) || '')}</textarea>
       <div class="duplica-compose-tools">
         ${btn('duplica-attach','','attachment','icon-btn','type="button" title="Joindre des fichiers et images" aria-label="Joindre des fichiers et images"')}
         ${btn('duplica-attach-folder','','folder','icon-btn','type="button" title="Joindre un dossier" aria-label="Joindre un dossier"')}
@@ -34,7 +34,7 @@ function duplicaView() {
         <label class="duplica-model-choice">${session ? esc(session.model) : `<select name="model" aria-label="Modèle de Duplica">${models.map(model => `<option value="${esc(model.model)}" ${model.model === selectedModel ? 'selected' : ''}>${esc(model.displayName)}</option>`).join('')}</select>`}</label>
         <span>${duplicaUploading.has(projectId) ? 'Ajout des fichiers…' : data.telegram.running && data.telegram.projectId === projectId ? 'Telegram connecté' : 'Lecture seule'}</span>
         ${busy && session ? btn('interrupt','Interrompre','','quiet',`data-id="${esc(session.id)}"`) : ''}
-        <button type="submit" class="button primary send-btn" aria-label="Envoyer à Duplica" ${busy || duplicaUploading.has(projectId) ? 'disabled' : ''}>${icon('arrow')}</button>
+        <button type="submit" class="button primary send-btn" aria-label="Envoyer à Duplica" ${busy || duplicaUploading.has(projectId) || duplicaSending.has(projectId) ? 'disabled' : ''}>${icon('arrow')}</button>
       </div></form>
     <div class="duplica-discussion-links">${btn('duplica-memory','Mémoire du projet','folder','quiet')}${btn('duplica-telegram',data.telegram.running ? 'Ouvrir Telegram' : 'Connecter Telegram','external','quiet')}</div></section></div>`;
 }
@@ -56,12 +56,21 @@ async function handleDuplicaChatSubmit(form, fields) {
   if (form.dataset.form === 'duplica-chat') {
     const submittedProject=projectId;
     if (duplicaUploading.has(projectId)) throw new Error('Attends la fin de l’ajout des fichiers.');
+    if (duplicaSending.has(projectId)) throw new Error('Ce message est déjà en cours d’envoi.');
     const attachments=draftAttachments().map(attachment=>attachment.id);
     const text=fields.text.trim() || (attachments.length ? 'Consulte ces pièces jointes.' : '');
     if (!text) throw new Error('Écris un message ou ajoute une pièce jointe.');
-    await api('duplica/discussion',{projectId,text,attachments,...(fields.model ? {model:fields.model} : {})});
-    duplicaDraftAttachments.delete(submittedProject);
-    form.reset();
+    rememberDuplicaDraft(fields.text,submittedProject);
+    duplicaSending.add(submittedProject);render();
+    try {
+      await api('duplica/discussion',{projectId:submittedProject,text,attachments,...(fields.model ? {model:fields.model} : {})});
+      const remaining=(duplicaDraftAttachments.get(submittedProject) || []).filter(attachment=>!attachments.includes(attachment.id));
+      duplicaDraftAttachments.set(submittedProject,remaining);
+      if ((duplicaDraftText.get(submittedProject) || '') === fields.text) {
+        duplicaDraftText.delete(submittedProject);
+        if (projectId === submittedProject && $('#duplica-message')) $('#duplica-message').value='';
+      }
+    } finally {duplicaSending.delete(submittedProject);render();}
   } else if (form.dataset.form === 'duplica-command') {
     await api('commands',{...fields,projectId});
     await loadDuplicaCommands();
@@ -83,7 +92,7 @@ Object.assign(duplicaActions,{
   'duplica-new-command':()=>duplicaCommandEditor(),
   'duplica-edit-command':element=>duplicaCommandEditor(element.dataset.id),
   'duplica-delete-command':async element=>{await api('commands/remove',{projectId,id:element.dataset.id});await duplicaCommandsModal();},
-  'duplica-use-command':element=>{const draft=$('#duplica-message');draft.value='/'+element.dataset.name+' ';draft.focus();renderSlashMenu();},
+  'duplica-use-command':element=>{const draft=$('#duplica-message');draft.value='/'+element.dataset.name+' ';rememberDuplicaDraft(draft.value);draft.focus();renderSlashMenu();},
   'duplica-panel':element => {duplicaPanel=element.dataset.panel;render();},
   'duplica-work':duplicaWorkModal,
   'duplica-memory':duplicaMemoryModal,

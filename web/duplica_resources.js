@@ -1,7 +1,19 @@
 "use strict";
 const duplicaDraftAttachments=new Map(), duplicaUploading=new Set(), duplicaCommands=new Map();
+const duplicaDraftText=new Map(), duplicaSending=new Set();
 const attachmentPreviews=new Map(), commandLoads=new Map();
 const draftAttachments=() => duplicaDraftAttachments.get(projectId) || [];
+const excludedAttachmentNames=new Set(['node_modules','__pycache__','credentials','credentials.json','auth.json','id_rsa','id_ed25519']);
+
+function shareableAttachmentPath(path) {
+  return !path.replace(/\\/g,'/').split('/').some(part => part.startsWith('.') ||
+    excludedAttachmentNames.has(part.toLowerCase()) || /\.(pem|key|p12|pfx)$/i.test(part));
+}
+
+function rememberDuplicaDraft(text, targetProject=projectId) {
+  if (text) duplicaDraftText.set(targetProject,text);
+  else duplicaDraftText.delete(targetProject);
+}
 
 function attachmentMarkup(attachments, editable=false) {
   return attachments.map(attachment => `<span class="chat-attachment" title="${esc(attachment.name)}">${attachment.kind === 'image' ? `<img data-attachment-image="${esc(attachment.id)}" data-project-id="${esc(attachment.projectId)}" alt="${esc(attachment.name)}">` : icon('attachment')}<span><strong>${esc(attachment.name)}</strong><small>${Math.ceil(attachment.size/1024)} Ko</small></span>${editable ? btn('duplica-remove-attachment','','close','icon-btn',`type="button" data-id="${esc(attachment.id)}" aria-label="Retirer ${esc(attachment.name)}"`) : ''}</span>`).join('');
@@ -13,7 +25,8 @@ function attachmentComposer() {
 
 async function addDuplicaFiles(files, targetProject=projectId) {
   if (duplicaUploading.has(targetProject)) throw new Error('Un ajout est déjà en cours.');
-  const selected=Array.from(files), previous=duplicaDraftAttachments.get(targetProject) || [];
+  const selected=Array.from(files).filter(file => !file.webkitRelativePath || shareableAttachmentPath(file.webkitRelativePath));
+  const previous=duplicaDraftAttachments.get(targetProject) || [];
   if (!selected.length) return;
   if (selected.length+previous.length > 12) throw new Error('Maximum 12 pièces jointes par message. Choisis un sous-dossier.');
   if (selected.some(file=>file.size > 8*1024*1024) || selected.reduce((total,file)=>total+file.size,previous.reduce((total,file)=>total+file.size,0)) > 32*1024*1024) throw new Error('Maximum 8 Mo par fichier et 32 Mo par message.');
@@ -25,7 +38,7 @@ async function addDuplicaFiles(files, targetProject=projectId) {
       uploaded.push(await api('attachments/upload',{projectId:targetProject,name:file.webkitRelativePath || file.name,content}));
     }
   } finally {
-    duplicaDraftAttachments.set(targetProject,[...previous,...uploaded]);
+    duplicaDraftAttachments.set(targetProject,[...(duplicaDraftAttachments.get(targetProject) || []),...uploaded]);
     duplicaUploading.delete(targetProject); render();
   }
 }
@@ -85,17 +98,21 @@ function duplicaCommandEditor(identifier) {
 async function droppedFiles(transfer) {
   const files=[];
   let visited=0;
-  async function visit(entry) {
+  async function visit(entry, parent='') {
     if (++visited > 500) throw new Error('Dossier trop grand ; choisis un sous-dossier.');
-    if (entry.name.startsWith('.') || ['node_modules','__pycache__','credentials','auth.json','id_rsa','id_ed25519'].includes(entry.name)) return;
-    if (files.length >= 12) throw new Error('Dossier limité à 12 fichiers ; choisis un sous-dossier.');
-    if (entry.isFile) files.push(await new Promise((resolve,reject)=>entry.file(resolve,reject)));
-    else if (entry.isDirectory) {
+    const relative=parent ? parent+'/'+entry.name : entry.name;
+    if (!shareableAttachmentPath(relative)) return;
+    if (entry.isFile) {
+      if (files.length >= 12) throw new Error('Dossier limité à 12 fichiers ; choisis un sous-dossier.');
+      const file=await new Promise((resolve,reject)=>entry.file(resolve,reject));
+      if (parent) Object.defineProperty(file,'webkitRelativePath',{value:relative});
+      files.push(file);
+    } else if (entry.isDirectory) {
       const reader=entry.createReader();
       for (;;) {
         const entries=await new Promise((resolve,reject)=>reader.readEntries(resolve,reject));
         if (!entries.length) break;
-        for (const child of entries) await visit(child);
+        for (const child of entries) await visit(child,relative);
       }
     }
   }
@@ -108,7 +125,7 @@ async function droppedFiles(transfer) {
 document.addEventListener('change',event=>{
   if (['duplica-files','duplica-folder'].includes(event.target.id)) addDuplicaFiles(event.target.files).catch(error=>toast(error.message,true));
 });
-document.addEventListener('input',event=>{if(event.target.id === 'duplica-message') renderSlashMenu();});
+document.addEventListener('input',event=>{if(event.target.id === 'duplica-message') {rememberDuplicaDraft(event.target.value);renderSlashMenu();}});
 document.addEventListener('paste',event=>{
   if (event.target.id !== 'duplica-message' || !event.clipboardData.files.length) return;
   event.preventDefault();addDuplicaFiles(event.clipboardData.files).catch(error=>toast(error.message,true));

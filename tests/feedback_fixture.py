@@ -27,6 +27,9 @@ resources.mkdir()
 skill = project_files / 'skills' / 'fixture-skill'
 skill.mkdir(parents=True)
 (skill / 'SKILL.md').write_text('Consigne synthétique : explique les vérifications.', encoding='utf-8')
+agent_skill = project_files / '.agents' / 'skills' / 'fixture-agent-skill'
+agent_skill.mkdir(parents=True)
+(agent_skill / 'SKILL.md').write_text('Skill synthétique du projet : examiner les preuves.', encoding='utf-8')
 app.store.update('project', 'atelier', path=str(project_files), name='Projet de recette')
 app.provider.update(connected=True, installed=True, plan='Fournisseur fictif', models=[
     {'model': name, 'displayName': name, 'isDefault': index == 0, 'defaultReasoningEffort': 'medium',

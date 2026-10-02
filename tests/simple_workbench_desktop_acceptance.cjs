@@ -100,13 +100,15 @@ async function main() {
     const inspectBrowser=() => app.evaluate(({BrowserWindow,webContents}) => {
       const browser=webContents.getAllWebContents().find(contents => contents.getURL() === 'about:blank');
       const preferences=browser?.getLastWebPreferences();
-      return {embedded:BrowserWindow.getAllWindows()[0].contentView.children.length > 1,sandbox:preferences?.sandbox,contextIsolation:preferences?.contextIsolation,nodeIntegration:preferences?.nodeIntegration};
+      const attached=BrowserWindow.getAllWindows()[0].contentView.children.find(child => child.webContents === browser);
+      const bounds=attached?.getBounds();
+      return {embedded:Boolean(bounds && bounds.width > 20 && bounds.height > 20),sandbox:preferences?.sandbox,contextIsolation:preferences?.contextIsolation,nodeIntegration:preferences?.nodeIntegration};
     });
     const browserSafety=await waitForNativeState(inspectBrowser,value => value.embedded && value.sandbox && value.contextIsolation && value.nodeIntegration === false,'Embedded browser ready');
     assert.deepEqual(browserSafety,{embedded:true,sandbox:true,contextIsolation:true,nodeIntegration:false});
-    await page.locator('.workspace-tool-pane [data-action=new-panel]').click();
+    await page.locator('.workspace-tool-pane>header [data-action=new-panel]').click();
     await page.getByRole('menuitem',{name:'Fichiers',exact:true}).click();
-    const embeddedHidden=await waitForNativeState(() => app.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].contentView.children.length === 1),value => value,'Local tool hides embedded browser');
+    const embeddedHidden=await waitForNativeState(() => app.evaluate(({BrowserWindow}) => !BrowserWindow.getAllWindows()[0].contentView.children.some(child => child.webContents?.getURL() === 'about:blank')),value => value,'Local tool hides embedded browser');
     assert.equal(embeddedHidden,true,'Native web content hides when a local tool replaces it');
     await page.getByRole('button',{name:'Fermer le panneau Fichiers',exact:true}).click();
     await page.getByRole('button',{name:'Fermer le panneau ChatGPT',exact:true}).click();

@@ -5,15 +5,17 @@ const PNG=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42
 async function main(){
   const browser=await chromium.launch({headless:true,channel:process.env.ATELIER_BROWSER_CHANNEL||'chrome'});
   const page=await browser.newPage({viewport:{width:1500,height:1000}}),errors=[];
-  const evidence=path.resolve('.atelier/feedback-evidence');fs.mkdirSync(evidence,{recursive:true});
+  const evidence=path.resolve(process.env.ATELIER_TEST_EVIDENCE || '.atelier/feedback-evidence');fs.mkdirSync(evidence,{recursive:true});
   page.on('pageerror',error=>errors.push(error.message));
   page.setDefaultTimeout(15000);
   try {
-    await page.goto('http://127.0.0.1:4332/#duplica');
+    await page.goto((process.env.ATELIER_TEST_URL || 'http://127.0.0.1:4332/')+'#duplica');
     await page.getByRole('heading',{name:'Duplica',exact:true}).waitFor();
     await page.waitForFunction(()=>provider().models.length > 0);
     await page.getByRole('button',{name:'Notifications',exact:true}).click();
     await page.locator('#work-popover .notification-item[data-kind="success"]').waitFor();
+    await page.locator('#work-popover').evaluate(async panel=>Promise.all(panel.getAnimations().map(animation=>animation.finished)));
+    assert.equal(await page.locator('#work-popover').evaluate(panel=>getComputedStyle(panel).opacity),'1');
     const semanticColors=await page.locator('#work-popover .notification-item').evaluateAll(items=>Object.fromEntries(items.map(item=>[item.dataset.kind,getComputedStyle(item.querySelector('svg')).color])));
     assert.equal(new Set(Object.values(semanticColors)).size,4);
     await page.screenshot({path:path.join(evidence,'semantic-notifications.png'),fullPage:true});
@@ -49,7 +51,7 @@ async function main(){
       document.querySelector('.duplica-chat-composer').dispatchEvent(drop);
     });
     await page.waitForFunction(()=>draftAttachments().length === 1);
-    await page.getByRole('button',{name:'Retirer drop.txt',exact:true}).click();
+    await page.getByRole('button',{name:'Retirer dossier/drop.txt',exact:true}).click();
     assert.equal(await page.locator('.duplica-chat-composer .chat-attachment').count(),0);
     await page.getByRole('button',{name:'Commandes et skills',exact:true}).click();
     await page.getByRole('button',{name:'Nouvelle commande',exact:true}).click();
@@ -61,12 +63,13 @@ async function main(){
     await page.getByLabel('Message à Duplica').fill('/');
     await page.locator('#duplica-slash-menu').waitFor({state:'visible'});
     assert.ok((await page.locator('#duplica-slash-menu').innerText()).includes('/fixture-skill'));
+    assert.ok((await page.locator('#duplica-slash-menu').innerText()).includes('/fixture-agent-skill'));
     await page.locator('[data-action="duplica-use-command"][data-name="audit"]').click();
     await page.getByLabel('Message à Duplica').fill('/audit les fichiers');
     await page.getByRole('button',{name:'Envoyer à Duplica',exact:true}).click();
     await page.waitForFunction(()=>state.duplica.discussion.deliveries.at(-1)?.text === '/audit les fichiers' && state.duplica.discussion.deliveries.at(-1)?.status === 'completed');
     await page.screenshot({path:path.join(evidence,'duplica-files-commands.png'),fullPage:true});
-    await page.getByRole('button',{name:'Vue d’ensemble',exact:true}).click();
+    await page.evaluate(()=>route('overview'));
     await page.locator('.graph-node').filter({hasText:'Agent à supprimer'}).click();
     await page.getByRole('button',{name:'Supprimer l’agent',exact:true}).click();
     await page.waitForFunction(()=>state.sessions.some(session=>session.name === 'Agent à supprimer' && session.removedAt));
@@ -75,7 +78,7 @@ async function main(){
     await page.getByRole('button',{name:'Restaurer',exact:true}).click();
     await page.locator('#modal').waitFor({state:'hidden'});
     await page.locator('.graph-node').filter({hasText:'Agent à supprimer'}).waitFor();
-    await page.getByRole('button',{name:'Canaux d’agents',exact:true}).click();
+    await page.evaluate(()=>route('channels'));
     await page.getByRole('button',{name:'Créer mon premier canal',exact:true}).click();
     await page.getByLabel('Nom du canal').fill('Discussion puis travail');
     await page.getByLabel('Sujet et résultat attendu').fill('Produire une correction, ses tests et un audit.');

@@ -36,11 +36,11 @@ async function main() {
     assert.equal(await page.locator('.workspace-tree').count(),2);
     await page.mouse.move(800,70);await page.waitForTimeout(300);
     assert.equal(await page.locator('body.sidebar-preview').count(),0);
-    const openMenu=async () => page.locator('.workspace-toolbar [data-action=new-panel]').click();
+    const openMenu=async () => page.locator('#main>.workspace-toolbar [data-action=new-panel]').click();
     await openMenu();
     await page.keyboard.press('Escape');
     assert.equal(await page.locator('#work-popover').isVisible(),false,'Escape closes the panel menu');
-    assert.equal(await page.locator('.workspace-toolbar [data-action=new-panel]').evaluate(element => element === document.activeElement),true,'Escape returns focus to the active menu anchor');
+    assert.equal(await page.locator('#main>.workspace-toolbar [data-action=new-panel]').evaluate(element => element === document.activeElement),true,'Escape returns focus to the active menu anchor');
     await openMenu();
     await page.getByRole('menuitem',{name:'Terminal',exact:true}).click();
     assert.equal(await page.locator('#modal [name=sandbox]').inputValue(),'read-only');
@@ -53,6 +53,11 @@ async function main() {
       await createNativeTerminal({runtime:'omp',model:'fixture-code',sandbox:'read-only',name:'Revue du projet'});
       return [first,activeNativeTerminal];
     });
+    const boardWidth=(await page.locator('.floating-board').boundingBox()).width;
+    await page.evaluate(() => {nativeWorkspaceLayout().dashboardVisible=true;render();});
+    assert.equal(await page.locator('.dashboard-dock-separator').count(),0,'Old dashboard preferences do not add a second dock to floating windows');
+    assert.equal((await page.locator('.floating-board').boundingBox()).width,boardWidth,'Old dashboard preferences do not shrink the floating board');
+    await page.evaluate(() => {nativeWorkspaceLayout().dashboardVisible=false;render();});
     await openMenu();await page.getByRole('menuitem',{name:'Dashboard',exact:true}).click();
     await page.locator('.workspace-tool-pane [data-dashboard-content]').waitFor();
     assert.equal(await page.locator('.floating-board>[data-floating-panel]').count(),3);
@@ -73,6 +78,10 @@ async function main() {
     await first.locator(`[data-action=zoom-native-terminal]`).click();
     assert.equal(await page.locator('.native-terminal-pane:visible').count(),2);
     const geometry=await page.evaluate(() => JSON.stringify(nativeWorkspaceLayout().windows));
+    await page.getByRole('button',{name:'Chat',exact:true}).click();
+    await page.getByRole('button',{name:'Code',exact:true}).click();
+    assert.equal(await first.evaluate(pane => pane.style.zIndex),'3','The selected foreground survives a mode switch');
+    assert.equal(await page.evaluate(() => JSON.stringify(nativeWorkspaceLayout().windows)),geometry,'Mode switches preserve window geometry');
     await page.getByLabel('Espace de travail',{exact:true}).selectOption('workspace-b');
     assert.equal(await page.locator('.native-terminal-pane').count(),0);
     await page.getByLabel('Espace de travail',{exact:true}).selectOption('atelier');
@@ -130,7 +139,7 @@ async function main() {
       }
     }
     assert.deepEqual(errors,[]);
-    fs.writeFileSync(path.join(evidence,'browser-result.json'),JSON.stringify({passed:true,fixture:true,desktopTransport:'mock',modes:3,moveResizeZoom:true,workspaceIsolation:true,panelClosurePreservesProcess:true,filesAndCanvas:true,cumulativeTokens:true,escapeMenusAndDetails:true,focusRestoration:true,widths:[1500,900,390,300],errors},null,2));
+    fs.writeFileSync(path.join(evidence,'browser-result.json'),JSON.stringify({passed:true,fixture:true,desktopTransport:'mock',modes:3,moveResizeZoom:true,workspaceIsolation:true,floatingForeground:true,panelClosurePreservesProcess:true,filesAndCanvas:true,cumulativeTokens:true,escapeMenusAndDetails:true,focusRestoration:true,widths:[1500,900,390,300],errors},null,2));
     console.log('Simple workbench browser recipe passed.');
   } catch (error) {
     await page.screenshot({path:path.join(evidence,'browser-failure.png'),fullPage:true});

@@ -116,6 +116,9 @@ jobs:
       - name: Install build dependencies
         run: |
           npm ci
+          npm install-scripts approve node-pty esbuild
+          npm rebuild node-pty esbuild
+          npm run build:electron
           npm run vendor
           ${{ matrix.python }} -m pip install -r packaging/requirements.txt
       - name: Install Linux desktop libraries
@@ -138,7 +141,7 @@ jobs:
       - name: Test fake providers and update preferences
         run: |
           ${{ matrix.python }} -B -m unittest discover -s tests -v
-          node --test tests/test_updates.cjs
+          node --test tests/test_updates.cjs tests/test_duplica_resources.cjs
           npm run test:ui
       - name: Freeze the local service and include Codex
         env:
@@ -171,7 +174,45 @@ jobs:
         run: |
           codesign --verify --deep --strict dist/mac-arm64/Atelier.app
           xcrun stapler validate dist/mac-arm64/Atelier.app
+      - name: Verify Windows installer, installed desktop and uninstall
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.release-policy.outputs.version }}
+        run: |
+          $installationDirectory = [IO.Path]::GetFullPath((Join-Path $env:RUNNER_TEMP 'atelier-installed'))
+          $temporaryRoot = [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd('\') + '\'
+          if (-not $installationDirectory.StartsWith($temporaryRoot, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'The installer smoke directory must remain inside RUNNER_TEMP.'
+          }
+          $installer = (Resolve-Path -LiteralPath "dist/Atelier-$env:VERSION-win-x64.exe").Path
+          $installedExecutable = Join-Path $installationDirectory 'Atelier.exe'
+          $uninstaller = Join-Path $installationDirectory 'Uninstall Atelier.exe'
+          $userData = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'Atelier'
+          New-Item -ItemType Directory -Path $userData -Force | Out-Null
+          $preservedMarker = Join-Path $userData 'release-installation-marker.txt'
+          Set-Content -LiteralPath $preservedMarker -Value 'NSIS lifecycle smoke marker'
+          $controllerNode = (Get-Command node).Source
+          $originalPath = $env:PATH
+          try {
+            $installation = Start-Process -FilePath $installer -ArgumentList @('/S', '/currentuser', "/D=$installationDirectory") -WindowStyle Hidden -Wait -PassThru
+            if ($installation.ExitCode -ne 0) { throw "NSIS installation failed: $($installation.ExitCode)" }
+            if (-not (Test-Path -LiteralPath $installedExecutable -PathType Leaf)) { throw 'Installed executable missing.' }
+            $env:ATELIER_PACKAGED_EXECUTABLE = $installedExecutable
+            $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot\System32\WindowsPowerShell\v1.0"
+            & $controllerNode tests/release_desktop_acceptance.cjs
+            if ($LASTEXITCODE -ne 0) { throw 'Installed desktop smoke failed.' }
+          } finally {
+            $env:PATH = $originalPath
+            if (Test-Path -LiteralPath $uninstaller -PathType Leaf) {
+              $uninstallation = Start-Process -FilePath $uninstaller -ArgumentList @('/S', '/currentuser', "_?=$installationDirectory") -WindowStyle Hidden -Wait -PassThru
+              if ($uninstallation.ExitCode -ne 0) { throw "NSIS uninstall failed: $($uninstallation.ExitCode)" }
+            }
+          }
+          if (Test-Path -LiteralPath $installedExecutable) { throw 'Uninstall left the application executable behind.' }
+          if (-not (Test-Path -LiteralPath $preservedMarker -PathType Leaf)) { throw 'Uninstall removed user data.' }
       - name: Verify packaged desktop and native PTY
+        if: runner.os != 'Windows'
         env:
           ATELIER_PACKAGED_EXECUTABLE: ${{ github.workspace }}/${{ matrix.executable }}
         run: |

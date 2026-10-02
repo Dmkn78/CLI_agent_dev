@@ -3,6 +3,25 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
+const CAPTURE_TIMEOUT_MS = 30000;
+
+async function captureHiddenWindow(application) {
+  let timeout;
+  try {
+    return await Promise.race([
+      application.evaluate(async ({BrowserWindow}) => {
+        const image = await BrowserWindow.getAllWindows()[0].capturePage(undefined, {stayHidden: true, stayAwake: true});
+        return {size: image.getSize(), png: image.toPNG().toString('base64')};
+      }),
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => reject(new Error('La capture desktop a dépassé le délai.')), CAPTURE_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function main() {
   const executable = process.env.ATELIER_PACKAGED_EXECUTABLE;
   if (!executable) throw new Error('ATELIER_PACKAGED_EXECUTABLE requis.');
@@ -37,9 +56,11 @@ async function main() {
     await page.waitForFunction(() => window.ptyProof.includes('ATELIER_PTY_READY'));
     await page.evaluate(() => window.atelierDesktop.writeTerminal('release-smoke', 'release-ok\r'));
     await page.waitForFunction(() => window.ptyProof.includes('ECHO:release-ok'));
-    await page.screenshot({path: path.join(directory, 'connections.png'), fullPage: true});
+    const desktopCapture = await captureHiddenWindow(application);
+    assert.ok(desktopCapture.size.width > 0 && desktopCapture.size.height > 0, 'La capture desktop contient une image');
+    fs.writeFileSync(path.join(directory, 'connections.png'), Buffer.from(desktopCapture.png, 'base64'));
     assert.deepEqual(errors, []);
-    fs.writeFileSync(path.join(directory, 'proof.json'), JSON.stringify({...proof, errors, pty: true}, null, 2));
+    fs.writeFileSync(path.join(directory, 'proof.json'), JSON.stringify({...proof, errors, pty: true, capture: desktopCapture.size}, null, 2));
     console.log('Packaged desktop, isolated data, updates preferences and native PTY: passed.');
   } finally {
     await application.close();

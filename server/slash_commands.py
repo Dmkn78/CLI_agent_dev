@@ -19,22 +19,28 @@ class SlashCommands:
         root = self.app.file_path(project_id)
         commands = [command for command in self.store.all('command') if command['projectId'] == project_id]
         names = {command['name'] for command in commands}
+        excluded = {part.casefold() for part in IGNORED}
+        roots = [root]
+        agent_skills = root / '.agents' / 'skills'
+        if agent_skills.is_dir() and not agent_skills.is_symlink() and not agent_skills.parent.is_symlink():
+            roots.append(agent_skills)
         visited = 0
-        for directory, directories, files in os.walk(root):
-            visited += 1
-            if visited > 500 or len(commands) >= MAX_COMMANDS:
-                break
-            directories[:] = sorted(name for name in directories if name.casefold() not in {part.casefold() for part in IGNORED}
-                                    and not name.startswith('.') and not (Path(directory) / name).is_symlink())
-            skill = Path(directory) / 'SKILL.md'
-            if 'SKILL.md' not in files or skill.is_symlink():
-                continue
-            name = re.sub(r'[^a-z0-9_-]+', '-', Path(directory).name.lower()).strip('-')[:60]
-            if not COMMAND_NAME.fullmatch(name) or name in names:
-                continue
-            names.add(name)
-            commands.append({'id': 'skill:' + name, 'projectId': project_id, 'name': name,
-                             'description': 'Skill du projet', 'kind': 'skill', 'path': skill.relative_to(root).as_posix()})
+        for scan_root in roots:
+            for directory, directories, files in os.walk(scan_root):
+                visited += 1
+                if visited > 500 or len(commands) >= MAX_COMMANDS:
+                    break
+                directories[:] = sorted(name for name in directories if name.casefold() not in excluded
+                                        and not name.startswith('.') and not (Path(directory) / name).is_symlink())
+                skill = Path(directory) / 'SKILL.md'
+                if 'SKILL.md' not in files or skill.is_symlink():
+                    continue
+                name = re.sub(r'[^a-z0-9_-]+', '-', Path(directory).name.lower()).strip('-')[:60]
+                if not COMMAND_NAME.fullmatch(name) or name in names:
+                    continue
+                names.add(name)
+                commands.append({'id': 'skill:' + name, 'projectId': project_id, 'name': name,
+                                 'description': 'Skill du projet', 'kind': 'skill', 'path': skill.relative_to(root).as_posix()})
         return sorted(commands, key=lambda command: command['name'])
 
     def save(self, submitted: dict) -> dict:

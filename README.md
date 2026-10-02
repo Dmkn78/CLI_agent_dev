@@ -18,6 +18,7 @@ automatiques des mises à jour. L’installation se déclenche par **Installer e
 redémarrer**, après arrêt des travaux actifs. Les données restent dans le profil
 utilisateur, séparées du programme. Le [guide de livraison](docs/RELEASE.md)
 précise les architectures, les signatures, les données et les commandes de build.
+L'[aperçu du système](docs/SYSTEM.md) décrit les composants et les permissions.
 
 Les **Canaux d’agents** réunissent jusqu’à huit agents, consultants,
 orchestrateurs ou Duplica autour d’un sujet. Choisis chaque modèle, lance des
