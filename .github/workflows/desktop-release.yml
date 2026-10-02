@@ -142,6 +142,7 @@ jobs:
         run: |
           ${{ matrix.python }} -B -m unittest discover -s tests -v
           node --test tests/test_updates.cjs tests/test_duplica_resources.cjs
+          node tests/test_workspace_panels.cjs
           npm run test:ui
       - name: Freeze the local service and include Codex
         env:
@@ -159,7 +160,11 @@ jobs:
           APPLE_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_ID || '' }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'mac' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
           APPLE_TEAM_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_TEAM_ID || '' }}
-        run: npm run dist -- --${{ matrix.platform }} --${{ matrix.arch }}
+        run: |
+          for variable in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [[ -z "${!variable}" ]]; then unset "$variable"; fi
+          done
+          npm run dist -- --${{ matrix.platform }} --${{ matrix.arch }}
       - name: Verify Windows signature for stable releases
         if: runner.os == 'Windows' && needs.release-policy.outputs.require-signing == '1'
         shell: pwsh
@@ -255,7 +260,7 @@ jobs:
           test -f "Atelier-$VERSION-win-x64.exe"
           test -f "Atelier-$VERSION-mac-arm64.dmg"
           test -f "Atelier-$VERSION-mac-arm64.zip"
-          test -f "Atelier-$VERSION-linux-x64.AppImage"
+          test -f "Atelier-$VERSION-linux-x86_64.AppImage"
           for manifest in SHA256SUMS-*.sha256; do sha256sum --check "$manifest"; done
       - name: Create or refresh a draft only
         env:

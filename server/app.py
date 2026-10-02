@@ -53,10 +53,10 @@ class Application:
                 ('Une interface, mes abonnements', 'Piloter les outils locaux connectés aux abonnements existants. Ne pas exiger une clé API pour Codex.', ['produit', 'codex'], True),
                 ('Le contexte se charge au besoin', 'Charger un noyau court au démarrage ; retrouver les détails par recherche lexicale MCP. Séparer mémoire durable et journaux.', ['mémoire', 'contexte'], True),
                 ('La preuve précède le statut', 'Un succès de modèle ne prouve pas la qualité du travail. Conserver résultats d’outils, logs, artefacts et validations indépendantes.', ['audit', 'validation'], True),
-                ('Captures de référence', 'Les six captures originales se trouvent dans docs/references/screenshots/. Leur correspondance est détaillée dans docs/memory/USER_REQUEST.md.', ['design', 'références'], False),
+                ('Connexion native Codex', 'Connecter le compte par le parcours officiel de Codex. Les modèles disponibles viennent du catalogue natif ; les credentials restent gérés par Codex.', ['connexion', 'codex'], False),
             ]:
                 self.store.put('memory', dict(id=uid('mem'), title=title, body=body, tags=tags, core=core,
-                                             scope='project', projectId='atelier', source='docs/memory/USER_REQUEST.md', createdAt=now(), kind='règle'))
+                                             scope='project', projectId='atelier', source='Atelier · règles produit', createdAt=now(), kind='règle'))
         for s in self.store.all('session'):
             if s['status'] not in ('closed', 'failed'):
                 self.store.update('session', s['id'], status='stopped', turnId=None)

@@ -114,7 +114,9 @@ async function loadWorkspaceFiles(path='') {
   let result;
   try {result=await api('files?project='+encodeURIComponent(requestedProject)+'&path='+encodeURIComponent(path));}
   catch (error) {
-    if (workspaceFileStates.get(requestedProject)?.generation === generation) workspaceFileStates.set(requestedProject,{...previous,generation,loading:false,error:error.message});
+    if (workspaceFileStates.get(requestedProject)?.generation !== generation) return;
+    workspaceFileStates.set(requestedProject,{...previous,generation,loading:false,error:error.message});
+    if (projectId !== requestedProject) return;
     if (projectId === requestedProject && workspaceMode() && workspaceTools().active === 'files') {
       const host=document.querySelector('.workspace-tool-content');
       if (host) host.innerHTML=workspaceFilesContent();

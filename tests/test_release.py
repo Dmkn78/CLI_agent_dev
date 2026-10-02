@@ -1,4 +1,5 @@
 """Release lifecycle tests use isolated data and never contact model providers."""
+import io
 import json
 import os
 import queue
@@ -13,12 +14,26 @@ import urllib.request
 from pathlib import Path
 from unittest.mock import patch
 
+from scripts.service_entry import configure_utf8_stdio
 from server.runtime import memory_command
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_frozen_stdio_uses_utf8_instead_of_windows_code_page(self):
+        with io.TextIOWrapper(io.BytesIO('entrée'.encode('utf-8')), encoding='cp1252') as stdin, \
+             io.TextIOWrapper(io.BytesIO(), encoding='cp1252') as stdout, \
+             io.TextIOWrapper(io.BytesIO(), encoding='cp1252') as stderr:
+            with patch.multiple(sys, stdin=stdin, stdout=stdout, stderr=stderr):
+                configure_utf8_stdio()
+                self.assertEqual(sys.stdin.read(), 'entrée')
+                print('Données locales', end='', flush=True)
+                sys.stderr.write('Échec')
+                sys.stderr.flush()
+            self.assertEqual(stdout.buffer.getvalue(), 'Données locales'.encode('utf-8'))
+            self.assertEqual(stderr.buffer.getvalue(), 'Échec'.encode('utf-8'))
+
     def test_memory_command_works_outside_install_directory(self):
         with patch.object(sys, 'frozen', True, create=True):
             self.assertEqual(memory_command(Path('data'), 'project')[1:],

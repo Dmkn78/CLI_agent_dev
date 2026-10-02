@@ -154,7 +154,7 @@ function filesView() {
               : empty(
                   "folder",
                   "Le contexte a une adresse",
-                  "Ouvrez un fichier pour le lire ici. Les captures originales sont dans docs/references/screenshots/.",
+                  "Ouvrez un fichier de votre projet pour le lire ici.",
                 )
         }<div class="editor-footer"><span>${esc(project().path)}</span><span>UTF-8 · Fichiers du projet</span></div></article></div>`
       : filesTab === "git"

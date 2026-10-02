@@ -8,7 +8,8 @@ const PLATFORM_NAMES = {win32: 'win', darwin: 'mac', linux: 'linux'};
 async function prepareReleaseAssets(sourceDirectory, destinationDirectory) {
   const platform = PLATFORM_NAMES[process.platform];
   if (!platform) throw new Error(`Plateforme non prise en charge : ${process.platform}`);
-  const prefix = `Atelier-${version}-${platform}-${process.arch}.`;
+  const artifactArchitecture = platform === 'linux' && process.arch === 'x64' ? 'x86_64' : process.arch;
+  const prefix = `Atelier-${version}-${platform}-${artifactArchitecture}.`;
   const channel = version.includes('-') ? version.split('-')[1].split('.')[0] : 'latest';
   const channelSuffix = platform === 'win' ? '' : `-${platform}`;
   const metadataNames = new Set([`${channel}${channelSuffix}.yml`]);

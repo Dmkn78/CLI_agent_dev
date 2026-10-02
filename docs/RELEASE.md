@@ -16,7 +16,7 @@ Un brouillon n'est pas public et ne déclenche aucune mise à jour.
 |---|---|---|
 | Windows x64 | `Atelier-0.3.0-beta.1-win-x64.exe` | Ouvrir l'installateur, choisir le dossier, puis lancer Atelier depuis le menu Démarrer. |
 | macOS Apple Silicon / arm64 | `Atelier-0.3.0-beta.1-mac-arm64.dmg` | Ouvrir le DMG et copier Atelier dans Applications. Le ZIP accompagne les mises à jour. |
-| Linux x64 | `Atelier-0.3.0-beta.1-linux-x64.AppImage` | Autoriser l'exécution dans les propriétés du fichier, puis l'ouvrir depuis un dossier utilisateur accessible en écriture. |
+| Linux x64 | `Atelier-0.3.0-beta.1-linux-x86_64.AppImage` | Autoriser l'exécution dans les propriétés du fichier, puis l'ouvrir depuis un dossier utilisateur accessible en écriture. |
 
 Ces formats sont les cibles de livraison. Les fichiers macOS/Linux deviennent
 disponibles après réussite de leurs builds natifs ; le tableau n'atteste pas
