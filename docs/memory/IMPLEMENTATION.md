@@ -1,4 +1,116 @@
-# État de l’implémentation — workbench, 1 octobre 2026
+# État de l’implémentation — Duplica, 2 octobre 2026
+
+## Accès Windows à Atelier
+
+Le [correctif de lancement](../audit/2026-10-02-atelier-windows-launcher.md)
+ajoute `scripts/open-atelier.ps1` et `scripts/install-atelier-shortcuts.ps1`.
+Les raccourcis **Atelier** existent dans le menu Démarrer et sur le bureau du
+poste de Damien. Le service local est réutilisé après contrôle du dossier,
+et Electron réaffiche sa fenêtre unique. Le fournisseur de certificats est
+chargé depuis le PowerShell courant si nécessaire ; aucune politique Windows
+n'est modifiée.
+
+Deux ouvertures réelles ont été vérifiées : même serveur sur 4317 et même
+fenêtre **Atelier · Agents & projets**, laissée sur **Canaux d’agents → Plan
+avant action**. Duplica reste en pause, aucune session active. C'est l'état
+observé lors de la recette, pas une garantie de processus toujours actifs.
+Le projet et ses dépendances restent requis ; pas d'exécutable autonome livré.
+
+## Discussion, Telegram et retours UX
+
+Le complément [duplica-ux](../audit/2026-10-02-duplica-ux.md) décrit l'état le
+plus récent : discussion durable par projet et partagée avec Telegram,
+Travailler pour moi limité au projet choisi, UI charbon chaud/arrondie,
+compteurs et abonnement proches des sessions. Le composant de consommation
+a été réellement développé en partie par Duplica avec GPT-6-Luna, contrôlé
+indépendamment puis relu et intégré.
+
+Telegram propose une création/association guidée par code privé de cinq
+minutes et un coffre DPAPI Windows ; aucun bot réel n'est encore configuré.
+Ses messages libres discutent désormais avec Duplica ; `/instruct` dirige
+explicitement un agent choisi. Les secrets du relais sont exclus des
+processus des agents et des recettes. Les TUI restent non automatisés ;
+seuls les compteurs Codex CLI sont lus via leurs journaux, avec association
+unique ou explicite, sans importer les conversations.
+
+Les sprints ouvrent un tableau filtré et présélectionnent le sprint lors
+d'une création de tâche ; dates et projet sont validés côté serveur. Le
+nonce HTTP est renouvelé après refus avant exécution, sans rejouer les
+résultats incertains. La TODO `task_18c4e845ba7b` suit ce correctif.
+Validation : 94 tests backend, 93 réussis et 1 saut Windows ; calculs et
+recettes navigateur/UX/workbench/manager réussis. Electron : sept PTY et
+compteurs, resize/drag/mobile réussis ; Duplica fictif réalise deux corrections
+et trois vérifications par vrais clics/clavier. Détails et limites dans
+le rapport. Aucun resize n'est envoyé après la sortie du terminal. La TODO
+des sprints/reconnexion est **En revue** ; le backend local est relancé.
+Le terminal utilisateur est préservé. La fenêtre desktop déjà ouverte charge
+les anciens scripts jusqu'à son prochain lancement ; le navigateur local
+permet de consulter immédiatement la nouvelle interface.
+
+## Duplica Agent
+
+Duplica est intégré à `Application`, au cockpit, aux sessions, workflows et
+TODO. Un indicateur reste dans la barre principale ; la vue manager réunit les
+missions, états observés, demandes, recettes, décisions et preuves. La mémoire
+globale/projet, les décisions exactes et les permissions sont persistantes sous
+`.atelier/duplica/`. Le service est désactivé par défaut ; global → projet →
+workflow → tâche → agent définit l'héritage, avec Pause/Stop/reprise de contrôle
+comme barrière générale. Les campagnes de benchmark restent exclues.
+
+Le backend Codex réutilise `app-server`, les sessions existantes et `on-request`.
+Une question connue est résolue depuis une réponse explicitement enregistrée,
+avec sa source ; une question inconnue ou contradictoire demande l'utilisateur.
+Les commandes sont classifiées prudemment, avec contrôle du dossier ; les
+profils de plan et lecture seule empêchent l'approbation automatique d'écriture.
+
+Le `ComputerController` utilise le shell Electron : captures réelles, contrôles
+observés, clics, double clics, défilement et clavier. Les observations expirent
+et se consomment une seule fois ; un contrôle changé avant clic autorise une
+nouvelle observation bornée, un résultat incertain ne se rejoue pas. Il couvre
+Atelier et un navigateur HTTP local isolé. Les GUI externes, Excel et les TUI
+natifs ne sont pas automatisés par ce contrôleur ; les PTY remontent uniquement
+PID, ouverture/fermeture et activité de sortie.
+
+Une mission conserve une recette explicite : fichiers attendus, tests, build
+(ou absence de compilation déclarée), commande d'application et parcours GUI
+avec résultat visible. Duplica exécute les tests lui-même, lance son processus
+d'application, utilise la GUI, écrit les rapports/captures, demande les
+corrections puis reteste, avec 0 à 10 relances. Le résultat `Vérifiée` dépend de
+tous ces contrôles ; les TODO restent **En revue**, pour validation humaine.
+Un outil ou fichier inaccessible produit `non exécuté` et une demande, sans
+relance de code. Une redéfinition des critères ne transforme pas une ancienne
+observation en correction validée. Les actions GUI sont auditées avec captures.
+
+Le watchdog signale silence/crash sans redémarrage aveugle. Après redémarrage,
+état et preuves restent conservés, Duplica passe en pause et la mission se
+reprend explicitement. Telegram est un relais facultatif, activé par l'utilisateur
+et configuré dans l'environnement ; il accepte un seul compte en conversation
+privée, conserve l'offset et transmet les événements importants. Aucun bot réel
+n'a été configuré ou contacté pendant cette livraison.
+
+Les empreintes SHA-256 des rapports, sorties de commande et artefacts de session
+portent sur les octets UTF-8 réellement écrits, sans conversion de fins de ligne.
+
+Validation du 2 octobre : **83 tests backend, 82 réussis et 1 saut symlink
+Windows** ; syntaxe JS/CJS et calculs cockpit vérifiés. Recette navigateur Duplica
+et régression du cockpit aux largeurs 1600/900/390/300, sans erreur JS ni
+débordement global. Recette Electron avec fournisseur fictif : permission et
+réponse CSV par vrais clics/saisie, deux relances, trois vérifications, deux bugs
+résolus après retest. Recette réelle **GPT-6-Luna** : défaut contrôlé, une
+relance/correction, deux vérifications, tests et parcours GUI réussis. Le modèle
+réel n'a demandé ni permission ni réponse : ces branches sont prouvées par la
+recette fictive, pas attribuées artificiellement au modèle réel.
+Régression desktop : navigateur isolé, PTY echo/fin, sept terminaux, déplacement,
+redimensionnement, onglets et affichage compact vérifiés. Les métadonnées Duplica
+partent après l'attachement des flux natifs pour préserver le démarrage du PTY.
+
+Les détails, commandes et preuves privées sont dans le
+[rapport Duplica](../audit/2026-10-02-duplica.md). L'inférence de préférences en
+langage naturel, le contrôle Windows externe et les autres backends spécifiques
+restent à développer. Une recette qui réussit ne prouve pas tous les workflows
+possibles ni un fonctionnement continu de plusieurs heures.
+
+## État précédent : workbench
 
 La plateforme intègre Codex app-server et Oh My Pi RPC. Le cockpit charbon/cyan suit sessions, workflows et consommation observée. Le workbench ajoute vrai navigateur ChatGPT optionnel, canvas de conception, notifications, quotas natifs, durées de tours, rapports compacts et plan soumis à validation. Voir le [rapport courant](../audit/2026-10-01-workbench.md), le [rapport chat/équipes précédent](../audit/2026-10-01-chat-teams-todo.md) et les [retours utilisateur](../references/2026-10-01-workbench-feedback.md). Le test synthétique autorisé GPT-6-Luna a réussi ; cela ne prouve pas l'accès à tous les modèles ni la qualité d'une implémentation.
 
@@ -110,6 +222,40 @@ Un test unique de streaming et de recherche mémoire avec GPT‑5.6‑Sol a ét�
 
 Le service a été redémarré après finalisation ; la session préparée reste conservée en état arrêté, reprenable.
 
+
+## Canaux de préparation — 2 octobre 2026
+
+Vue **Canaux d’agents** et connexions **API locales & distantes** livrées.
+Canaux persistants par projet, jusqu’à 8 participants et 1 à 6 tours parallèles
+avec état public identique, publication en fin de tour et synthèse à relire.
+Les participants natifs utilisent des contextes frais de discussion ; copier
+un agent existant copie sa configuration sans ses pensées, messages ni mission.
+Arrêt, callback tardif ignoré, état Arrêt en cours et reprise explicite.
+
+Codex app-server, OMP, Chat Completions et SystemOne sont adaptés. LAYA et CLEF
+sont consultants de décisions typées via un serveur configuré ; un LLM rédige
+le plan. Aucun poids n’est installé. Le transfert au chat Duplica est un brouillon ;
+la tâche issue du plan reste En revue et sa création est idempotente.
+Les clés des nouvelles API restent dans des variables du service et sont retirées
+des environnements enfants. Les tokens absents ne sont pas estimés.
+
+Preuves : 121 tests backend (120 réussis, 1 symlink ignoré), recette navigateur
+avec quatre participants fictifs, persistance et quatre largeurs. L’inférence
+native réelle et la qualité des consultants ne sont pas vérifiées. Détails :
+[rapport](../audit/2026-10-02-agent-channels.md).
+Le service local sur 4317 a été rechargé sans travail actif ; le canal réel
+« Plan avant action » est conservé en brouillon, sans participant ni inférence.
+
+Consolidation et recette Electron du 2 octobre : la navigation fixe défile
+verticalement, ce qui rend Connexions accessible lorsque les entrées dépassent
+la hauteur de fenêtre. La recette reprend une seule fois un clic explicitement
+refusé avant émission, avec nouvelle observation et recherche du label ; elle
+ne rejoue pas un résultat indéterminé. Validation isolée : 128 tests backend
+(127 réussis, 1 symlink ignoré), syntaxe JS et parcours Canaux → Connexions
+réussis, avec un rejet forcé puis un seul clic réel. Voir le
+[rapport de consolidation](../audit/2026-10-02-duplica-channels-consolidation.md).
+Les fenêtres cachées de test conservent leur rendu actif et leur fermeture est
+confirmée. Cette validation ne constitue pas un état d’exécution de Duplica.
 
 ## Correction : Agents ouvre les CLI natifs
 

@@ -67,6 +67,8 @@ def make_handler(app, token):
                     self.reply(redact(state))
                 elif route == '/api/processes':
                     self.reply(process_inventory())
+                elif route == '/api/terminal/usage/choices':
+                    self.reply(app.native_usage.choices(query['id']))
                 elif route == '/api/files':
                     self.reply(app.files(query.get('project', 'atelier'), query.get('path', '')))
                 elif route == '/api/desktop-file':
@@ -82,6 +84,13 @@ def make_handler(app, token):
                     self.reply(app.pull_requests(query.get('project', 'atelier')))
                 elif route == '/api/events':
                     self.reply(app.store.events(int(query.get('after', 0)), session=query.get('session')))
+                elif route == '/api/duplica/screenshot':
+                    import re
+                    screenshot_id = query.get('id', '')
+                    if not re.fullmatch(r'screen_[a-f0-9]{12}', screenshot_id):
+                        raise ValueError('Identifiant de capture invalide.')
+                    path = app.duplica.directory / 'screenshots' / (screenshot_id + '.png')
+                    self.reply(path.read_bytes(), mime='image/png')
                 elif route == '/api/skills':
                     root = app.file_path(query.get('project', 'atelier'))
                     paths = []
@@ -104,7 +113,7 @@ def make_handler(app, token):
                 elif route in ('/', '/index.html'):
                     content = (ROOT / 'web/index.html').read_text().replace('__ATELIER_TOKEN__', token)
                     self.reply(content.encode(), mime='text/html; charset=utf-8')
-                elif route in ('/app.js', '/core.js', '/views.js', '/cockpit.js', '/chat.js', '/forms.js', '/workbench.js', '/design.js', '/webchat.js', '/shell.js', '/terminal.js', '/style.css', '/icon.svg', '/vendor/logicflow.js', '/vendor/logicflow.css', '/vendor/xterm.js', '/vendor/xterm.css'):
+                elif route in ('/app.js', '/core.js', '/views.js', '/cockpit.js', '/chat.js', '/forms.js', '/workbench.js', '/design.js', '/webchat.js', '/shell.js', '/terminal.js', '/duplica.js', '/duplica_chat.js', '/session_usage.js', '/channels.js', '/api_connections.js', '/channels.css', '/style.css', '/icon.svg', '/vendor/logicflow.js', '/vendor/logicflow.css', '/vendor/xterm.js', '/vendor/xterm.css'):
                     path = ROOT / 'web' / route[1:]
                     self.reply(path.read_bytes(), mime=mimetypes.guess_type(path.name)[0] or 'text/plain')
                 elif route == '/favicon.ico':
@@ -127,7 +136,65 @@ def make_handler(app, token):
                     raise ValueError('Requête vide ou trop volumineuse.')
                 data = json.loads(self.rfile.read(length))
                 route = urlparse(self.path).path
-                if route == '/api/providers/refresh':
+                if route == '/api/channels':
+                    result = app.channels.create(data)
+                elif route == '/api/channels/participants':
+                    result = app.channels.add_participant(data['id'], {key: value for key, value in data.items() if key != 'id'})
+                elif route == '/api/channels/remove-participant':
+                    result = app.channels.remove_participant(data['id'], data['participantId'])
+                elif route == '/api/channels/messages':
+                    result = app.channels.post_message(data['id'], {key: value for key, value in data.items() if key != 'id'})
+                elif route == '/api/channels/start':
+                    result = app.channels.start(data['id'])
+                elif route == '/api/channels/stop':
+                    result = app.channels.stop(data['id'])
+                elif route == '/api/channels/prepare-task':
+                    result = app.channels.prepare_task(data['id'])
+                elif route == '/api/api-connections':
+                    result = app.api_connections.save(data)
+                elif route == '/api/api-connections/discover':
+                    result = app.api_connections.discover(data['id'])
+                elif route == '/api/api-connections/remove':
+                    result = app.api_connections.remove(data['id'])
+                elif route == '/api/duplica/control':
+                    result = app.duplica.control(data['action'], data.get('globalEnabled'))
+                elif route == '/api/duplica/configure':
+                    result = app.duplica.configure(data)
+                elif route == '/api/duplica/discussion':
+                    result = app.duplica.discussion.send(data)
+                elif route == '/api/duplica/telegram/connect':
+                    result = app.duplica.telegram.connect(data)
+                elif route == '/api/duplica/telegram/pair':
+                    result = app.duplica.telegram.pair()
+                elif route == '/api/duplica/work':
+                    result = app.duplica.work_on_project(data)
+                elif route == '/api/duplica/scope':
+                    result = app.duplica.set_scope(data['kind'], data['id'], data.get('enabled'))
+                elif route == '/api/duplica/context':
+                    result = app.duplica.save_context(data)
+                elif route == '/api/duplica/decision':
+                    result = app.duplica.save_decision(data)
+                elif route == '/api/duplica/mission':
+                    result = app.duplica.save_mission(data)
+                elif route == '/api/duplica/resume':
+                    result = app.duplica.resume_mission(data['sessionId'])
+                elif route == '/api/duplica/resolve':
+                    result = app.duplica.resolve_request(data['id'], data.get('answer', ''), data.get('accepted') is True, data.get('remember') is True)
+                elif route == '/api/duplica/verify':
+                    result = app.duplica.schedule_verification(data['id'])
+                elif route == '/api/duplica/computer/observe':
+                    result = app.duplica.computer.observe(data.get('target', 'platform'))
+                elif route == '/api/duplica/computer/act':
+                    result = app.duplica.computer_action(data)
+                elif route == '/api/duplica/computer/poll':
+                    result = app.duplica.bridge.poll()
+                elif route == '/api/duplica/computer/check':
+                    result = app.duplica.bridge.check(data['id'], data['generation'])
+                elif route == '/api/duplica/computer/complete':
+                    result = app.duplica.bridge.complete(data['id'], data.get('result'), data.get('error'), data.get('errorCode'))
+                elif route == '/api/duplica/terminal':
+                    result = app.duplica.native_terminal(data)
+                elif route == '/api/providers/refresh':
                     result = app.discover()
                 elif route == '/api/providers/login':
                     result = app.login()
@@ -135,6 +202,8 @@ def make_handler(app, token):
                     result = app.refresh_limits()
                 elif route == '/api/terminal/prepare':
                     result = app.terminal_plan(data)
+                elif route == '/api/terminal/usage/bind':
+                    result = app.native_usage.bind(data['id'], data['threadId'])
                 elif route == '/api/desktop/open':
                     result = open_desktop(app.root, self.server.server_port, data.get('mode', 'chat'))
                 elif route == '/api/projects/pick':
@@ -160,7 +229,12 @@ def make_handler(app, token):
                 elif route == '/api/sessions/report':
                     result = app.report(data['id'], bool(data.get('close')))
                 elif route == '/api/approvals':
+                    approval = app.store.get('approval', data['id'])
                     result = app.approve(data['id'], data.get('decision'), data.get('answers'))
+                    if data.get('remember') is True and approval['method'] == 'item/tool/requestUserInput':
+                        session = app.store.get('session', approval['sessionId'])
+                        for question in approval['params'].get('questions', []):
+                            app.duplica.save_decision({'projectId': session['projectId'], 'questions': [question['question']], 'answer': data['answers'][question['id']]})
                 elif route == '/api/save':
                     result = app.upsert(data['kind'], data['value'])
                 elif route == '/api/designs':

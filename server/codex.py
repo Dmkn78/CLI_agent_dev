@@ -5,6 +5,7 @@ import queue
 import shutil
 import subprocess
 import threading
+from .process_environment import agent_environment
 
 
 class CodexError(RuntimeError):
@@ -29,7 +30,7 @@ class CodexClient:
         self.process = subprocess.Popen(
             command,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, bufsize=1, start_new_session=True)
+            text=True, bufsize=1, start_new_session=True, env=agent_environment())
         threading.Thread(target=self._read_errors, daemon=True).start()
         threading.Thread(target=self._read, daemon=True).start()
         try:

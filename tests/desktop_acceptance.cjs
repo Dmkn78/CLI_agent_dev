@@ -12,6 +12,11 @@ async function main() {
     const errors=[];
     page.on('pageerror',error => errors.push(error.message));
     await page.getByRole('heading',{name:'ChatGPT',exact:true}).waitFor();
+    await page.evaluate(() => {
+      window.desktopTerminalEvidence=[];
+      window.atelierDesktop.onTerminalData(({id,data}) => { if (window.desktopTerminalEvidence.length < 40) window.desktopTerminalEvidence.push({id,data:data.slice(0,500)}); });
+      window.atelierDesktop.onTerminalExit(({id,exitCode}) => window.desktopTerminalEvidence.push({id,exitCode}));
+    });
     await page.evaluate(() => { sidebarCollapsed=false; browserResourcesCollapsed=false; chatFocused=false; applyShellLayout(); });
     await page.getByRole('button',{name:'Nouveau chat',exact:true}).first().click();
     await page.locator('.browser-tab').waitFor();
@@ -47,12 +52,18 @@ async function main() {
     assert.deepEqual(await page.locator('[name="cli"] option').evaluateAll(options => options.map(option => option.value)),['codex','claude','opencode','omp']);
     await page.getByRole('button',{name:'Ouvrir ici',exact:false}).click();
     await page.waitForFunction(() => [...nativeTerminals.values()][0]?.terminal.buffer.active.getLine(0) && [...Array(nativeTerminals.values().next().value.terminal.buffer.active.length)].some((_,index) => nativeTerminals.values().next().value.terminal.buffer.active.getLine(index)?.translateToString().includes('ATELIER_PTY_READY')));
+    const initialSize=await page.evaluate(() => ({id:activeNativeTerminal,cols:nativeTerminals.get(activeNativeTerminal).terminal.cols,rows:nativeTerminals.get(activeNativeTerminal).terminal.rows}));
+    let observedSizes=[];
+    for (let attempt=0;attempt<20;attempt++) {
+      observedSizes=await application.evaluate(() => globalThis.terminalResizes);
+      if (observedSizes.some(size => size.id === initialSize.id && size.cols === initialSize.cols && size.rows === initialSize.rows)) break;
+      await page.waitForTimeout(100);
+    }
+    assert.ok(observedSizes.some(size => size.id === initialSize.id && size.cols === initialSize.cols && size.rows === initialSize.rows),JSON.stringify({expected:initialSize,observed:observedSizes}));
     await page.evaluate(() => window.atelierDesktop.writeTerminal(activeNativeTerminal,'terminal-test\r'));
     await page.waitForFunction(() => [...nativeTerminals.values()][0]?.exited);
     const transcript=await page.evaluate(() => { const buffer=nativeTerminals.values().next().value.terminal.buffer.active; return Array.from({length:buffer.length},(_,index) => buffer.getLine(index)?.translateToString()).join('\n'); });
     assert.ok(transcript.includes('ECHO:terminal-test'));
-    const initialSize=await page.evaluate(() => ({id:activeNativeTerminal,cols:nativeTerminals.get(activeNativeTerminal).terminal.cols,rows:nativeTerminals.get(activeNativeTerminal).terminal.rows}));
-    assert.ok((await application.evaluate(() => globalThis.terminalResizes)).some(size => size.id === initialSize.id && size.cols === initialSize.cols && size.rows === initialSize.rows));
     const previousColumns=await page.evaluate(() => nativeTerminals.values().next().value.terminal.cols);
     await application.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].setContentSize(1000,800));
     await page.waitForFunction(previous => nativeTerminals.values().next().value.terminal.cols < previous,previousColumns);
@@ -70,6 +81,10 @@ async function main() {
     await page.waitForFunction(() => [...nativeTerminals.values()].every(tab => { const buffer=tab.terminal.buffer.active; return Array.from({length:buffer.length},(_,index) => buffer.getLine(index)?.translateToString()).join('\n').includes('ATELIER_PTY_READY'); }),null,{timeout:45000});
     assert.equal(await page.locator('.native-terminal-pane').count(),7);
     assert.equal(await page.locator('.xterm').count(),7);
+    assert.equal(await page.locator('.native-session-footer').count(),7);
+    await page.waitForFunction(() => state.nativeSessions.length >= 7);
+    assert.ok((await page.locator('.native-session-footer').first().innerText()).includes('Abonnement :'));
+    assert.ok((await page.locator('.native-session-footer').first().innerText()).includes('Compteur non communiqué'));
     const panels=await page.locator('.native-terminal-pane').evaluateAll(elements => elements.map(element => {const rect=element.getBoundingClientRect(); return {x:rect.x,y:rect.y,width:rect.width,height:rect.height};}));
     assert.ok(panels.every(panel => panel.width > 300 && panel.height >= 160));
     for (let first=0; first < panels.length; first++) for (let second=first+1; second < panels.length; second++) {
@@ -112,7 +127,7 @@ async function main() {
     const pixels=await application.evaluate(async ({BrowserWindow}) => (await BrowserWindow.getAllWindows()[0].capturePage()).toPNG().toString('base64'));
     fs.writeFileSync('.atelier/browser-evidence/desktop-shell-fixture.png',Buffer.from(pixels,'base64'));
     console.log('Desktop acceptance passed: isolated browser, hover overlay, real PTY echo/exit, seven panes, drag/resize/zoom/tabs/mobile/close. ChatGPT login/upload not automated.');
-  } catch (error) { console.error('Desktop recipe failed:',error); const page=application.windows()[0]; if (page) console.error(await page.evaluate(() => [...nativeTerminals.values()].map(tab => ({title:tab.title,exited:tab.exited,transcript:Array.from({length:tab.terminal.buffer.active.length},(_,index) => tab.terminal.buffer.active.getLine(index)?.translateToString()).join('\n').slice(-500)}))).catch(() => [])); throw error; }
+  } catch (error) { console.error('Desktop recipe failed:',error); const page=application.windows()[0]; if (page) console.error(await page.evaluate(() => ({events:window.desktopTerminalEvidence,terminals:[...nativeTerminals.values()].map(tab => ({title:tab.title,exited:tab.exited,transcript:Array.from({length:tab.terminal.buffer.active.length},(_,index) => tab.terminal.buffer.active.getLine(index)?.translateToString()).join('\n').slice(-500)}))})).catch(() => [])); throw error; }
   finally { await application.close(); }
 }
 main().catch(error => {console.error(error); process.exitCode=1;});

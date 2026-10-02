@@ -41,7 +41,7 @@ class OmpSession:
             state = self.client.rpc('get_state')
             if state.get('dumpTools'):
                 raise OmpError('Des outils natifs OMP sont encore actifs. Session refusée pour conserver le périmètre Atelier.')
-            tools = [self.tool('atelier_read', 'Read a project file or list a project directory.',
+            tools = [] if session.get('discussionOnly') else [self.tool('atelier_read', 'Read a project file or list a project directory.',
                                {'path': {'type': 'string'}}, ['path'])]
             if session['sandbox'] == 'workspace-write':
                 tools.append(self.tool('atelier_write', 'Replace a project text file after user approval.',
@@ -164,6 +164,8 @@ class OmpSession:
 
     def handle_tool(self, frame):
         try:
+            if self.session.get('discussionOnly'):
+                raise ValueError('Ce participant discute uniquement ; aucun outil n’est autorisé.')
             arguments = frame.get('arguments') or {}
             relative = arguments.get('path', '')
             if not isinstance(relative, str):

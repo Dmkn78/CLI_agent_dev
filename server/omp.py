@@ -4,6 +4,7 @@ import queue
 import shutil
 import subprocess
 import threading
+from .process_environment import agent_environment
 
 
 class OmpError(RuntimeError):
@@ -35,7 +36,7 @@ class OmpClient:
                                       'providers': {'cacheWarming': 'off'}, 'advisor': {'enabled': False}}), encoding='utf-8')
         command += ['--config', str(policy)]
         self.process = subprocess.Popen(command, cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                        stderr=subprocess.PIPE, text=True, encoding='utf-8', bufsize=1)
+                                        stderr=subprocess.PIPE, text=True, encoding='utf-8', bufsize=1, env=agent_environment())
         threading.Thread(target=self._read, daemon=True).start()
         threading.Thread(target=self._read_errors, daemon=True).start()
         if not self.ready.wait(30) or self.process.poll() is not None:

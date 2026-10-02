@@ -1,0 +1,14 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const context=vm.createContext({esc:text=>String(text??'').replaceAll('&','&amp;').replaceAll('<','&lt;'),compact:value=>value==null?'—':String(value)});
+vm.runInContext(fs.readFileSync('web/session_usage.js','utf8'),context);
+const render=context.sessionUsageSummary;
+const session={usage:{total:{inputTokens:120,outputTokens:30,cachedInputTokens:80,totalTokens:150}}};
+const html=render(session,{plan:'plus',limits:{rateLimitsByLimitId:{codex:{primary:{usedPercent:25.5}}}}});
+for(const text of ['150 tokens','120 tokens','30 tokens','80 tokens','plus','25.5','compte partagé'])assert.ok(html.includes(text),text);
+assert.ok(!html.includes('230 tokens'));
+assert.ok(render({usage:null},{}).includes('—'));assert.ok(!render({usage:null},{}).includes('0 tokens'));
+assert.ok(render({usage:{total:{totalTokens:0}}},{}).includes('0 tokens'));
+for(const totalTokens of [-1,NaN,Infinity,0.5,'<img src=x>'])assert.ok(!render({usage:{total:{totalTokens}}},{}).includes(String(totalTokens)+' tokens'));
+assert.ok(!render(session,{plan:'<script>x</script>'}).includes('<script>'));
+assert.ok(!render(session,{limits:{rateLimits:{primary:{usedPercent:150}}}}).includes('150%'));
+console.log('Session counters passed: totals, cache, missing/zero, shared quota, HTML escaping.');

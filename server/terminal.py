@@ -6,6 +6,8 @@ import shlex
 import shutil
 import subprocess
 
+from .process_environment import agent_environment
+
 
 def powershell_literal(value):
     literal = str(value)
@@ -98,14 +100,14 @@ def launch_terminal(plan):
     if os.name == 'nt':
         encoded = base64.b64encode(plan['script'].encode('utf-16-le')).decode('ascii')
         process = subprocess.Popen(['powershell.exe', '-NoProfile', '-NoExit', '-EncodedCommand', encoded],
-                                   cwd=plan['cwd'], creationflags=subprocess.CREATE_NEW_CONSOLE)
+                                   cwd=plan['cwd'], env=agent_environment(), creationflags=subprocess.CREATE_NEW_CONSOLE)
         return {'opened': True, 'pid': process.pid}
     terminal = shutil.which('x-terminal-emulator') or shutil.which('xterm')
     if terminal:
-        process = subprocess.Popen([terminal, '-e', 'sh', '-c', plan['script']], cwd=plan['cwd'])
+        process = subprocess.Popen([terminal, '-e', 'sh', '-c', plan['script']], cwd=plan['cwd'], env=agent_environment())
         return {'opened': True, 'pid': process.pid}
     if shutil.which('osascript'):
         escaped = json.dumps(plan['script'])
-        subprocess.run(['osascript', '-e', 'tell application "Terminal" to do script ' + escaped], check=True)
+        subprocess.run(['osascript', '-e', 'tell application "Terminal" to do script ' + escaped], check=True, env=agent_environment())
         return {'opened': True}
     raise ValueError('Aucun terminal compatible détecté. La commande préparée reste disponible.')

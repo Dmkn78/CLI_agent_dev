@@ -47,6 +47,8 @@ const icon = (name, cls = "") =>
   `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name] || paths.grid}"/></svg>`;
 const nav = [
   ["overview", "Vue d’ensemble", "grid"],
+  ["duplica", "Duplica Agent", "spark"],
+  ["channels", "Canaux d’agents", "network"],
   ["terminal", "Code", "terminal"],
   ["agents", "Agents", "agents"],
   ["webchat", "ChatGPT", "agents"],
@@ -72,6 +74,8 @@ let state = {
   providers: [],
   events: [],
   approvals: [],
+  discussions: {channels: [], participants: [], messages: [], rounds: []},
+  apiConnections: [],
 };
 let view = "overview",
   projectId = localStorage.getItem("atelier-project") || "atelier",
@@ -93,6 +97,7 @@ let view = "overview",
   loading = false;
 let selectedGraphNode = null, graphWorkflowId = '', graphPage = 0, usageGrouping = 'provider', usageProvider = '', terminalSettings = null;
 let selectedChatId = null;
+let taskSprintFilter = '', localSessionRefresh = null;
 const chatFileCharacters = {};
 const project = () =>
   state.projects.find((p) => p.id === projectId) ||
@@ -141,7 +146,7 @@ const empty = (ico, title, text, action = "", label = "") =>
 const heading = (kicker, title, description, actions = "") =>
   `<div class="page-heading"><div><div class="eyebrow">${kicker}</div><h1>${title}</h1><p>${description}</p></div><div class="heading-actions">${actions}</div></div>`;
 async function api(path, data) {
-  const response = await fetch("/api/" + path, {
+  const send = () => fetch("/api/" + path, {
     method: data === undefined ? "GET" : "POST",
     headers: {
       "X-Atelier-Token": $('meta[name="atelier-token"]').content,
@@ -149,12 +154,29 @@ async function api(path, data) {
     },
     body: data === undefined ? undefined : JSON.stringify(data),
   });
-  const result = await response.json();
+  let response = await send();
+  let result = await response.json();
+  if (response.status === 403 && result.error === 'Session locale requise.') {
+    // Nonce refusals precede execution. Never retry timeouts or uncertain actions.
+    if (!localSessionRefresh) localSessionRefresh = renewLocalSession().finally(() => { localSessionRefresh = null; });
+    await localSessionRefresh;
+    response = await send();
+    result = await response.json();
+  }
   if (!response.ok)
     throw new Error(result.error || "Le service est indisponible.");
   return result;
 }
+async function renewLocalSession() {
+  const response = await fetch('/', {cache:'no-store'});
+  if (!response.ok) throw new Error('Reconnexion au service local impossible.');
+  const document = new DOMParser().parseFromString(await response.text(), 'text/html');
+  const nonce = document.querySelector('meta[name="atelier-token"]')?.content;
+  if (!nonce) throw new Error('Session locale indisponible.');
+  $('meta[name="atelier-token"]').content = nonce;
+}
 function toast(message, error = false) {
+  if ([...$('#toasts').children].some(element => element.textContent === message)) return;
   const el = document.createElement("div");
   el.className = "toast " + (error ? "error" : "");
   el.textContent = message;
@@ -180,7 +202,7 @@ async function refresh(force = false) {
     const hash = JSON.stringify(next);
     if (force || hash !== lastStateHash) {
       lastStateHash = hash;
-      if (!force && ((view === 'design' && $('#design-canvas')) || $('#native-terminal'))) $('#notifications-button').innerHTML=notificationBell();
+      if (!force && ((view === 'design' && $('#design-canvas')) || $('#native-terminal'))) { $('#notifications-button').innerHTML=notificationBell(); renderDuplicaIndicator(); updateNativeUsage(); }
       else render();
     }
   } catch (e) {
@@ -194,6 +216,7 @@ function route(next) {
   view = nav.some((n) => n[0] === next) ? next : "overview";
   history.replaceState(null, "", "#" + view);
   render();
+  if (view === 'duplica') { $('#main').scrollTop=0; window.scrollTo(0,0); }
   if (view === "files") loadFiles(filePath);
 }
 function render() {
@@ -207,6 +230,7 @@ function render() {
   $("#breadcrumb-project").textContent = project().name;
   $("#breadcrumb-view").textContent = nav.find((n) => n[0] === view)?.[1];
   $('#notifications-button').innerHTML = notificationBell();
+  renderDuplicaIndicator();
   $("#project-list").innerHTML = state.projects
     .map(
       (p) =>
@@ -240,6 +264,8 @@ function render() {
   $("#main").className = "view-" + view;
   $("#main").innerHTML = {
     overview: cockpitView,
+    duplica: duplicaView,
+    channels: channelsView,
     terminal: terminalView,
     agents: agentsView,
     webchat: webChatView,
@@ -251,7 +277,7 @@ function render() {
     benchmarks: benchmarksView,
     files: filesView,
     audit: auditView,
-    settings: connectionsView,
+    settings: () => connectionsView() + apiConnectionsView(),
   }[view]();
   renderedProjectId = projectId;
   mountWorkbench();

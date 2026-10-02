@@ -83,6 +83,11 @@ function graphDetails(workflow, artifacts) {
 function consumptionRecords() {
   const requests = objects('requests');
   const records = [...requests];
+  for (const session of objects('nativeSessions').filter(session => session.usage?.total)) {
+    records.push({id:'native:'+session.id,sessionId:session.id,projectId:session.projectId,title:session.title,
+      provider:session.runtime,runtime:session.runtime,consumer:'terminal',model:session.model || 'Non communiqué',
+      usage:session.usage.total,createdAt:session.createdAt,status:session.status,source:session.usageSource});
+  }
   for (const session of objects('sessions').filter(s => s.usage?.total)) {
     const assigned = requests.filter(r => r.sessionId === session.id);
     const remaining = {};
@@ -116,7 +121,10 @@ function consumptionView() {
   for (const record of records) {
     const session = state.sessions.find(s => s.id === record.sessionId);
     let key = record.provider, title = key;
-    if (usageGrouping === 'consumer') { key = record.sessionId; title = session?.name || key; }
+    if (usageGrouping === 'consumer') {
+      key = record.sessionId || record.participantId || record.id;
+      title = session?.name || state.discussions?.participants.find(participant => participant.id === record.participantId)?.name || record.title || key;
+    }
     if (usageGrouping === 'task') { key = record.taskId || 'unassigned'; title = state.tasks.find(t => t.id === record.taskId)?.title || 'Sans tâche associée'; }
     if (usageGrouping === 'model') { key = record.provider + '/' + record.model; title = record.model; }
     if (usageGrouping === 'request') { key = record.id; title = record.title; }

@@ -9,14 +9,14 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from server.app import Application
-from server.store import now
+from server.store import now, uid
 from run import make_handler
 from test_application import FakeCodex
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--port',type=int,default=4320)
 args = parser.parse_args()
-app = Application(ROOT,ROOT / '.atelier' / 'browser-fixture')
+app = Application(ROOT,ROOT / '.atelier' / 'browser-fixture' / uid('run'))
 models = [{'model':name,'displayName':name,'isDefault':i == 0,'defaultReasoningEffort':'medium',
            'supportedReasoningEfforts':[{'reasoningEffort':e} for e in ['low','medium','high']]} for i,name in enumerate(['fixture-code','fixture-review'])]
 app.provider.update(connected=True,installed=True,models=models,authType='fixture',plan='Fournisseur fictif')

@@ -10,9 +10,11 @@
     <link rel="stylesheet" href="/vendor/logicflow.css" />
     <link rel="stylesheet" href="/vendor/xterm.css" />
     <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/channels.css" />
     <script src="/core.js" defer></script>
     <script src="/views.js" defer></script>
     <script src="/cockpit.js" defer></script>
+    <script src="/session_usage.js" defer></script>
     <script src="/chat.js" defer></script>
     <script src="/forms.js" defer></script>
     <script src="/vendor/logicflow.js" defer></script>
@@ -21,6 +23,10 @@
     <script src="/webchat.js" defer></script>
     <script src="/vendor/xterm.js" defer></script>
     <script src="/terminal.js" defer></script>
+    <script src="/duplica.js" defer></script>
+    <script src="/duplica_chat.js" defer></script>
+    <script src="/api_connections.js" defer></script>
+    <script src="/channels.js" defer></script>
     <script src="/shell.js" defer></script>
     <script src="/app.js" defer></script>
   </head>
@@ -84,6 +90,8 @@
             ><strong id="breadcrumb-view">Vue d’ensemble</strong>
           </div>
           <div class="topbar-actions">
+            <button id="duplica-global" class="button quiet duplica-global" data-action="duplica-open" title="Duplica Agent" aria-label="Duplica Agent"></button>
+            <button id="duplica-quick-pause" class="icon-btn" data-action="duplica-control" data-control="pause" title="Pause Duplica" aria-label="Pause Duplica" hidden>Ⅱ</button>
             <button id="notifications-button" class="icon-btn" data-action="notifications" title="Notifications" aria-label="Notifications"></button>
             <button class="search-trigger" id="global-search">
               ⌕ <span>Rechercher dans le projet</span><kbd>⌘ K</kbd></button

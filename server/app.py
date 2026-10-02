@@ -18,6 +18,11 @@ from .terminal import prepare_omp, prepare_codex, prepare_claude, prepare_openco
 from .task_queue import TaskQueue
 from .context import read_context_files, context_prompt, session_context
 from .session_report import build_report
+from .duplica import Duplica
+from .native_usage import NativeUsage
+from .api_connections import ApiConnections
+from .channel_runtime import ChannelRuntime, DISCUSSION_CONFIGURATION
+from .channels import ChannelHub
 
 IGNORED = {'.git', '.atelier', '.env', '.aws', '.ssh', '.codex', 'node_modules', '__pycache__', '.DS_Store'}
 MAX_WORKFLOW_WORKERS = 8
@@ -27,6 +32,7 @@ class Application:
     def __init__(self, root, data=None):
         self.root = Path(root).resolve()
         self.store = Store(data or self.root / '.atelier')
+        self.native_usage = NativeUsage(self)
         self.clients = {}
         self.workflow_threads = set()
         self.done = {}
@@ -69,6 +75,16 @@ class Application:
         for session in self.store.all('session'):
             if session.get('workEnabled'):
                 self.store.update('session', session['id'], workEnabled=False)
+        self.duplica = Duplica(self)
+        self.api_connections = ApiConnections(self)
+        self.channel_runtime = ChannelRuntime(self)
+        self.channels = ChannelHub(self)
+
+    def channel_reply(self, participant, public_messages, purpose):
+        return self.channel_runtime.reply(participant, public_messages, purpose)
+
+    def channel_cancel(self, channel_id):
+        self.channel_runtime.cancel(channel_id)
 
     def project(self, id='atelier'):
         return self.store.get('project', id)
@@ -160,12 +176,15 @@ class Application:
         return {'limits': self.provider.get('limits'), 'error': self.provider.get('limitsError')}
 
     def state(self):
+        self.native_usage.refresh()
         state = {('memories' if kind == 'memory' else kind + 's'): self.store.all(kind) for kind in ('project', 'session', 'task', 'memory', 'sprint', 'benchmark', 'workflow', 'request', 'notification', 'design', 'tariff')} | {
             'providers': [self.provider,
                           self.omp_provider,
                           {'id': 'claude', 'name': 'Claude Code', 'installed': bool(shutil.which('claude')), 'supported': False},
                           {'id': 'local', 'name': 'Modèles locaux', 'installed': bool(shutil.which('ollama')), 'supported': False}],
-            'events': self.store.latest_events(), 'root': str(self.root)}
+            'events': self.store.latest_events(), 'root': str(self.root), 'duplica': self.duplica.snapshot(),
+            'nativeSessions': self.store.all('nativeSession'), 'apiConnections': self.api_connections.snapshot(),
+            'discussions': self.channels.snapshot()}
         for session in state['sessions']:
             client = self.clients.get(session['id'])
             process = getattr(client, 'process', None)
@@ -242,6 +261,8 @@ class Application:
         return text[:4000]
 
     def new_session(self, data, start=True):
+        if data.get('duplicaEnabled') is not None and not isinstance(data['duplicaEnabled'], bool):
+            raise ValueError('Activation Duplica invalide.')
         project = self.project(data.get('projectId', 'atelier'))
         configuration = self.model_configuration(data)
         execution_mode = data.get('executionMode', 'code')
@@ -268,6 +289,8 @@ class Application:
                        planningStage='diagnosis', totalTurnDurationMs=None)
         read_context_files(self, session, session['contextFiles'])
         self.store.put('session', session)
+        if 'duplicaEnabled' in data:
+            self.duplica.set_scope('session', id, data['duplicaEnabled'])
         self.done[session['id']] = threading.Event()
         self.session_locks[session['id']] = threading.RLock()
         self.store.event('session.created', {'name': session['name'], 'model': model, 'sandbox': session['sandbox']}, session['id'], project['id'])
@@ -280,6 +303,8 @@ class Application:
         try:
             instructions = self.instructions(s)
             configuration = {}
+            if s.get('discussionOnly'):
+                configuration.update(DISCUSSION_CONFIGURATION)
             if s['memory']:
                 configuration.update({'mcp_servers.atelier_memory.command': sys.executable,
                                  'mcp_servers.atelier_memory.args': [str(self.root / 'server/memory_mcp.py'), '--data', str(self.store.root), '--project', s['projectId']],
@@ -294,6 +319,8 @@ class Application:
             params = {'cwd': s.get('workingPath', self.project(s['projectId'])['path']), 'model': s['model'],
                       'approvalPolicy': 'on-request', 'sandbox': 'read-only' if s.get('planMode') and s.get('planningStage') != 'implementation' else s['sandbox'],
                       'developerInstructions': instructions}
+            if s.get('discussionOnly') and s.get('runtime', 'codex') == 'codex':
+                params['ephemeral'] = True
             if s.get('threadId') and any(m.get('role') == 'user' for m in s['messages']):
                 response = client.rpc('thread/resume', dict(params, threadId=s['threadId']))
             else:
@@ -321,6 +348,8 @@ class Application:
             self.done[id].set()
 
     def instructions(self, s):
+        if s.get('discussionOnly'):
+            return s['mission']
         text = 'Tu travailles dans Atelier. Mission: ' + s['mission']
         text += '\nRôle: ' + str(s.get('role', 'developer'))
         if s.get('executionMode') == 'chat':
@@ -351,12 +380,21 @@ class Application:
             session = self.store.get('session', id)
         except ValueError:
             return
+        if not method.startswith('item/reasoning'):
+            self.store.update('session', id, lastActivityAt=now())
         if 'id' in message and method:
+            if session.get('discussionOnly'):
+                client = self.clients.get(id)
+                if client:
+                    client.unsupported(message['id'])
+                self.store.event('channel.tool_refused', {'method': method}, id, session['projectId'])
+                return
             if method in ('item/commandExecution/requestApproval', 'item/fileChange/requestApproval', 'item/permissions/requestApproval', 'item/tool/requestUserInput'):
-                self.store.put('approval', {'id': id + ':' + str(message['id']), 'sessionId': id, 'requestId': message['id'], 'method': method, 'params': redact(params)})
+                self.store.put('approval', {'id': id + ':' + str(message['id']), 'sessionId': id, 'requestId': message['id'], 'method': method, 'params': redact(params), 'createdAt': now()})
                 self.store.update('session', id, status='waiting')
                 self.store.event('permission.requested', {'method': method, 'params': params}, id, session['projectId'])
                 self.notify(id + ':permission:' + str(message['id']), 'Accord requis · ' + session['name'], id, session['projectId'])
+                self.duplica.wake.set()
             else:
                 client = self.clients.get(id)
                 if client:
@@ -441,8 +479,10 @@ class Application:
             self.store.event(method, params, id, session['projectId'])
         if method == 'turn/completed':
             self.done[id].set()
+            self.duplica.wake.set()
+            self.duplica.discussion.completed(id)
 
-    def prompt(self, id, text, schema=None):
+    def prompt(self, id, text, schema=None, display_text=None, source='user'):
         if not text.strip() or len(text) > 100000:
             raise ValueError('Message vide ou trop long.')
         client = self.clients.get(id)
@@ -462,7 +502,7 @@ class Application:
                 submitted_text = ('DIAGNOSTIC ET PLAN UNIQUEMENT. Ne modifie aucun fichier. Reproduis le problème si possible en lecture seule, '
                                   'inspecte les preuves et distingue les hypothèses. Propose un test de régression (ne le déclare pas rouge sans exécution), '
                                   'un plan court et ses vérifications. Attends la validation humaine avant toute implémentation.\n\n' + submitted_text)
-            messages = s['messages'] + [{'id': uid('msg'), 'role': 'user', 'text': redact(text), 'ts': now()}]
+            messages = s['messages'] + [{'id': uid('msg'), 'role': 'user', 'text': redact(display_text if display_text is not None else text), 'ts': now(), 'source': source}]
             self.done[id].clear()
             request_id = uid('request')
             self.store.put('request', dict(id=request_id, projectId=s['projectId'], sessionId=id, taskId=s.get('taskId'),
@@ -537,21 +577,29 @@ class Application:
 
     def approve(self, id, decision, answers=None):
         a = self.store.get('approval', id)
-        client = self.clients.get(a['sessionId'])
-        if not client:
-            raise ValueError('Session arrêtée.')
-        if a['method'] == 'item/tool/requestUserInput':
-            result = {'answers': {k: {'answers': [str(v)]} for k, v in (answers or {}).items()}}
-        elif a['method'] == 'item/permissions/requestApproval':
-            result = {'permissions': a['params'].get('permissions', {}) if decision == 'accept' else {}, 'scope': 'turn'}
-        else:
-            if decision not in ('accept', 'decline', 'cancel'):
-                raise ValueError('Décision invalide.')
-            result = {'decision': decision}
-        client.respond(a['requestId'], result)
-        self.store.delete('approval', id)
-        self.store.update('session', a['sessionId'], status='running')
-        self.store.event('permission.resolved', {'requestId': a['requestId'], 'decision': decision}, a['sessionId'])
+        with self.session_locks[a['sessionId']]:
+            a = self.store.get('approval', id)
+            client = self.clients.get(a['sessionId'])
+            if not client:
+                raise ValueError('Session arrêtée.')
+            if a['method'] == 'item/tool/requestUserInput':
+                questions = a['params'].get('questions', [])
+                if not answers or {question['id'] for question in questions} != set(answers) or not all(str(answer).strip() for answer in answers.values()):
+                    raise ValueError('Réponds à toutes les questions en attente.')
+                result = {'answers': {k: {'answers': [str(v)]} for k, v in answers.items()}}
+            elif a['method'] == 'item/permissions/requestApproval':
+                if decision not in ('accept', 'decline', 'cancel'):
+                    raise ValueError('Décision invalide.')
+                result = {'permissions': a['params'].get('permissions', {}) if decision == 'accept' else {}, 'scope': 'turn'}
+            else:
+                if decision not in ('accept', 'decline', 'cancel'):
+                    raise ValueError('Décision invalide.')
+                result = {'decision': decision}
+            # Remove the consumed request before the provider can emit the next one.
+            self.store.delete('approval', id)
+            self.store.update('session', a['sessionId'], status='running')
+            client.respond(a['requestId'], result)
+            self.store.event('permission.resolved', {'requestId': a['requestId'], 'decision': decision}, a['sessionId'])
         return {'ok': True}
 
     def write_handoff(self, id):
@@ -690,6 +738,10 @@ class Application:
             if obj['status'] not in ('todo', 'running', 'review', 'done'):
                 raise ValueError('État invalide.')
             obj.setdefault('priority', 'medium')
+            if obj.get('sprintId'):
+                sprint = self.store.get('sprint', obj['sprintId'])
+                if sprint['projectId'] != obj['projectId']:
+                    raise ValueError('Choisis un sprint de ce projet.')
             if obj.get('assigneeId'):
                 agent = self.store.get('session', obj['assigneeId'])
                 if agent['projectId'] != obj['projectId'] or agent.get('parentId') or agent.get('executionMode') == 'chat':
@@ -697,6 +749,13 @@ class Application:
                 if data.get('activateAgent') and agent['status'] != 'ready' and not agent.get('workEnabled'):
                     raise ValueError('L’agent doit être prêt ou déjà abonné à la file TODO.')
             obj.pop('activateAgent', None)
+        if kind == 'sprint':
+            from datetime import date
+            for field in ('start', 'end'):
+                if obj.get(field):
+                    date.fromisoformat(obj[field])
+            if obj.get('start') and obj.get('end') and obj['end'] < obj['start']:
+                raise ValueError('L’échéance doit suivre le début du sprint.')
         if kind == 'memory':
             obj.setdefault('scope', 'project')
             obj.setdefault('tags', [])
@@ -715,6 +774,8 @@ class Application:
                 if obj['core'] and total > 4000:
                     raise ValueError('Le noyau projet + utilisateur dépasserait 4 000 caractères. Garde ce souvenir en réserve.')
         self.store.put(kind, obj)
+        if kind == 'task' and 'duplicaEnabled' in data:
+            self.duplica.set_scope('task', id, data['duplicaEnabled'])
         self.store.event(kind + '.saved', {'id': id, 'title': obj.get('title', obj.get('name'))}, project_id=obj.get('projectId'))
         if kind == 'task':
             self.task_queue.wake.set()
@@ -906,6 +967,8 @@ class Application:
             self.store.artifact(id, 'results.json', self.store.get('benchmark', id))
 
     def workflow(self, data):
+        if data.get('duplicaEnabled') is not None and not isinstance(data['duplicaEnabled'], bool):
+            raise ValueError('Activation Duplica invalide.')
         if data.get('mode') not in ('duo', 'orchestration') or not data.get('mission', '').strip():
             raise ValueError('Choisis un mode et une mission.')
         id = uid('flow')
@@ -957,6 +1020,8 @@ class Application:
                  taskId=selected_task['id'] if selected_task else data.get('taskId'), claimedTaskId=selected_task['id'] if selected_task else None,
                  planMode=bool(data.get('planMode', True)))
         self.store.put('workflow', w)
+        if 'duplicaEnabled' in data:
+            self.duplica.set_scope('workflow', id, data['duplicaEnabled'])
         thread = threading.Thread(target=self._workflow_run, args=(w,), daemon=True)
         with self.lock:
             self.workflow_threads.add(thread)
@@ -1058,6 +1123,8 @@ class Application:
         return {'ok': True}
 
     def shutdown(self):
+        self.channels.close()
+        self.duplica.close()
         self.task_queue.close()
         for client in list(self.clients.values()) + ([self.discovery] if self.discovery else []):
             client.close()

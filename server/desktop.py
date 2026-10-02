@@ -4,6 +4,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from .process_environment import agent_environment
+
 
 def open_desktop(root, port, mode):
     root = Path(root)
@@ -13,7 +15,7 @@ def open_desktop(root, port, mode):
         raise ValueError('Shell desktop non installé. Exécute npm ci et npm run vendor.')
     if mode not in ('chat', 'code', 'project'):
         raise ValueError('Mode desktop invalide.')
-    env = {**os.environ, 'ATELIER_URL': f'http://127.0.0.1:{port}/'}
+    env = {**agent_environment(), 'ATELIER_URL': f'http://127.0.0.1:{port}/'}
     env.pop('ELECTRON_RUN_AS_NODE', None)
     process = subprocess.Popen([str(executable), str(root / 'desktop/main.cjs'), '--atelier-' + mode],
                                cwd=str(root), env=env, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)

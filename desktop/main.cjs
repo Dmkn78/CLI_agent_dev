@@ -1,5 +1,6 @@
 const {app,BrowserWindow,WebContentsView,ipcMain,shell,nativeImage,dialog}=require('electron');
 const {registerTerminals,closeTerminals}=require('./pty.cjs');
+const {registerComputerController}=require('./computer.cjs');
 const path=require('node:path');
 const origin=new URL(process.env.ATELIER_URL || 'http://127.0.0.1:4317/');
 if (origin.protocol !== 'http:' || !['127.0.0.1','localhost'].includes(origin.hostname)) throw new Error('Serveur Atelier local requis.');
@@ -17,7 +18,7 @@ else app.on('second-instance',(_event,argv) => {
 });
 async function request(route,data) {
   for (let attempt=0; attempt < 2; attempt++) {
-    const response=await fetch(new URL(route,origin),{method:'POST',headers:{'X-Atelier-Token':nonce,'Content-Type':'application/json'},body:JSON.stringify(data)});
+    const response=await fetch(new URL(route,origin),{method:'POST',headers:{'X-Atelier-Token':nonce,'Content-Type':'application/json'},body:JSON.stringify(data),signal:AbortSignal.timeout(15000)});
     const result=await response.json();
     if (response.ok) return result;
     if (attempt === 0 && response.status === 403 && result.error === 'Session locale requise.') { await refreshNonce(); continue; }
@@ -56,7 +57,8 @@ app.whenReady().then(async () => {
   const mode=requestedMode || 'chat';
   await mainWindow.loadURL(new URL(mode === 'code' ? '#terminal' : '#webchat',origin).href);
   if (requestedMode) mainWindow.webContents.send('desktop:mode',mode);
-  mainWindow.on('closed',() => { closeTerminals(); for (const view of browsers.values()) if (!view.webContents.isDestroyed()) view.webContents.close(); browsers.clear(); });
+  const stopComputer=registerComputerController({getWindow:() => mainWindow,request,fixture:process.env.ATELIER_DESKTOP_TEST === '1'});
+  mainWindow.on('closed',() => { stopComputer(); closeTerminals(); for (const view of browsers.values()) if (!view.webContents.isDestroyed()) view.webContents.close(); browsers.clear(); });
 });
 ipcMain.handle('browser:create',async (event,id) => {
   trusted(event); browserId(id);

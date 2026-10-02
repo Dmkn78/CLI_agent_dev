@@ -1,4 +1,5 @@
 const actions = {
+  'open-sprint-tasks': el => { taskSprintFilter = el.dataset.id; route('tasks'); },
   'select-graph-node': (el) => { selectedGraphNode = el.dataset.id; render(); },
   'select-workflow': (el) => { graphWorkflowId = el.dataset.id; selectedGraphNode = null; render(); },
   'graph-page': (el) => { graphPage = Math.max(0, graphPage + Number(el.dataset.direction)); selectedGraphNode = null; render(); },
@@ -272,6 +273,7 @@ const actions = {
   },
   project: (el) => {
     projectId = el.dataset.id;
+    taskSprintFilter = '';
     localStorage.setItem("atelier-project", projectId);
     selectedAgents = [];
     selectedChatId = null;
@@ -350,7 +352,7 @@ function updateAgentMode(form) {
 document.addEventListener("click", async (event) => {
   const el = event.target.closest("[data-action]");
   if (!el || !el.dataset.action) return;
-  const action = actions[el.dataset.action];
+  const action = actions[el.dataset.action] || duplicaActions[el.dataset.action];
   if (!action) return;
   event.preventDefault();
   try {
@@ -373,6 +375,25 @@ document.addEventListener("submit", async (event) => {
   if (submit) submit.disabled = true;
   try {
     switch (form.dataset.form) {
+      case 'api-connection':
+        await submitApiConnection(form,value);
+        break;
+      case 'channel-create':
+      case 'channel-participant':
+      case 'channel-message':
+        await handleChannelSubmit(form,value);
+        break;
+      case 'duplica-chat':
+      case 'duplica-work':
+      case 'duplica-telegram':
+        await handleDuplicaChatSubmit(form,value);
+        break;
+      case 'duplica-context':
+      case 'duplica-decision':
+      case 'duplica-permissions':
+      case 'duplica-mission':
+        await handleDuplicaSubmit(form,fd,value);
+        break;
       case "agent": {
         const data = {
           ...value,
@@ -384,6 +405,9 @@ document.addEventListener("submit", async (event) => {
           sendInitialMission: fd.has('sendInitialMission'),
           sandbox: value.executionMode === 'chat' ? 'read-only' : value.sandbox,
         };
+        if (value.duplicaEnabled !== 'inherit') data.duplicaEnabled=value.duplicaEnabled === 'true';
+        else delete data.duplicaEnabled;
+        if (data.duplicaEnabled && duplicaData().settings.status !== 'active') await api('duplica/control',{action:'start'});
         if (value.mode !== 'classic') {
           data.agents = {
             planner: configurationValues(form, 'planner_'),
@@ -441,7 +465,7 @@ document.addEventListener("submit", async (event) => {
         await loadChatFiles(form.dataset.id);
         break;
       case "answers":
-        await api("approvals", { id: form.dataset.id, answers: value });
+        await api("approvals", { id: form.dataset.id, answers: value, remember:!!form.querySelector('[data-remember-decisions]')?.checked });
         await refresh(true);
         break;
       case "memory":
@@ -465,6 +489,10 @@ document.addEventListener("submit", async (event) => {
       case "task":
       case "sprint":
         if (form.dataset.form === 'task') value.activateAgent = fd.has('activateAgent');
+        if (form.dataset.form === 'task') {
+          value.duplicaEnabled=value.duplicaEnabled === 'inherit' ? null : value.duplicaEnabled === 'true';
+          if (value.duplicaEnabled && duplicaData().settings.status !== 'active') await api('duplica/control',{action:'start'});
+        }
         await api("save", {
           kind: form.dataset.form,
           value: {
@@ -534,6 +562,7 @@ document.addEventListener("input", (event) => {
     quickSearchResults(event.target.value);
 });
 document.addEventListener("change", (event) => {
+  if (event.target.id === 'task-sprint-filter') { taskSprintFilter = event.target.value; render(); }
   const scope = event.target.closest('[data-model-config]');
   if (scope && event.target.name.endsWith('runtime')) updateConfigurationModels(scope);
   else if (scope && event.target.name.endsWith('model')) updateConfigurationEfforts(scope);
@@ -650,5 +679,7 @@ installDesignActions();
 installWebChatActions();
 installTerminalActions();
 installShellActions();
+installApiConnectionActions();
+installChannelActions();
 refresh(true);
 setInterval(() => refresh(), 1800);

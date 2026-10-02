@@ -16,7 +16,7 @@ function durationLabel(milliseconds) {
 
 function sessionObservability(session) {
   const duration = session.turnId && session.turnStartedAt ? Date.now() - Date.parse(session.turnStartedAt) : session.lastTurnDurationMs;
-  return `<div class="session-observability"><span title="Processus local vivant, pas une preuve de travail réussi">${session.processAlive ? 'Moteur connecté' : 'Moteur arrêté'}${session.processId ? ' · PID '+session.processId : ''}</span><span title="Durée du tour, incluant attente réseau et permissions">${icon('clock')} <b data-turn-clock="${esc(session.id)}">${durationLabel(duration)}</b></span>${btn('session-cost','','usage','icon-btn',`data-id="${esc(session.id)}" title="Estimation de coût" aria-label="Estimation de coût"`)}</div>`;
+  return `<div class="session-observability"><span title="Processus local vivant, pas une preuve de travail réussi">${session.processAlive ? 'Moteur connecté' : 'Moteur arrêté'}${session.processId ? ' · PID '+session.processId : ''}</span><span title="Durée du tour, incluant attente réseau et permissions">${icon('clock')} <b data-turn-clock="${esc(session.id)}">${durationLabel(duration)}</b></span>${btn('session-cost','','usage','icon-btn',`data-id="${esc(session.id)}" title="Estimation de coût" aria-label="Estimation de coût"`)}</div>${sessionUsageSummary(session,provider(session.runtime || 'codex'))}`;
 }
 
 function mountWorkbench() {

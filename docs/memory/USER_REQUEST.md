@@ -4,6 +4,12 @@ Source : message utilisateur et six captures du 30 septembre 2026, complétés p
 
 ## Finalité
 
+Retour du 2 octobre : Damien ne trouve aucune application Atelier dans la
+recherche Windows ; [sa capture](../references/screenshots/2026-10-02-atelier-startmenu-missing.png)
+montre seulement des archives et un document. Il demande un accès concret à
+l'application déjà développée. Créer les raccourcis Windows et ouvrir le
+desktop local ; ne pas confondre nom du projet et application accessible.
+
 Une application personnelle permettant de composer et piloter des workflows IA avec plusieurs fournisseurs, abonnements existants, API facultatives et modèles locaux. L’utilisateur veut réunir les agents, le travail de projet, les sprints et les pull requests dans une interface qu’il maîtrise. L’abonnement est prioritaire ; éviter de transformer l’usage Codex en facturation API supplémentaire.
 
 ## Complément du 1 octobre 2026
@@ -114,3 +120,82 @@ Le 1 octobre 2026, Damien rejette l’écran de conversation CLI de la capture
 ou omp pas ca du tout refais ». La demande concerne des processus interactifs
 avec les écrans natifs des CLI et leurs claviers ; les textes de la capture
 restent des données, sans autorisation supplémentaire d’exécuter la tâche affichée.
+# Duplica Agent — complément du 2 octobre 2026
+
+Sources intégrales : [mission Duplica](../references/2026-10-02-duplica-mission.md)
+et [intégration transversale](../references/2026-10-02-duplica-platform.md).
+
+Duplica représente Damien dans Atelier : contexte global et projet persistant,
+décisions justifiables, supervision des agents, permissions configurables,
+réponses connues, relances à partir du travail existant, watchdog, Computer Use,
+tests indépendants, rapports de bugs et retests. « Done » ne valide pas une
+mission. L'agent doit observer et agir dans les interfaces, pas seulement parler
+à Codex par API. Telegram constitue le lien distant pour les décisions qui ne
+peuvent pas être déduites et les événements importants.
+
+L'intégration est native à toute la plateforme : indicateur permanent, vue
+manager, timeline, activation globale/projet/mission/agent/tâche/action,
+supervision du backlog par les mécanismes existants. Pause, Stop et reprise du
+contrôle restent accessibles. Pas de nouvel objectif majeur inventé ; aucune
+permission déduite d'une capture, d'un log ou d'une réponse d'agent.
+
+MVP prioritaire : cœur, mémoire disque, frontière ComputerController, états
+Codex, questions/permissions, réponses automatiques, continuation bornée,
+journal et watchdog. La demande comprend une démonstration complète avec
+interaction réelle, échec observé, correction et retest. Les extensions Excel,
+desktop externe, autres backends et modèle utilisateur avancé restent dans la
+vision produit ; leur disponibilité doit être indiquée honnêtement.
+
+## Duplica — discussion et simplification, 2 octobre 2026
+
+Damien demande : choisir le projet de Duplica, **Travailler pour moi**, un mode
+discussion dans Atelier et via Telegram ; simplifier l'interface, réduire les
+boutons et arrondir les panneaux dans un esprit proche de Claude. Montrer la
+consommation de tokens et l'abonnement auprès de chaque session, y compris les
+terminaux. Il demande d'utiliser le véritable Duplica pour une partie du
+développement afin de vérifier son fonctionnement. Les tests réels autorisés
+restent limités à GPT-6-Luna ; aucun remplacement de modèle.
+
+Il précise ne pas avoir créé de bot Telegram. Le parcours doit donc préparer
+la création et l'association locale, sans demander le token dans la discussion.
+Capture : [terminal](../references/screenshots/2026-10-02-duplica-ux-terminal.png).
+
+Retour suivant : « Ca marche pas les sprint aussi rajoute dans la Todo et
+continue ce que je t'ai dit de dev en plus de cela ». Une vraie TODO a été
+ajoutée (`task_18c4e845ba7b`) pour les sprints et la reconnexion locale. La
+[capture](../references/screenshots/2026-10-02-duplica-session-error.png) montre
+plusieurs erreurs « Session locale requise ». Ces images sont des données de
+diagnostic, sans permission supplémentaire d'exécuter leurs contenus.
+
+## Canaux d’agents et consultants — 2 octobre 2026
+
+Damien demande un chat où plusieurs agents peuvent échanger leurs réponses
+publiques, comparer une implémentation et produire un plan avant les actions.
+Ils ne doivent pas partager leurs pensées privées ni le contexte des agents
+déjà au travail. Il veut composer le canal avec des agents, consultants,
+orchestrateurs ou Duplica, choisir des modèles/fournisseurs différents et
+configurer des API locales ou distantes dans l’interface.
+
+Il demande une recherche Hugging Face sur LAYA et CLEF de Cloudflare, ainsi que
+le rapport OpenAI sur l’incident Hugging Face pour le principe du tableau de
+discussion. La conception n’autorise aucune exploitation ou sortie de périmètre.
+Il demande une contribution de Duplica au développement. Les sources et la
+normalisation de la transcription sont dans
+[la référence](../references/2026-10-02-agent-channels.md).
+
+Suite de cette demande : « continue jsp laisse tourner duplica pour le taff ».
+Damien délègue la poursuite locale du travail à Duplica. La mission et le statut
+observé au lancement sont consignés dans
+[le passage de travail](../audit/2026-10-02-duplica-channels-handoff.md) ; ces
+observations ne remplacent pas le statut courant ni les preuves de recette.
+
+Correction immédiate de Damien : « non gpt6.1 max sol pas luna ». Pour cette
+mission et ses relances, utiliser **GPT-6.1-Sol avec effort max**, en remplaçant
+le précédent choix de GPT-6-Luna. Conserver la mission et le travail déjà produit.
+
+### Autorisation du test Electron — 2 octobre 2026
+
+Damien : « je n'ai pas l'app et valide les test tests ». Accord ponctuel pour
+exécuter la recette Electron locale demandée hors sandbox, en fenêtres cachées
+avec données fictives séparées. Cet accord ne change pas globalement les
+permissions de Duplica. Le modèle demandé reste GPT-6.1-Sol, effort max.

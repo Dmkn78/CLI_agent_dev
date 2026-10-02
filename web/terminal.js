@@ -15,7 +15,7 @@ function currentNativeTerminals() {
 }
 
 function nativeTerminalPane(tab) {
-  return `<section class="native-terminal-pane ${tab.id === activeNativeTerminal ? 'selected' : ''}" data-terminal-pane="${tab.id}" style="flex-grow:${tab.weight || 1}"><header draggable="true" data-terminal-drag="${tab.id}"><span class="terminal-pane-title">${icon('terminal')}<span><strong>${esc(tab.title)}</strong><small>${esc(tab.cli)}${tab.model ? ' · '+esc(tab.model) : ''}</small></span></span><span class="terminal-native-status ${tab.exited ? 'ended' : ''}">${tab.exited ? 'Arrêté' : tab.pid ? 'Ouvert' : 'Démarrage'}</span>${btn('zoom-native-terminal','','external','icon-btn',`data-id="${tab.id}" aria-label="Agrandir / restaurer ${esc(tab.title)}" title="Agrandir / restaurer"`)}${btn('close-native-terminal','','close','icon-btn',`data-id="${tab.id}" aria-label="Terminer ${esc(tab.title)}" title="Terminer ce terminal"`)}</header><div class="terminal-pane-meta" data-terminal-meta="${tab.id}"></div><div class="terminal-pane-host" id="native-terminal-${tab.id}" data-terminal-host="${tab.id}"></div></section>`;
+  return `<section class="native-terminal-pane ${tab.id === activeNativeTerminal ? 'selected' : ''}" data-terminal-pane="${tab.id}" style="flex-grow:${tab.weight || 1}"><header draggable="true" data-terminal-drag="${tab.id}"><span class="terminal-pane-title">${icon('terminal')}<span><strong>${esc(tab.title)}</strong><small>${esc(tab.cli)}${tab.model ? ' · '+esc(tab.model) : ''}</small></span></span><span class="terminal-native-status ${tab.exited ? 'ended' : ''}">${tab.exited ? 'Arrêté' : tab.pid ? 'Ouvert' : 'Démarrage'}</span>${btn('zoom-native-terminal','','external','icon-btn',`data-id="${tab.id}" aria-label="Agrandir / restaurer ${esc(tab.title)}" title="Agrandir / restaurer"`)}${btn('close-native-terminal','','close','icon-btn',`data-id="${tab.id}" aria-label="Terminer ${esc(tab.title)}" title="Terminer ce terminal"`)}</header><div class="terminal-pane-meta" data-terminal-meta="${tab.id}"></div><div class="terminal-pane-host" id="native-terminal-${tab.id}" data-terminal-host="${tab.id}"></div><footer class="native-session-footer"><div data-native-usage="${tab.id}"></div>${tab.runtime === 'codex' ? btn('native-usage-link','','usage','icon-btn',`data-id="${tab.id}" title="Associer une session Codex" aria-label="Associer une session Codex"`) : ''}</footer></section>`;
 }
 
 function terminalView() {
@@ -45,6 +45,7 @@ function mountNativeTerminal() {
     terminalPaneObserver.observe(host);
   }
   requestAnimationFrame(() => { fitNativeTerminals(); nativeTerminals.get(activeNativeTerminal)?.terminal.focus(); });
+  updateNativeUsage();
 }
 
 function fitNativeTerminals() {
@@ -61,17 +62,17 @@ async function createNativeTerminal(settings) {
   if (!window.atelierDesktop) { const opened=await api('terminal/open',settings); $('#modal').close(); toast('Terminal système ouvert'+(opened.pid ? ' · PID '+opened.pid : '')+'.'); return; }
   if (!window.TerminalEngine) throw new Error('Assets terminal absents. Exécute npm run vendor.');
   const id=crypto.randomUUID();
-  const terminal=new TerminalEngine.Terminal({cursorBlink:true,fontSize:14,fontFamily:'Consolas, monospace',scrollback:3000,theme:{background:'#24272b',foreground:'#e5e9ee',cursor:'#77d6ff'}});
+  const terminal=new TerminalEngine.Terminal({cursorBlink:true,fontSize:14,fontFamily:'Consolas, monospace',scrollback:3000,theme:{background:'#242423',foreground:'#e6e2dc',cursor:'#d59b7a'}});
   const fit=new TerminalEngine.FitAddon(); terminal.loadAddon(fit);
   const cli={codex:'Codex',claude:'Claude Code',opencode:'OpenCode',omp:'OMP · Oh My Pi'}[settings.runtime];
   const columnCounts=Array(nativeTerminalColumns).fill(0);
   for (const existing of currentNativeTerminals()) columnCounts[existing.column % nativeTerminalColumns]++;
   const column=columnCounts.indexOf(Math.min(...columnCounts));
-  const tab={id,projectId,title:settings.name?.trim().slice(0,80) || cli,cli,model:settings.model,terminal,fit,exited:false,column,order:terminalPlacementSequence++,weight:1};
+  const tab={id,projectId,title:settings.name?.trim().slice(0,80) || cli,cli,runtime:settings.runtime,model:settings.model,terminal,fit,exited:false,column,order:terminalPlacementSequence++,weight:1};
   nativeTerminals.set(id,tab); activeNativeTerminal=id; zoomedNativeTerminal=null;
   $('#modal').close(); route(view === 'agents' ? 'agents' : 'terminal');
   terminal.onData(data => { if (!tab.exited) window.atelierDesktop.writeTerminal(id,data); });
-  terminal.onResize(({cols,rows}) => window.atelierDesktop.resizeTerminal(id,cols,rows));
+  terminal.onResize(({cols,rows}) => { if (!tab.exited) window.atelierDesktop.resizeTerminal(id,cols,rows); });
   try {
     Object.assign(tab,await window.atelierDesktop.createTerminal(id,settings));
     window.atelierDesktop.resizeTerminal(id,terminal.cols,terminal.rows);
@@ -84,8 +85,23 @@ function updateNativeTerminalStatus(tab) {
   const label=document.querySelector(`[data-terminal-pane="${tab.id}"] .terminal-native-status`);
   if (label) { label.textContent=tab.exited ? 'Arrêté' : 'Ouvert'; label.classList.toggle('ended',tab.exited); }
 }
+function updateNativeUsage() {
+  for (const tab of currentNativeTerminals()) {
+    const host=document.querySelector(`[data-native-usage="${tab.id}"]`);
+    if (!host || typeof sessionUsageSummary !== 'function') continue;
+    const session=(state.nativeSessions || []).find(session => session.id === tab.id) || {runtime:tab.runtime || 'codex'};
+    const account=provider(session.runtime || 'codex');
+    host.innerHTML=sessionUsageSummary(session,{...account,plan:account.plan || session.accountPlan,limits:account.limits || session.accountLimits})+
+      `<small class="native-usage-source">${session.usageSource ? 'Compteur natif · '+stamp(session.observedAt) : 'Compteur non communiqué'}${session.nativeThreadId ? ' · '+esc(session.nativeThreadId.slice(0,8)) : ''}</small>`;
+  }
+}
 
 function installTerminalActions() {
+  actions['native-usage-link']=async element => {
+    const choices=await api('terminal/usage/choices?id='+encodeURIComponent(element.dataset.id));
+    if (!choices.length) throw new Error('Aucune session Codex native observée dans ce projet. Envoyez un premier message dans le terminal.');
+    modal('Associer le compteur natif','Choisissez la session correspondant à ce terminal.',`<form data-form="native-usage-link" data-id="${esc(element.dataset.id)}"><div class="modal-body">${select('Session Codex','threadId',choices.map(choice => [choice.id,stamp(choice.timestamp)+' · '+choice.id.slice(0,8)]))}<p class="muted small">Compteur de toute la session CLI, y compris les tours avant une reprise. Aucune conversation n’est importée.</p></div>${formFooter('Associer')}</form>`);
+  };
   actions['new-native-terminal']=() => newNativeTerminalModal();
   actions['launch-cli']=el => newNativeTerminalModal(el.dataset.runtime);
   actions['select-native-terminal']=el => { activeNativeTerminal=el.dataset.id; render(); };
@@ -111,6 +127,13 @@ document.addEventListener('change',event => {
   }
 });
 document.addEventListener('submit',async event => {
+  const link=event.target.closest('[data-form="native-usage-link"]');
+  if (link) {
+    event.preventDefault();
+    try {await api('terminal/usage/bind',{id:link.dataset.id,threadId:new FormData(link).get('threadId')});$('#modal').close();await refresh(true);}
+    catch(error){toast(error.message,true);}
+    return;
+  }
   const form=event.target.closest('[data-form="native-terminal"]');
   if (!form) return;
   event.preventDefault();
