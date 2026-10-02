@@ -49,4 +49,4 @@ function closeTerminals() {
   for (const terminal of terminals.values()) { try { terminal.kill(); } catch (_) {} }
   terminals.clear();
 }
-module.exports={registerTerminals,closeTerminals};
+module.exports={registerTerminals,closeTerminals,terminalCount:() => terminals.size};

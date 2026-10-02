@@ -1,0 +1,246 @@
+name: Desktop distribution
+
+on:
+  push:
+    branches: [branch_dev_laptop]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  PYTHONUTF8: '1'
+
+jobs:
+  release-policy:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.policy.outputs.version }}
+      prerelease: ${{ steps.policy.outputs.prerelease }}
+      require-signing: ${{ steps.policy.outputs.require-signing }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Validate laptop branch, version and signing requirements
+        id: policy
+        shell: bash
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          git merge-base --is-ancestor HEAD origin/branch_dev_laptop
+          node <<'NODE'
+          const fs = require('node:fs');
+          const {version} = require('./package.json');
+          if (!/^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$/.test(version)) {
+            throw new Error('Version attendue : x.y.z ou x.y.z-beta.n (alpha/rc également permis).');
+          }
+          const ref = process.env.GITHUB_REF;
+          if (ref.startsWith('refs/tags/')) {
+            if (ref !== `refs/tags/v${version}`) throw new Error('Le tag doit correspondre à package.json.');
+          } else if (ref !== 'refs/heads/branch_dev_laptop') {
+            throw new Error('Seule branch_dev_laptop peut construire cette distribution.');
+          }
+          const prerelease = version.includes('-');
+          if (!prerelease) {
+            const required = ['WIN_CSC_LINK', 'WIN_CSC_KEY_PASSWORD', 'MAC_CSC_LINK',
+              'MAC_CSC_KEY_PASSWORD', 'APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID'];
+            const missing = required.filter(name => !process.env[name]);
+            if (missing.length) throw new Error(`Release stable refusée : secrets manquants ${missing.join(', ')}`);
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,
+            `version=${version}\nprerelease=${prerelease}\nrequire-signing=${prerelease ? '0' : '1'}\n`);
+          NODE
+
+  build:
+    needs: release-policy
+    name: Build and smoke ${{ matrix.platform }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            platform: win
+            arch: x64
+            python: python
+            service: build/runtime/atelier-service/atelier-service.exe
+            executable: dist/win-unpacked/Atelier.exe
+          - runner: macos-14
+            platform: mac
+            arch: arm64
+            python: python3
+            service: build/runtime/atelier-service/atelier-service
+            executable: dist/mac-arm64/Atelier.app/Contents/MacOS/Atelier
+          - runner: ubuntu-22.04
+            platform: linux
+            arch: x64
+            python: python3
+            service: build/runtime/atelier-service/atelier-service
+            executable: dist/linux-unpacked/atelier
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          architecture: ${{ matrix.arch }}
+          cache: npm
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          architecture: ${{ matrix.arch }}
+      - name: Install build dependencies
+        run: |
+          npm ci
+          npm run vendor
+          ${{ matrix.python }} -m pip install -r packaging/requirements.txt
+      - name: Install Linux desktop libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y xvfb libgtk-3-0 libnss3 libgbm1 libasound2 libfuse2
+      - name: Check JavaScript syntax
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const {execFileSync} = require('node:child_process');
+          for (const directory of ['desktop', 'web', 'scripts', 'tests']) {
+            for (const name of fs.readdirSync(directory)) {
+              if (/\.(?:js|cjs)$/.test(name)) execFileSync(process.execPath, ['--check', path.join(directory, name)], {stdio: 'inherit'});
+            }
+          }
+          NODE
+      - name: Test fake providers and update preferences
+        run: |
+          ${{ matrix.python }} -B -m unittest discover -s tests -v
+          node --test tests/test_updates.cjs
+          npm run test:ui
+      - name: Freeze the local service and include Codex
+        env:
+          ATELIER_BUILD_PYTHON: ${{ matrix.python }}
+        run: npm run build:runtime
+      - name: Test the frozen service and memory MCP
+        env:
+          ATELIER_SERVICE_BINARY: ${{ github.workspace }}/${{ matrix.service }}
+        run: ${{ matrix.python }} -B -m unittest discover -s tests -p test_release.py -v
+      - name: Build installers without publishing
+        env:
+          ATELIER_REQUIRE_SIGNING: ${{ needs.release-policy.outputs.require-signing }}
+          CSC_LINK: ${{ matrix.platform == 'win' && secrets.WIN_CSC_LINK || matrix.platform == 'mac' && secrets.MAC_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.platform == 'win' && secrets.WIN_CSC_KEY_PASSWORD || matrix.platform == 'mac' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'mac' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_TEAM_ID || '' }}
+        run: npm run dist -- --${{ matrix.platform }} --${{ matrix.arch }}
+      - name: Verify Windows signature for stable releases
+        if: runner.os == 'Windows' && needs.release-policy.outputs.require-signing == '1'
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.release-policy.outputs.version }}
+        run: |
+          $installer = "dist/Atelier-$env:VERSION-win-x64.exe"
+          $signature = Get-AuthenticodeSignature -LiteralPath $installer
+          if ($signature.Status -ne 'Valid') { throw "Invalid installer signature: $($signature.Status)" }
+      - name: Verify macOS signature and notarization for stable releases
+        if: runner.os == 'macOS' && needs.release-policy.outputs.require-signing == '1'
+        run: |
+          codesign --verify --deep --strict dist/mac-arm64/Atelier.app
+          xcrun stapler validate dist/mac-arm64/Atelier.app
+      - name: Verify packaged desktop and native PTY
+        env:
+          ATELIER_PACKAGED_EXECUTABLE: ${{ github.workspace }}/${{ matrix.executable }}
+        run: |
+          if [[ "$RUNNER_OS" == 'Linux' ]]; then
+            xvfb-run --auto-servernum node tests/release_desktop_acceptance.cjs
+          else
+            node tests/release_desktop_acceptance.cjs
+          fi
+      - name: Stage only distributable files and checksums
+        run: node scripts/release-checksums.cjs dist build/release-assets
+      - uses: actions/upload-artifact@v7
+        with:
+          name: atelier-${{ matrix.platform }}-${{ matrix.arch }}
+          path: build/release-assets/*
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 14
+          compression-level: 0
+
+  draft-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [release-policy, build]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: atelier-*
+          path: release-assets
+          merge-multiple: true
+      - name: Check every downloaded asset
+        working-directory: release-assets
+        env:
+          VERSION: ${{ needs.release-policy.outputs.version }}
+          PRERELEASE: ${{ needs.release-policy.outputs.prerelease }}
+        shell: bash
+        run: |
+          test -f "Atelier-$VERSION-win-x64.exe"
+          test -f "Atelier-$VERSION-mac-arm64.dmg"
+          test -f "Atelier-$VERSION-mac-arm64.zip"
+          test -f "Atelier-$VERSION-linux-x64.AppImage"
+          for manifest in SHA256SUMS-*.sha256; do sha256sum --check "$manifest"; done
+      - name: Create or refresh a draft only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.release-policy.outputs.version }}
+          PRERELEASE: ${{ needs.release-policy.outputs.prerelease }}
+        shell: bash
+        run: |
+          cat > release-notes.md <<'NOTES'
+          Atelier includes its desktop runtime, local service and Codex CLI.
+          Install the asset matching your operating system and sign in through Connexions.
+          Updates are offered in the application; automatic download is optional.
+
+          Initial architectures: Windows x64, macOS Apple Silicon (arm64), Linux x64.
+          See docs/RELEASE.md at this tag for requirements, signing and verification limits.
+          NOTES
+          if [[ "$PRERELEASE" == 'true' ]]; then
+            printf '\nPreview release: installers may be unsigned. macOS updates require a signed application.\n' >> release-notes.md
+          fi
+          if gh release view "$RELEASE_TAG" --json isDraft > existing-release.json 2>/dev/null; then
+            node -e "if (!require('./existing-release.json').isDraft) throw new Error('Published releases are immutable in this workflow.');"
+            gh release upload "$RELEASE_TAG" release-assets/* --clobber
+          else
+            flags=(--draft --verify-tag --title "Atelier $VERSION" --notes-file release-notes.md)
+            if [[ "$PRERELEASE" == 'true' ]]; then flags+=(--prerelease); fi
+            gh release create "$RELEASE_TAG" release-assets/* "${flags[@]}"
+          fi

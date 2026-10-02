@@ -40,6 +40,10 @@ class _DiscussionStopped(Exception):
 MAX_CHANNELS = 100
 MAX_PARTICIPANTS = 8
 MAX_DISCUSSION_ROUNDS = 6
+MAX_AUTOMATIC_ROUNDS = 50
+DEFAULT_AUTOMATIC_ROUNDS = 24
+READY_MARKER = '[[ATELIER:READY]]'
+CONTINUE_MARKER = '[[ATELIER:CONTINUE]]'
 MAX_MESSAGE_CHARACTERS = 16000
 MAX_HISTORY_MESSAGES = 512
 MAX_HISTORY_CHARACTERS = 240000
@@ -50,7 +54,7 @@ REPLY_POLL_SECONDS = 0.05
 SHUTDOWN_JOIN_SECONDS = 2
 PARTICIPANT_ROLES = frozenset(('agent', 'consultant', 'orchestrator', 'duplica'))
 CONFIGURATION_FIELDS = frozenset(('runtime', 'provider', 'model', 'effort', 'connectionId', 'protocol'))
-PUBLIC_MESSAGE_FIELDS = ('id', 'channelId', 'participantId', 'author', 'role', 'text', 'createdAt', 'roundId', 'sequence')
+PUBLIC_MESSAGE_FIELDS = ('id', 'channelId', 'participantId', 'author', 'role', 'text', 'createdAt', 'roundId', 'sequence', 'readyToPlan')
 PRIVATE_TEXT = re.compile(
     r'</?(?:analysis|think|thinking|reasoning|tool_call|tool_result|function_call)(?:\s[^>]*)?>'
     r'|<\|(?:channel|im_start|im_sep)\|>'
@@ -91,7 +95,7 @@ class ChannelHub:
             return snapshot
 
     def create(self, submitted: dict) -> dict:
-        _check_fields(submitted, {'projectId', 'name', 'topic', 'maxRounds'})
+        _check_fields(submitted, {'projectId', 'name', 'topic', 'maxRounds', 'roundMode', 'autoRoundLimit', 'execution'})
         project_id = _identifier(submitted.get('projectId', 'atelier'), 'Projet')
         project = self.app.project(project_id)
         name = _public_text(submitted.get('name', 'Discussion d’agents'), 100, 'Nom')
@@ -99,6 +103,13 @@ class ChannelHub:
         max_rounds = submitted.get('maxRounds', 2)
         if type(max_rounds) is not int or not 1 <= max_rounds <= MAX_DISCUSSION_ROUNDS:
             raise ValueError('Choisis entre 1 et 6 tours de discussion.')
+        round_mode = submitted.get('roundMode', 'fixed')
+        if round_mode not in ('fixed', 'auto'):
+            raise ValueError('Mode de discussion invalide.')
+        automatic_limit = submitted.get('autoRoundLimit', DEFAULT_AUTOMATIC_ROUNDS)
+        if type(automatic_limit) is not int or not 1 <= automatic_limit <= MAX_AUTOMATIC_ROUNDS:
+            raise ValueError('Limite de sécurité : 1 à 50 tours.')
+        execution = self._execution_configuration(submitted.get('execution'))
         with self.lock:
             self._require_open()
             if len(self.store.all('channel')) >= MAX_CHANNELS:
@@ -106,6 +117,8 @@ class ChannelHub:
             channel = {
                 'id': uid('channel'), 'projectId': project['id'], 'name': name, 'topic': topic,
                 'maxRounds': max_rounds, 'status': 'draft', 'sequence': 0, 'runCount': 0,
+                'roundMode': round_mode, 'autoRoundLimit': automatic_limit, 'execution': execution,
+                'executionWorkflowId': None, 'executionTaskId': None,
                 'runId': None, 'plan': None, 'planParticipantId': None, 'preparedTaskId': None, 'error': None,
                 'createdAt': now(), 'participants': [], 'messages': [], 'rounds': [],
             }
@@ -145,6 +158,26 @@ class ChannelHub:
             self._save(channel)
             self._event('channel.participant_added', channel, participantId=participant['id'])
             return copy.deepcopy(participant)
+
+    def configure(self, channel_id: str, submitted: dict) -> dict:
+        _check_fields(submitted, {'name', 'topic', 'maxRounds', 'roundMode', 'autoRoundLimit', 'execution'})
+        with self.lock:
+            channel = self._editable(channel_id)
+            mode = submitted.get('roundMode', channel.get('roundMode', 'fixed'))
+            maximum = submitted.get('maxRounds', channel['maxRounds'])
+            automatic_limit = submitted.get('autoRoundLimit', channel.get('autoRoundLimit', DEFAULT_AUTOMATIC_ROUNDS))
+            if mode not in ('fixed', 'auto') or type(maximum) is not int or not 1 <= maximum <= MAX_DISCUSSION_ROUNDS:
+                raise ValueError('Mode ou nombre de tours invalide.')
+            if type(automatic_limit) is not int or not 1 <= automatic_limit <= MAX_AUTOMATIC_ROUNDS:
+                raise ValueError('Limite de sécurité : 1 à 50 tours.')
+            execution = self._execution_configuration(submitted['execution']) if 'execution' in submitted else channel.get('execution')
+            name = _public_text(submitted.get('name', channel['name']), 100, 'Nom')
+            topic = _public_text(submitted.get('topic', channel['topic']), MAX_MESSAGE_CHARACTERS, 'Sujet')
+            channel.update(name=name, topic=topic, roundMode=mode, maxRounds=maximum, autoRoundLimit=automatic_limit,
+                           execution=execution, status='draft', plan=None, error=None)
+            self._save(channel)
+            self._event('channel.configured', channel)
+            return self._summary(channel)
 
     def remove_participant(self, channel_id: str, participant_id: str) -> dict:
         participant_id = _identifier(participant_id, 'Participant')
@@ -206,14 +239,16 @@ class ChannelHub:
             planner = _select_planner(channel['participants'])
             if not planner:
                 raise ValueError('Ajoute un agent, un orchestrateur ou Duplica pour construire le plan.')
-            required_rounds = channel['maxRounds'] + 1
+            discussion_limit = self._discussion_limit(channel)
+            required_rounds = discussion_limit + 1
             if len(channel['rounds']) + required_rounds > MAX_RECORDED_ROUNDS:
                 raise ValueError('Historique des tours rempli ; crée un nouveau canal.')
-            _check_history_capacity(channel, [''] * (len(channel['participants']) * channel['maxRounds'] + 1))
+            _check_history_capacity(channel, [''] * (len(channel['participants']) * discussion_limit + 1))
             run = _ChannelRun(uid('channel_run'))
             channel.update(status='running', runId=run.id, runCount=channel['runCount'] + 1,
                            plan=None, planParticipantId=planner['id'], preparedTaskId=None,
                            error=None, cancellationError=None, startedAt=now())
+            channel.update(executionWorkflowId=None, executionTaskId=None, stopReason=None)
             self._save(channel)
             self._runs[channel_id] = run
             run.thread = threading.Thread(target=self._run, args=(channel_id, run), daemon=True,
@@ -236,6 +271,12 @@ class ChannelHub:
         with self.lock:
             self._require_open()
             channel = self.store.get('channel', channel_id)
+            if channel.get('executionWorkflowId'):
+                workflow = self.store.get('workflow', channel['executionWorkflowId'])
+                if workflow['status'] in ('queued', 'running', 'waiting_plan'):
+                    self.store.update('workflow', workflow['id'], status='cancelled')
+                    self._event('channel.execution_cancelled', channel, workflowId=workflow['id'])
+                    return self._summary(channel)
             run = self._runs.get(channel_id)
             if not run or channel['status'] != 'running':
                 raise ValueError('Aucune discussion active à interrompre.')
@@ -277,11 +318,24 @@ class ChannelHub:
             with self.lock:
                 channel = self._active_channel(channel_id, run)
                 participants = copy.deepcopy(channel['participants'])
-                max_rounds = channel['maxRounds']
+                max_rounds = self._discussion_limit(channel)
+                automatic = channel.get('roundMode') == 'auto'
                 planner = _select_planner(participants)
             for number in range(1, max_rounds + 1):
-                self._round(channel_id, run, participants, number, 'discussion')
-            self._round(channel_id, run, [planner], max_rounds + 1, 'plan')
+                ready = self._round(channel_id, run, participants, number, 'discussion')
+                if automatic and ready:
+                    break
+            else:
+                if automatic:
+                    with self.lock:
+                        channel = self._active_channel(channel_id, run)
+                        channel.update(status='needs_more_discussion', runId=None, stopReason='safety_limit',
+                                       error='Limite de sécurité atteinte sans accord. Aucun travail lancé ; reprends explicitement la discussion.', completedAt=now())
+                        self._save(channel)
+                        self._event('channel.limit_reached', channel)
+                    return
+            self._round(channel_id, run, [planner], number + 1, 'plan')
+            self._dispatch_execution(channel_id, run)
         except _DiscussionStopped:
             pass
         except Exception as error:
@@ -304,7 +358,7 @@ class ChannelHub:
                 self._release_finished_run(channel_id, run)
 
     def _round(self, channel_id: str, run: _ChannelRun, participants: list[dict], number: int,
-               purpose: str) -> None:
+               purpose: str) -> bool:
         with self.lock:
             channel = self._active_channel(channel_id, run)
             public_messages = _public_messages(channel['messages'])
@@ -325,7 +379,15 @@ class ChannelHub:
             _check_history_capacity(channel, [reply['text'] for reply in replies])
             round_record = next(record for record in channel['rounds'] if record['id'] == round_record['id'])
             for participant, reply in zip(participants, replies):
-                message = self._message(channel, reply['text'], participant, round_record['id'])
+                text = reply['text']
+                ready = text.splitlines()[-1].strip() == READY_MARKER
+                if text.splitlines()[-1].strip() in (READY_MARKER, CONTINUE_MARKER):
+                    text = text.rsplit('\n', 1)[0].strip() if '\n' in text else 'Décision publique du participant.'
+                if purpose == 'discussion' and channel.get('roundMode') == 'auto':
+                    text += '\n\nDécision publique : ' + ('prêt à conclure.' if ready else 'poursuivre la discussion.')
+                message = self._message(channel, text, participant, round_record['id'])
+                if purpose == 'discussion' and channel.get('roundMode') == 'auto':
+                    message['readyToPlan'] = ready
                 for key in ('usage', 'sessionId'):
                     if key in reply:
                         message[key] = reply[key]
@@ -333,11 +395,13 @@ class ChannelHub:
                 round_record['messageIds'].append(message['id'])
             round_record.update(status='completed', completedAt=now())
             if purpose == 'plan':
-                channel.update(status='ready_for_review', runId=None, completedAt=now(),
+                auto_execute = bool(channel.get('execution'))
+                channel.update(status='running' if auto_execute else 'ready_for_review', runId=run.id if auto_execute else None, completedAt=now(),
                                plan=replies[0]['text'], planParticipantId=participants[0]['id'])
             self._save(channel)
             self._event('channel.plan_ready' if purpose == 'plan' else 'channel.round_completed',
                         channel, roundId=round_record['id'])
+            return all(reply['text'].splitlines()[-1].strip() == READY_MARKER for reply in replies)
 
     def _collect_replies(self, channel_id: str, run: _ChannelRun, participants: list[dict],
                          public_messages: list[dict], topic: str, purpose: str) -> list[dict]:
@@ -348,11 +412,11 @@ class ChannelHub:
             reply, error_message = None, None
             try:
                 with self.lock:
-                    self._active_channel(channel_id, run)
+                    channel = self._active_channel(channel_id, run)
                 # Each provider gets a separate copy; callback mutations cannot reach peers.
                 public_participant = {key: copy.deepcopy(value) for key, value in participant.items()
                                       if key != 'sourceSessionId'}
-                public_participant.update(topic=topic, runId=run.id)
+                public_participant.update(topic=topic, runId=run.id, roundMode=channel.get('roundMode', 'fixed'))
                 response = self.app.channel_reply(public_participant, copy.deepcopy(public_messages), purpose)
                 reply = _public_reply(response, participant.get('sourceSessionId'))
             except _DiscussionStopped:
@@ -403,6 +467,8 @@ class ChannelHub:
             if 'configuration' in submitted or CONFIGURATION_FIELDS.intersection(submitted):
                 raise ValueError('Clone une session ou choisis une configuration, pas les deux.')
             source = self.store.get('session', _identifier(submitted['sessionId'], 'Session'))
+            if source.get('removedAt'):
+                raise ValueError('Restaure cet agent avant de copier sa configuration.')
             if source.get('projectId') != channel['projectId']:
                 raise ValueError('La session à cloner doit appartenir au même projet.')
             configuration = {key: source[key] for key in CONFIGURATION_FIELDS if key in source}
@@ -430,10 +496,55 @@ class ChannelHub:
             raise ValueError('Une configuration native ne possède pas de connexion API.')
         return public_configuration, source
 
+    def _discussion_limit(self, channel: dict) -> int:
+        return channel.get('autoRoundLimit', DEFAULT_AUTOMATIC_ROUNDS) if channel.get('roundMode') == 'auto' else channel['maxRounds']
+
+    def _execution_configuration(self, submitted: object) -> dict | None:
+        if submitted is None:
+            return None
+        _check_fields(submitted, {'executor', 'reviewer', 'sandbox'})
+        if submitted.get('sandbox') != 'workspace-write':
+            raise ValueError('L’implémentation automatique exige le choix explicite Écriture projet.')
+        configurations = {}
+        for role in ('executor', 'reviewer'):
+            _check_fields(submitted.get(role), {'runtime', 'model', 'effort'})
+            if submitted[role].get('runtime', 'codex') != 'codex':
+                raise ValueError('Choisis Codex pour l’implémentation et la vérification automatique.')
+            configurations[role] = self.app.model_configuration(submitted[role])
+        return {**configurations, 'sandbox': 'workspace-write'}
+
+    def _dispatch_execution(self, channel_id: str, run: _ChannelRun) -> None:
+        with self.lock:
+            channel = self.store.get('channel', channel_id)
+            execution = channel.get('execution')
+            if not execution:
+                return
+            self._active_channel(channel_id, run)
+            task = self.app.upsert('task', {'projectId': channel['projectId'], 'title': 'Implémentation · ' + channel['name'],
+                'description': channel['topic'] + '\n\n' + channel['plan'], 'status': 'todo', 'channelId': channel_id})
+            channel['executionTaskId'] = task['id']
+            self._save(channel)
+            workflow = self.app.workflow({'projectId': channel['projectId'], 'name': channel['name'], 'mode': 'duo',
+                **execution['executor'], 'sandbox': execution['sandbox'], 'planMode': False, 'memory': False,
+                'mission': 'Exécute le plan issu de cette discussion, dans le projet choisi. Produis les changements, '
+                    'exécute les tests nécessaires et conserve les preuves. Les inconnues du plan doivent être clarifiées avant les étapes qui en dépendent.\n\n'
+                    + channel['topic'] + '\n\nPlan :\n' + channel['plan'],
+                'startWork': True, 'taskId': task['id'], 'agents': {'workers': [{**execution['executor'],
+                    'name': 'Implémentation', 'sandbox': 'workspace-write'}], 'reviewer': execution['reviewer'],
+                    'auditor': execution['reviewer'], 'synthesizer': None}})
+            self.app.store.update('workflow', workflow['id'], channelId=channel_id)
+            channel.update(status='execution_started', runId=None, executionWorkflowId=workflow['id'], stopReason='plan_ready')
+            self._save(channel)
+            self._event('channel.execution_started', channel, workflowId=workflow['id'], taskId=task['id'])
+
     def _editable(self, channel_id: str) -> dict:
         self._require_open()
         channel_id = _identifier(channel_id, 'Canal')
         channel = self.store.get('channel', channel_id)
+        if channel.get('executionWorkflowId'):
+            workflow = self.store.get('workflow', channel['executionWorkflowId'])
+            if workflow['status'] in ('queued', 'running', 'waiting_plan'):
+                raise ValueError('L’implémentation de ce canal est encore active ; arrête-la avant de modifier ou relancer.')
         if channel_id in self._runs and channel['status'] != 'running':
             raise ValueError('Arrêt en cours : attends la fin de l’appel fournisseur avant de reprendre ou modifier le canal.')
         if channel_id in self._runs or channel['status'] == 'running':
@@ -444,6 +555,8 @@ class ChannelHub:
         summary = _channel_summary(channel)
         run = self._runs.get(channel['id'])
         summary['isStopping'] = bool(run and run.cancelled.is_set())
+        if channel.get('executionWorkflowId'):
+            summary['executionStatus'] = self.store.get('workflow', channel['executionWorkflowId'])['status']
         return summary
 
     def _require_open(self) -> None:
@@ -547,7 +660,7 @@ def _public_messages(messages: list[dict]) -> list[dict]:
     for message in reversed(messages):
         if size + len(message['text']) > MAX_CONTEXT_CHARACTERS:
             break
-        selected.append({key: copy.deepcopy(message[key]) for key in PUBLIC_MESSAGE_FIELDS})
+        selected.append({key: copy.deepcopy(message[key]) for key in PUBLIC_MESSAGE_FIELDS if key in message})
         size += len(message['text'])
     return list(reversed(selected))
 

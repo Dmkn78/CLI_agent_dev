@@ -101,7 +101,7 @@ async function newAgent(mode = "classic", executionMode = 'code', template = nul
   const formProjectId=projectId;
   form.querySelector('.modal-body').insertAdjacentHTML('afterbegin',select('Projet','agentProject',state.projects.map(p => [p.id,p.name]),projectId));
   form.querySelector('.advanced-settings').insertAdjacentHTML('beforebegin','<label class="check-option"><input type="checkbox" name="planMode" checked><span>Diagnostic et plan avant implémentation · validation requise</span></label>');
-  form.querySelector('.mode-picker').insertAdjacentHTML('beforebegin', `<div class="session-mode-picker">${select('Expérience','executionMode',[['code','Code · tâches du projet'],['chat','Conversation CLI · lecture seule']],executionMode)}</div>`);
+  form.querySelector('.modal-body').insertAdjacentHTML('afterbegin','<input type="hidden" name="executionMode" value="code">');
   form.querySelector('.advanced-settings').insertAdjacentHTML('beforebegin', '<label class="check-option"><input type="checkbox" name="startWork" checked><span>Prendre les tâches À faire au lancement</span></label>');
   updateAgentMode(form);
   if (template) {

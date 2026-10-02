@@ -3,15 +3,31 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 async function main() {
+  const deadline=setTimeout(() => { console.error('Desktop recipe exceeded 180 seconds.'); process.exit(1); },180000);
+  deadline.unref();
   const env={...process.env,ATELIER_URL:'http://127.0.0.1:4320/',ATELIER_DESKTOP_TEST:'1'};
   delete env.ELECTRON_RUN_AS_NODE;
-  const application=await electron.launch({executablePath:require('electron'),args:[path.resolve('desktop/main.cjs')],env});
+  const application=await electron.launch({executablePath:require('electron'),args:[path.resolve('desktop/main.cjs')],env,timeout:45000});
+  console.log('Desktop fixture launched.');
   try {
-    const page=await application.firstWindow();
+    const page=await application.firstWindow({timeout:30000});
+    assert.equal(await application.evaluate(({Menu}) => Menu.getApplicationMenu()),null);
     page.setDefaultTimeout(15000);
+    await application.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].webContents.setBackgroundThrottling(false));
     const errors=[];
     page.on('pageerror',error => errors.push(error.message));
     await page.getByRole('heading',{name:'ChatGPT',exact:true}).waitFor();
+    console.log('Desktop local UI ready.');
+    await application.evaluate(({BrowserWindow}) => {
+      globalThis.dragProof=[];
+      BrowserWindow.getAllWindows()[0].webContents.startDrag=options => globalThis.dragProof.push({files:options.files,iconEmpty:options.icon.isEmpty()});
+    });
+    await page.evaluate(() => window.atelierDesktop.dragFile({projectId:'atelier',path:'docs/memory'}));
+    const folderDrag=await application.evaluate(() => globalThis.dragProof[0]);
+    assert.ok(folderDrag.files.length > 3);
+    assert.ok(folderDrag.files.every(file => file.includes('docs') && file.endsWith('.md')));
+    assert.equal(folderDrag.iconEmpty,false);
+    console.log('Desktop folder drag contract passed.');
     await page.evaluate(() => {
       window.desktopTerminalEvidence=[];
       window.atelierDesktop.onTerminalData(({id,data}) => { if (window.desktopTerminalEvidence.length < 40) window.desktopTerminalEvidence.push({id,data:data.slice(0,500)}); });
@@ -30,6 +46,7 @@ async function main() {
     assert.equal(proof.contextIsolation,true);
     assert.ok(!proof.preload);
     assert.ok(proof.bounds.width > 500 && proof.bounds.height > 400);
+    console.log('Desktop embedded browser isolation passed.');
     await page.locator('#notifications-button').hover();
     await page.locator('#work-popover').waitFor({state:'visible'});
     await page.waitForTimeout(100);
@@ -64,6 +81,7 @@ async function main() {
     await page.waitForFunction(() => [...nativeTerminals.values()][0]?.exited);
     const transcript=await page.evaluate(() => { const buffer=nativeTerminals.values().next().value.terminal.buffer.active; return Array.from({length:buffer.length},(_,index) => buffer.getLine(index)?.translateToString()).join('\n'); });
     assert.ok(transcript.includes('ECHO:terminal-test'));
+    console.log('Desktop PTY echo passed.');
     const previousColumns=await page.evaluate(() => nativeTerminals.values().next().value.terminal.cols);
     await application.evaluate(({BrowserWindow}) => BrowserWindow.getAllWindows()[0].setContentSize(1000,800));
     await page.waitForFunction(previous => nativeTerminals.values().next().value.terminal.cols < previous,previousColumns);
@@ -122,12 +140,12 @@ async function main() {
     });
     assert.equal(await page.locator('.xterm').count(),0);
     assert.deepEqual(errors,[]);
-    const result={passed:true,fixture:true,remoteWebsiteTested:false,proof,terminalEcho:true,terminalSize,sevenPanes:true,panels,dragAndResize:true,errors};
+    const result={passed:true,fixture:true,remoteWebsiteTested:false,proof,applicationMenuHidden:true,folderDrag,terminalEcho:true,terminalSize,sevenPanes:true,panels,dragAndResize:true,errors};
     fs.writeFileSync('.atelier/browser-evidence/desktop-result.json',JSON.stringify(result,null,2));
     const pixels=await application.evaluate(async ({BrowserWindow}) => (await BrowserWindow.getAllWindows()[0].capturePage()).toPNG().toString('base64'));
     fs.writeFileSync('.atelier/browser-evidence/desktop-shell-fixture.png',Buffer.from(pixels,'base64'));
     console.log('Desktop acceptance passed: isolated browser, hover overlay, real PTY echo/exit, seven panes, drag/resize/zoom/tabs/mobile/close. ChatGPT login/upload not automated.');
   } catch (error) { console.error('Desktop recipe failed:',error); const page=application.windows()[0]; if (page) console.error(await page.evaluate(() => ({events:window.desktopTerminalEvidence,terminals:[...nativeTerminals.values()].map(tab => ({title:tab.title,exited:tab.exited,transcript:Array.from({length:tab.terminal.buffer.active.length},(_,index) => tab.terminal.buffer.active.getLine(index)?.translateToString()).join('\n').slice(-500)}))})).catch(() => [])); throw error; }
-  finally { await application.close(); }
+  finally { await application.close(); clearTimeout(deadline); }
 }
 main().catch(error => {console.error(error); process.exitCode=1;});

@@ -1,0 +1,22 @@
+module.exports = {
+  appId: 'fr.atelier.workbench',
+  productName: 'Atelier',
+  icon: 'packaging/icon.png',
+  directories: {output: 'dist', buildResources: 'packaging'},
+  artifactName: 'Atelier-${version}-${os}-${arch}.${ext}',
+  // node-pty ships Node-API prebuilds; the packaged PTY smoke test verifies each host.
+  npmRebuild: false,
+  electronDist: 'node_modules/electron/dist',
+  forceCodeSigning: process.env.ATELIER_REQUIRE_SIGNING === '1',
+  files: ['desktop/**/*.cjs', 'package.json', '!node_modules/@openai/**'],
+  asarUnpack: ['node_modules/node-pty/**'],
+  extraResources: [{from: 'build/runtime', to: 'runtime', filter: ['**/*']}],
+  publish: [{provider: 'github', owner: 'Dmkn78', repo: 'CLI_agent_dev', releaseType: 'draft',
+    channel: require('./package.json').version.split('-')[1]?.split('.')[0] || 'latest'}],
+  win: {target: ['nsis'], icon: 'packaging/icon.ico', verifyUpdateCodeSignature: true},
+  nsis: {oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true,
+    createDesktopShortcut: true, createStartMenuShortcut: true, deleteAppDataOnUninstall: false},
+  mac: {target: ['dmg', 'zip'], category: 'public.app-category.developer-tools', hardenedRuntime: true,
+    notarize: process.env.ATELIER_REQUIRE_SIGNING === '1'},
+  linux: {target: ['AppImage'], category: 'Development', executableName: 'atelier'},
+};

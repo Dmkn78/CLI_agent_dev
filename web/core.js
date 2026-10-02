@@ -26,6 +26,8 @@ const paths = {
   arrow: "M5 12h14 M14 7l5 5-5 5",
   external: "M14 3h7v7 M21 3l-9 9 M10 3H3v18h18v-7",
   terminal: "M4 6l6 6-6 6 M13 18h7",
+  'split-horizontal': "M3 4h18v16H3z M12 4v16",
+  'split-vertical': "M3 4h18v16H3z M3 12h18",
   chevron: "M9 5l7 7-7 7",
   check: "M5 12l4 4L19 6",
   close: "M6 6l12 12 M6 18 18 6",
@@ -37,11 +39,14 @@ const paths = {
   play: "M8 4l13 8-13 8z",
   pause: "M8 5v14 M16 5v14",
   download: "M12 3v12 M7 10l5 5 5-5 M4 16v5h16v-5",
+  attachment: "M8 12l6-6a3 3 0 0 1 4 4l-8 8a5 5 0 0 1-7-7l9-9 M6 14l8-8",
+  trash: "M3 6h18 M9 6V3h6v3 M5 6l1 15h12l1-15 M10 10v7 M14 10v7",
   code: "M8 6l-6 6 6 6 M16 6l6 6-6 6 M14 3l-4 18",
   git: "M6 3v12 M18 6v6c0 4-12 2-12 6 M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0 M9 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0 M21 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0",
   settings: "M4 7h16 M4 17h16 M8 4v6 M16 14v6",
   bell: "M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9 M10 21h4",
   spark: "M12 2l3 7 7 3-7 3-3 7-3-7-7-3 7-3z",
+  home: "M3 10l9-7 9 7v11h-6v-7H9v7H3z",
 };
 const icon = (name, cls = "") =>
   `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name] || paths.grid}"/></svg>`;
@@ -50,7 +55,8 @@ const nav = [
   ["duplica", "Duplica Agent", "spark"],
   ["channels", "Canaux d’agents", "network"],
   ["terminal", "Code", "terminal"],
-  ["agents", "Agents", "agents"],
+  ["agents", "Sessions", "agents"],
+  ["dashboard", "Dashboard des agents", "grid"],
   ["webchat", "ChatGPT", "agents"],
   ["design", "Architecture", "network"],
   ["tasks", "Tableau des tâches", "tasks"],
@@ -104,7 +110,7 @@ const project = () =>
   state.projects[0] || { id: "atelier", name: "Atelier", path: "" };
 const provider = (id = 'codex') => state.providers.find((p) => p.id === id) || {};
 const objects = (key) =>
-  (state[key] || []).filter((o) => o.projectId === project().id);
+  (state[key] || []).filter((o) => o.projectId === project().id && (key !== 'sessions' || !o.removedAt));
 const sessions = () => objects("sessions").filter((s) => !s.parentId);
 const compact = (value) =>
   value == null
@@ -202,7 +208,7 @@ async function refresh(force = false) {
     const hash = JSON.stringify(next);
     if (force || hash !== lastStateHash) {
       lastStateHash = hash;
-      if (!force && ((view === 'design' && $('#design-canvas')) || $('#native-terminal'))) { $('#notifications-button').innerHTML=notificationBell(); renderDuplicaIndicator(); updateNativeUsage(); }
+      if (!force && ((view === 'design' && $('#design-canvas')) || $('#native-terminal') || view === 'dashboard')) {$('#notifications-button').innerHTML=notificationBell();renderDuplicaIndicator();updateNativeUsage();renderWorkspaceList();updateAgentDashboard();}
       else render();
     }
   } catch (e) {
@@ -213,6 +219,7 @@ async function refresh(force = false) {
   }
 }
 function route(next) {
+  closePopover();
   view = nav.some((n) => n[0] === next) ? next : "overview";
   history.replaceState(null, "", "#" + view);
   render();
@@ -220,7 +227,9 @@ function route(next) {
   if (view === "files") loadFiles(filePath);
 }
 function render() {
+  captureDesign();
   $("#main-nav").innerHTML = nav
+    .filter(([id]) => !['duplica','channels','terminal','webchat','agents'].includes(id))
     .map(
       ([id, label, ico]) =>
         `<button data-action="navigate" data-view="${id}" aria-label="${esc(label)}" title="${esc(label)}" class="nav-item ${view === id ? "active" : ""}">${icon(ico)}<span>${label}</span>${id === "agents" && sessions().length ? `<small>${sessions().length}</small>` : ""}${id === "audit" && state.approvals.length ? `<small class="notification">${state.approvals.length}</small>` : ""}</button>`,
@@ -231,12 +240,8 @@ function render() {
   $("#breadcrumb-view").textContent = nav.find((n) => n[0] === view)?.[1];
   $('#notifications-button').innerHTML = notificationBell();
   renderDuplicaIndicator();
-  $("#project-list").innerHTML = state.projects
-    .map(
-      (p) =>
-        `<button class="project-item ${p.id === projectId ? "selected" : ""}" data-action="project" data-id="${esc(p.id)}"><i style="background:${/^#[0-9a-f]{6}$/i.test(p.color || "") ? p.color : "#b7c69a"}"></i><span>${esc(p.name)}</span>${p.id === projectId ? icon("chevron") : ""}</button>`,
-    )
-    .join("");
+  renderWorkspaceList();
+  renderShellModes();
   const active = objects("sessions").filter((s) =>
     ["running", "ready", "waiting", "initializing"].includes(s.status),
   ).length;
@@ -250,7 +255,7 @@ function render() {
   $("#main")
     .querySelectorAll("input,textarea,select")
     .forEach((el) => {
-      if (renderedProjectId === projectId && el.id && !['design-page','design-title','design-explanation','design-node-label','browser-resource-text','browser-instructions','terminal-columns'].includes(el.id)) values[el.id] = el.value;
+      if (renderedProjectId === projectId && el.id && el.type !== 'file' && !['design-page','design-title','design-explanation','design-node-label','browser-resource-text','browser-instructions','terminal-columns'].includes(el.id)) values[el.id] = el.value;
     });
   const scrolls = {};
   $("#main")
@@ -268,6 +273,7 @@ function render() {
     channels: channelsView,
     terminal: terminalView,
     agents: agentsView,
+    dashboard: dashboardView,
     webchat: webChatView,
     design: designView,
     tasks: tasksView,
@@ -277,9 +283,11 @@ function render() {
     benchmarks: benchmarksView,
     files: filesView,
     audit: auditView,
-    settings: () => connectionsView() + apiConnectionsView(),
+    settings: () => updatesView() + connectionsView() + apiConnectionsView(),
   }[view]();
+  $('#main').classList.toggle('terminal-workspace',Boolean($('#native-terminal')));
   renderedProjectId = projectId;
+  mountWorkspaceTools();
   mountWorkbench();
   mountNativeTerminal();
   applyShellLayout();
@@ -287,12 +295,15 @@ function render() {
     const el = document.getElementById(key);
     if (el && el.tagName !== "BUTTON") el.value = val;
   });
+  mountDuplicaResources();
+  mountGraphZoom();
+  mountTelegram();
   $('#main').querySelectorAll('.prompt-form textarea').forEach(updateDraftEstimate);
   $("#main")
     .querySelectorAll("[data-scroll]")
     .forEach((el) => {
       const s = scrolls[el.dataset.scroll];
-      el.scrollTop = s ? (s.bottom ? el.scrollHeight : s.top) : el.scrollHeight;
+      el.scrollTop = ['dashboard','agent-graph'].includes(el.dataset.scroll) ? (s?.top || 0) : s ? (s.bottom ? el.scrollHeight : s.top) : el.scrollHeight;
     });
   if (id) {
     const el = document.getElementById(id);

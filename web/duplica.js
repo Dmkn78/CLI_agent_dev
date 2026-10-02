@@ -91,7 +91,7 @@ function duplicaPermissionsModal() {
       <div class="duplica-permission-grid">${Object.entries(settings.permissions).map(([category,mode]) => select(duplicaPermissionLabels[category], 'permission_'+category,
         category === 'destructive_system_operation' ? [['deny','Interdit']] : ['git_push','production_deploy','public_publish','payment','read_secrets','send_private_data','unknown','approve_plan'].includes(category) ? [['ask','Me demander'],['deny','Interdit']] : [['auto','Délégué'],['ask','Me demander'],['deny','Interdit']], mode)).join('')}</div>
       ${field('Silence avant alerte (secondes)','watchdogSeconds',settings.watchdogSeconds,'number','min="30" max="3600"')}
-      <label class="check-option"><input type="checkbox" name="telegramEnabled" ${settings.telegramEnabled ? 'checked' : ''}><span>Activer Telegram pour mon compte configuré</span></label><p class="muted small">Configurer DUPLICA_TELEGRAM_BOT_TOKEN et DUPLICA_TELEGRAM_CHAT_ID dans l’environnement du service. Aucun secret dans ce formulaire. Messages importants uniquement.</p></div>${formFooter('Enregistrer les permissions')}</form>`,true);
+      <label class="check-option"><input type="checkbox" name="telegramEnabled" ${settings.telegramEnabled ? 'checked' : ''} ${duplicaData().telegram.configured ? '' : 'disabled'}><span>Activer le relais Telegram associé</span></label><p class="muted small">Créez et associez votre bot depuis l’onglet Telegram de Duplica.</p></div>${formFooter('Enregistrer les permissions')}</form>`,true);
 }
 function duplicaDecisionModal() {
   modal('Mémoriser une réponse','Duplica réutilisera cette réponse pour les formulations exactes enregistrées.',

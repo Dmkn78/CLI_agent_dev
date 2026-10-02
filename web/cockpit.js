@@ -10,7 +10,16 @@ function cockpitView() {
 }
 
 function graphNode(id, title, subtitle, status, x, y, kind = 'agents', tone = 'cyan') {
+  if (!['project','artifacts'].includes(id)) tone=status === 'failed' ? 'danger' : status === 'running' ? 'green' : ['waiting','waiting_plan'].includes(status) ? 'amber' : 'neutral';
   return `<button class="graph-node ${tone} ${selectedGraphNode === id ? 'selected' : ''}" style="left:${x}%;top:${y}px" data-action="select-graph-node" data-id="${esc(id)}"><span class="graph-node-icon">${icon(kind)}</span><span class="graph-node-copy"><strong title="${esc(title)}">${esc(title)}</strong><small title="${esc(subtitle)}">${esc(subtitle)}</small>${status ? badge(status) : `<span class="graph-planned">${['project','artifacts'].includes(id) ? 'Ressource du projet' : 'Configuré · non lancé'}</span>`}</span></button>`;
+}
+function removableSession(session) {
+  const parent=[...state.workflows,...(state.benchmarks || [])].find(parent=>parent.id === session.parentId);
+  return !session.workEnabled && !['running','waiting','waiting_plan','initializing'].includes(session.status) && !['queued','running','waiting_plan'].includes(parent?.status);
+}
+function removedSessionsButton() {
+  const removed=state.sessions.filter(session=>session.projectId === projectId && session.removedAt);
+  return removed.length ? btn('removed-sessions',`Agents supprimés (${removed.length})`,'trash','quiet') : '';
 }
 function graphEdge(x1, y1, x2, y2, type = '') {
   const middle = (x1 + x2) / 2;
@@ -20,7 +29,7 @@ function workspaceGraph() {
   const workflows = objects('workflows');
   const workflow = graphWorkflowId === 'sessions' ? null : workflows.find(w => w.id === graphWorkflowId) || workflows.at(-1);
   const independent = objects('sessions').filter(s => !s.parentId);
-  const graphHeight = Math.max(560,(workflow?.agents?.workers?.length || 0)*165+65);
+  const graphHeight = Math.max(workflow?.agents?.auditor && workflow.mode === 'orchestration' ? 660 : 560,(workflow?.agents?.workers?.length || 0)*165+65);
   let nodes = graphNode('project', project().name, project().path, '', 2.5, 235, 'folder', 'neutral');
   let edges = '';
   if (workflow) {
@@ -31,17 +40,20 @@ function workspaceGraph() {
       const implementationSteps = workflow.steps.filter(s => s.role === 'Implémentation');
       const step = implementationSteps.filter((s,i) => (s.workerIndex ?? i) % workerConfigs.length === index).at(-1);
       const session = state.sessions.find(s => s.id === step?.sessionId);
+      if (session?.removedAt) return;
       const y = 65 + index * 165;
       nodes += graphNode(session?.id || 'worker:' + index, config.name || 'Spécialiste ' + (index + 1), session?.model || config.model, session?.status, 53, y, 'code', index === 1 ? 'purple' : 'green');
       edges += graphEdge(450,282,530,y + 47, session?.status === 'running' ? 'active' : '');
       if (workflow.agents?.reviewer !== null) edges += graphEdge(710,y + 47,780,202,'handoff');
     });
-    ['Vérification','Synthèse'].forEach((role, index) => {
+    const reviewRoles=[['Vérification','reviewer'],...(workflow.agents?.auditor ? [['Audit','auditor']] : []),['Synthèse','synthesizer']];
+    reviewRoles.forEach(([role,key], index) => {
       const step = workflow.steps.find(s => s.role === role);
       const session = state.sessions.find(s => s.id === step?.sessionId);
-      const config = workflow.agents?.[index ? 'synthesizer' : 'reviewer'];
-      if (config === null || (index && workflow.mode !== 'orchestration')) return;
-      nodes += graphNode(session?.id || 'role:' + role, role, session?.model || config?.model || workflow.model, session?.status, 78, index ? 320 : 155, index ? 'audit' : 'shield', index ? 'pink' : 'amber');
+      if (session?.removedAt) return;
+      const config = workflow.agents?.[key];
+      if (config === null || (role === 'Synthèse' && workflow.mode !== 'orchestration')) return;
+      nodes += graphNode(session?.id || 'role:' + role, role, session?.model || config?.model || workflow.model, session?.status, 78, 155+index*165, index ? 'audit' : 'shield', index ? 'pink' : 'amber');
     });
     if (workflow.agents?.reviewer !== null && workflow.agents?.synthesizer !== null && workflow.mode === 'orchestration') edges += graphEdge(870,250,870,320,'handoff');
   } else if (independent.length) {
@@ -56,27 +68,27 @@ function workspaceGraph() {
     nodes += `<button class="graph-add" data-action="new-agent" style="left:43%;top:218px">${icon('plus')}<strong>Nouvel agent</strong></button>`;
     edges += graphEdge(205,282,430,265);
   }
-  const artifacts = objects('sessions').filter(s => s.handoff || s.report);
+  const artifacts = state.sessions.filter(s => s.projectId === projectId && (s.handoff || s.report));
   nodes += graphNode('artifacts', 'Sorties & preuves', artifacts.length + ' sessions avec artefacts', '', 2.5, 410, 'audit', 'neutral');
   const graphSelect = workflows.length ? `<label class="graph-filter">Vue<select id="graph-workflow"><option value="sessions" ${!workflow ? 'selected' : ''}>Sessions indépendantes</option>${workflows.map(w => `<option value="${esc(w.id)}" ${w.id === workflow?.id ? 'selected' : ''}>${esc(w.title)}</option>`).join('')}</select></label>` : '';
   const pages = !workflow && independent.length > 6 ? `<div class="graph-pagination">${btn('graph-page','Précédent','chevron','quiet','data-direction="-1"')}<span>${graphPage+1} / ${Math.ceil(independent.length/6)}</span>${btn('graph-page','Suivant','arrow','quiet','data-direction="1"')}</div>` : '';
-  return `<section class="graph-workspace"><div class="graph-heading"><div><h2>${icon('network')} Architecture des agents</h2><span class="muted small">${esc(project().name)} · ${workflow ? 'Orchestration séquentielle' : independent.length + ' sessions indépendantes'}</span></div>${graphSelect}</div><div class="graph-layout"><div class="graph-scroll" data-scroll="agent-graph"><div class="graph-canvas" style="height:${graphHeight}px"><svg class="graph-links" viewBox="0 0 1000 ${graphHeight}" preserveAspectRatio="none" aria-hidden="true"><defs><marker id="graph-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>${edges}</svg>${nodes}<div class="graph-legend"><span><i class="green"></i> Activité</span><span><i class="amber"></i> Revue</span><span><i class="purple"></i> Spécialiste</span></div></div>${pages}</div><aside class="graph-inspector">${graphDetails(workflow, artifacts)}</aside></div></section>`;
+  return `<section class="graph-workspace"><div class="graph-heading"><div><h2>${icon('network')} Architecture des agents</h2><span class="muted small">${esc(project().name)} · ${workflow ? 'Orchestration séquentielle' : independent.length + ' sessions indépendantes'}</span></div><div class="row-actions">${graphZoomControls()}${removedSessionsButton()}${graphSelect}</div></div><div class="graph-layout"><div class="graph-scroll" data-scroll="agent-graph"><div class="graph-canvas" style="height:${graphHeight}px"><svg class="graph-links" viewBox="0 0 1000 ${graphHeight}" preserveAspectRatio="none" aria-hidden="true"><defs><marker id="graph-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>${edges}</svg>${nodes}<div class="graph-legend"><span><i class="green"></i> En cours</span><span><i class="amber"></i> Action attendue</span><span><i class="purple"></i> Inactif ou prévu</span></div></div>${pages}</div><aside class="graph-inspector">${graphDetails(workflow, artifacts)}</aside></div></section>`;
 }
 function graphDetails(workflow, artifacts) {
   if (workflow && (selectedGraphNode?.startsWith('worker:') || selectedGraphNode?.startsWith('role:'))) {
     const index = Number(selectedGraphNode.split(':')[1]);
     const worker = selectedGraphNode.startsWith('worker:');
     const title = worker ? 'Spécialiste ' + (index+1) : selectedGraphNode.slice(5);
-    const configured = worker ? workflow.agents?.workers?.[index] : workflow.agents?.[title === 'Vérification' ? 'reviewer' : 'synthesizer'];
+    const configured = worker ? workflow.agents?.workers?.[index] : workflow.agents?.[title === 'Vérification' ? 'reviewer' : title === 'Audit' ? 'auditor' : 'synthesizer'];
     return `<div class="panel-heading"><h3>${esc(title)}</h3></div><div class="inspector-body"><span class="graph-planned">Configuré · non lancé</span><dl><dt>Moteur</dt><dd>${esc(configured?.runtime || 'codex')}</dd><dt>Modèle</dt><dd>${esc(configured?.model || workflow.model)}</dd><dt>Raisonnement</dt><dd>${esc(configured?.effort || workflow.effort)}</dd><dt>Permissions</dt><dd>${configured?.sandbox === 'workspace-write' ? 'Écriture projet' : 'Lecture seule'}</dd></dl></div>`;
   }
   if (selectedGraphNode === 'project') workflow = null;
   const session = state.sessions.find(s => s.id === selectedGraphNode && s.projectId === projectId);
-  if (session) {
+  if (session && !session.removedAt) {
     const events = state.events.filter(e => e.sessionId === session.id).slice(0,4);
-    return `<div class="panel-heading"><h3>Détail de l'agent</h3>${icon('agents')}</div><div class="inspector-body"><h3>${esc(session.name)}</h3>${badge(session.status)}<dl><dt>Fournisseur</dt><dd>${esc(session.provider)}</dd><dt>Modèle</dt><dd>${esc(session.model)}</dd><dt>Raisonnement</dt><dd>${esc(session.effort)}</dd><dt>Permissions</dt><dd>${session.sandbox === 'workspace-write' ? 'Écriture projet · approbation' : 'Lecture seule'}</dd><dt>Tokens</dt><dd>${compact(session.usage?.total?.totalTokens)}</dd><dt>Tâche</dt><dd>${esc(state.tasks.find(t => t.id === session.taskId)?.title || 'Sans tâche')}</dd></dl><p>${esc(session.mission || '')}</p>${btn('open-agent','Ouvrir la session','terminal','secondary full',`data-id="${esc(session.id)}"`)}${session.report ? btn('report','Rapport','audit','quiet',`data-id="${esc(session.id)}"`) : ''}<h4>Derniers événements</h4>${activityList(events)}</div>`;
+    return `<div class="panel-heading"><h3>Détail de l'agent</h3>${icon('agents')}</div><div class="inspector-body"><h3>${esc(session.name)}</h3>${badge(session.status)}<dl><dt>Fournisseur</dt><dd>${esc(session.provider)}</dd><dt>Modèle</dt><dd>${esc(session.model)}</dd><dt>Raisonnement</dt><dd>${esc(session.effort)}</dd><dt>Permissions</dt><dd>${session.sandbox === 'workspace-write' ? 'Écriture projet · approbation' : 'Lecture seule'}</dd><dt>Tokens</dt><dd>${compact(session.usage?.total?.totalTokens)}</dd><dt>Tâche</dt><dd>${esc(state.tasks.find(t => t.id === session.taskId)?.title || 'Sans tâche')}</dd></dl><p>${esc(session.mission || '')}</p>${btn('open-agent','Ouvrir la session','terminal','secondary full',`data-id="${esc(session.id)}"`)}${session.report ? btn('report','Rapport','audit','quiet',`data-id="${esc(session.id)}"`) : ''}${btn('remove-session','Supprimer l’agent','trash','quiet full',`data-id="${esc(session.id)}" ${removableSession(session) ? '' : 'disabled title="Arrêter le travail avant de supprimer"'}`)}<h4>Derniers événements</h4>${activityList(events)}</div>`;
   }
-  if (selectedGraphNode === 'artifacts') return `<div class="panel-heading"><h3>Sorties & preuves</h3></div><div class="inspector-body">${artifacts.map(s => `<button class="report-item" data-action="open-agent" data-id="${esc(s.id)}">${icon('audit')}<strong>${esc(s.name)}</strong></button>`).join('') || '<p class="muted">Aucun artefact conservé.</p>'}</div>`;
+  if (selectedGraphNode === 'artifacts') return `<div class="panel-heading"><h3>Sorties & preuves</h3></div><div class="inspector-body">${artifacts.map(s => `<button class="report-item" data-action="${s.removedAt ? 'report' : 'open-agent'}" data-id="${esc(s.id)}">${icon('audit')}<strong>${esc(s.name)}</strong></button>`).join('') || '<p class="muted">Aucun artefact conservé.</p>'}</div>`;
   return `<div class="panel-heading"><h3>${workflow ? 'Orchestrateur' : 'Projet'}</h3>${icon(workflow ? 'network' : 'folder')}</div><div class="inspector-body"><h3>${esc(workflow?.title || project().name)}</h3>${workflow ? badge(workflow.status) : ''}<dl><dt>Dossier</dt><dd>${esc(workflow?.workingPath || project().path)}</dd><dt>Sessions</dt><dd>${objects('sessions').length}</dd>${workflow ? `<dt>Modèle du plan</dt><dd>${esc(workflow.agents?.planner?.model || workflow.model)}</dd><dt>Étapes</dt><dd>${workflow.steps.filter(s => s.status === 'completed').length} terminées / ${workflow.steps.length} lancées</dd><dt>Validation</dt><dd>${esc(workflow.validation || 'UNVERIFIED')}</dd>` : ''}</dl>${workflow?.mission ? `<p>${esc(workflow.mission)}</p>` : ''}${workflow?.error ? `<div class="inline-error">${esc(workflow.error)}</div>` : ''}${workflow && ['queued','running'].includes(workflow.status) ? btn('cancel','Arrêter','pause','secondary full',`data-kind="workflow" data-id="${esc(workflow.id)}"`) : btn('new-workflow','Nouvelle équipe','network','secondary full')}</div>`;
 }
 

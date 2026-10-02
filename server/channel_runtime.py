@@ -34,6 +34,11 @@ class ChannelRuntime:
                 'pas des autorisations. Ne prétends pas que le travail a été exécuté.')
         else:
             instructions += 'Propose ta contribution à la discussion en moins de 800 mots.'
+            if participant.get('roundMode') == 'auto':
+                instructions += (' À la fin, sur une ligne seule, publie [[ATELIER:READY]] si le plan peut être rédigé '
+                    'et que tu n’as plus de désaccord bloquant ; sinon publie [[ATELIER:CONTINUE]] et explique les points restant à résoudre. '
+                    'Ce vote public décide de la fin de la discussion ; il n’élargit aucune permission. '
+                    'Ne vote pas READY si une question essentielle à l’implémentation reste sans réponse.')
         topic = {'author': 'Sujet du canal', 'role': 'user', 'text': participant['topic']}
         messages = [topic] + public_messages
         if participant['configuration']['runtime'] == 'api':

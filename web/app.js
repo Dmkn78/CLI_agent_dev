@@ -1,4 +1,10 @@
 const actions = {
+  'updates-check':async () => receiveUpdateStatus(await window.atelierDesktop.checkUpdates()),
+  'updates-download':async () => receiveUpdateStatus(await window.atelierDesktop.downloadUpdate()),
+  'updates-install':async () => receiveUpdateStatus(await window.atelierDesktop.installUpdate()),
+  'remove-session':async element=>{const id=element.dataset.id;await api('sessions/remove',{id});selectedAgents=selectedAgents.filter(selected=>selected !== id);if(selectedGraphNode === id) selectedGraphNode=null;if(selectedChatId === id) selectedChatId=null;await refresh(true);toast('Agent supprimé de l’espace de travail. Ses preuves sont conservées.');},
+  'removed-sessions':()=>modal('Agents supprimés','Les rapports et fichiers restent conservés. Vous pouvez restaurer une session.',`<div class="modal-body removed-session-list">${state.sessions.filter(session=>session.projectId === projectId && session.removedAt).map(session=>`<div><span><strong>${esc(session.name)}</strong><small>${esc(session.model)}</small></span>${session.report ? btn('report','Rapport','audit','quiet',`data-id="${esc(session.id)}"`) : ''}${btn('restore-session','Restaurer','refresh','secondary',`data-id="${esc(session.id)}"`)}</div>`).join('')}</div>`),
+  'restore-session':async element=>{await api('sessions/restore',{id:element.dataset.id});$('#modal').close();await refresh(true);},
   'open-sprint-tasks': el => { taskSprintFilter = el.dataset.id; route('tasks'); },
   'select-graph-node': (el) => { selectedGraphNode = el.dataset.id; render(); },
   'select-workflow': (el) => { graphWorkflowId = el.dataset.id; selectedGraphNode = null; render(); },
@@ -32,7 +38,7 @@ const actions = {
     await navigator.clipboard.writeText($('#terminal-command').textContent);
     toast('Commande copiée.');
   },
-  navigate: (el) => { if (el.dataset.view === 'agents') agentLayout='terminals'; route(el.dataset.view); },
+  navigate: (el) => { if (el.dataset.view === 'agents') agentLayout='grid'; route(el.dataset.view); },
   dismiss: () => $("#modal").close(),
   "new-agent": () => newNativeTerminalModal(),
   "new-session": (el) => newAgent(el.dataset.mode || "classic"),
@@ -272,7 +278,9 @@ const actions = {
     }
   },
   project: (el) => {
+    rememberTerminalWorkspace();
     projectId = el.dataset.id;
+    activateTerminalWorkspace(projectId);
     taskSprintFilter = '';
     localStorage.setItem("atelier-project", projectId);
     selectedAgents = [];
@@ -384,9 +392,13 @@ document.addEventListener("submit", async (event) => {
         await handleChannelSubmit(form,value);
         break;
       case 'duplica-chat':
+      case 'duplica-command':
       case 'duplica-work':
-      case 'duplica-telegram':
         await handleDuplicaChatSubmit(form,value);
+        break;
+      case 'duplica-telegram':
+      case 'telegram-settings':
+        await submitTelegram(form,value);
         break;
       case 'duplica-context':
       case 'duplica-decision':
@@ -510,7 +522,9 @@ document.addEventListener("submit", async (event) => {
           kind: "project",
           value: { ...value, color: "#b7c69a" },
         });
+        rememberTerminalWorkspace();
         projectId = p.id;
+        activateTerminalWorkspace(projectId);
         localStorage.setItem("atelier-project", projectId);
         $("#modal").close();
         selectedAgents = [];
@@ -602,7 +616,7 @@ function quickSearch() {
   modal(
     "Retrouver le fil",
     "Cherchez un agent, une tâche ou un souvenir de ce projet.",
-    `<div class="modal-body"><label class="search-field">${icon("search")}<input id="quick-search-input" placeholder="Que cherchez-vous ?" autofocus></label><div id="quick-search-results"></div></div>`,
+    `<div class="modal-body"><label class="search-field">${icon("search")}<input id="quick-search-input" aria-label="Rechercher dans le projet" placeholder="Que cherchez-vous ?" autofocus></label><div id="quick-search-results"></div></div>`,
   );
   quickSearchResults("");
   $('#modal').classList.add('command-palette');
@@ -646,16 +660,16 @@ $("#audit-shortcut").addEventListener("click", () => route("audit"));
 $("#settings-shortcut").addEventListener("click", () => route("settings"));
 $("#project-switch").addEventListener("click", () =>
   modal(
-    "Votre espace de travail",
-    "Chaque projet possède ses sessions, ses tâches et sa mémoire.",
+    "Espaces de travail",
+    "Chaque espace regroupe un dossier, ses terminaux, ses agents, ses tâches et sa mémoire.",
     `<div class="modal-body project-chooser">${state.projects.map((p) => `<button class="quick-result" data-action="project" data-id="${esc(p.id)}"><span>${esc(p.name)}</span><small>${esc(p.path)}</small>${icon("chevron")}</button>`).join("")}</div>`,
   ),
 );
 $("#add-project").addEventListener("click", () =>
   modal(
-    "Ajouter un projet",
+    "Ajouter un espace de travail",
     "Choisis un dossier existant sur cet ordinateur.",
-    `<form data-form="project"><div class="modal-body">${field("Nom du projet", "name", "", "text", "required")}<div class="project-folder-field">${field("Dossier du projet", "path", "", "text", 'required placeholder="Chemin absolu du dossier"')}${btn('pick-project-folder','Parcourir','folder','secondary')}</div><p class="muted small">Ce dossier devient le périmètre des agents et de l’explorateur pour ce projet.</p></div>${formFooter("Ajouter le projet")}</form>`,
+    `<form data-form="project"><div class="modal-body">${field("Nom de l’espace", "name", "", "text", "required")}<div class="project-folder-field">${field("Dossier de travail", "path", "", "text", 'required placeholder="Chemin absolu du dossier"')}${btn('pick-project-folder','Parcourir','folder','secondary')}</div><p class="muted small">Ce dossier devient le périmètre des agents et de l’explorateur pour cet espace.</p></div>${formFooter("Ajouter l’espace")}</form>`,
   ),
 );
 $("#modal").addEventListener("click", (event) => {
@@ -678,7 +692,10 @@ installWorkbenchActions();
 installDesignActions();
 installWebChatActions();
 installTerminalActions();
+installDashboardActions();
+installWorkspacePanelActions();
 installShellActions();
+installDisplayActions();
 installApiConnectionActions();
 installChannelActions();
 refresh(true);

@@ -8,3 +8,5 @@ artifacts/qa/
 node_modules/
 web/vendor/
 desktop/.cache/
+build/
+dist/

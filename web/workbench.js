@@ -3,9 +3,23 @@ function notificationBell() {
   return icon('bell') + (count ? `<small class="notification-count">${count}</small>` : '');
 }
 
+function notificationPresentation(item) {
+  const title=item.title.replace('Tour interrupted','Tour interrompu').replace('Tour completed','Tour terminé').replace('Tour failed','Tour en erreur');
+  // Earlier saved notifications have no kind; use their explicit event wording.
+  const legacy=/Accord requis|Autorisation|à valider|nécessaire|manquantes/.test(title) ? 'action' : /Échec|échouée|en erreur|moteur interrompue/.test(title) ? 'error' : /mission vérifiée/.test(title) ? 'success' : 'info';
+  const kind=['action','error','success','info'].includes(item.kind) ? item.kind : legacy;
+  const descriptions={action:['shield','Action attendue'],error:['close','Erreur'],success:['check','Vérifié'],info:['bell','Information']};
+  return {title,kind,icon:descriptions[kind][0],label:descriptions[kind][1]};
+}
+
+function notificationMarkup(item) {
+  const presentation=notificationPresentation(item);
+  return `<button class="notification-item ${item.read ? '' : 'unread'}" data-kind="${presentation.kind}" data-action="open-notification" data-id="${esc(item.id)}">${icon(presentation.icon)}<span><strong>${esc(presentation.title)}</strong><small><span>${presentation.label}</span><time>${stamp(item.createdAt)}</time></small></span>${item.read ? '' : '<i class="notification-unread" aria-label="Non lue"></i>'}${icon('chevron')}</button>`;
+}
+
 function notificationsModal() {
   const items = [...(state.notifications || [])].reverse();
-  modal('Notifications','',`<div class="modal-body notification-list">${items.map(item => `<button class="quick-result ${item.read ? '' : 'unread'}" data-action="open-notification" data-id="${esc(item.id)}"><span><strong>${esc(item.title)}</strong><small>${esc(item.detail ? String(item.detail) : '')}</small></span><time>${stamp(item.createdAt)}</time></button>`).join('') || '<p class="muted">Aucune notification.</p>'}</div>`);
+  modal('Notifications','',`<div class="modal-body notification-list">${items.map(notificationMarkup).join('') || '<p class="muted">Aucune notification.</p>'}</div>`);
 }
 
 function durationLabel(milliseconds) {

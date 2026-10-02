@@ -1,5 +1,24 @@
 # Atelier
 
+## Télécharger l’application
+
+Les installateurs sont distribués dans les [releases GitHub](https://github.com/Dmkn78/CLI_agent_dev/releases).
+La version `0.3.0-beta.1` prépare la première distribution : Windows `.exe`,
+macOS Apple Silicon `.dmg` et Linux x64 `.AppImage`, selon les builds validés.
+Cette bêta n’est pas signée ; la version de production Windows/macOS requiert
+les certificats d’éditeur et la notarisation Apple.
+
+L’installateur contient Chromium, le service Python et Codex. Aucun Node ou
+Python à installer pour utiliser Atelier. Ouvrez Atelier, puis **Se connecter
+avec ChatGPT**. Git reste nécessaire pour les fonctions Git ; les autres CLI
+(Oh My Pi, Claude Code, OpenCode) et les outils propres aux projets restent optionnels.
+
+**Connexions → Atelier** permet de choisir la vérification et le téléchargement
+automatiques des mises à jour. L’installation se déclenche par **Installer et
+redémarrer**, après arrêt des travaux actifs. Les données restent dans le profil
+utilisateur, séparées du programme. Le [guide de livraison](docs/RELEASE.md)
+précise les architectures, les signatures, les données et les commandes de build.
+
 Les **Canaux d’agents** réunissent jusqu’à huit agents, consultants,
 orchestrateurs ou Duplica autour d’un sujet. Choisis chaque modèle, lance des
 tours de discussion, puis relis le plan. Seules les réponses publiques circulent ;
@@ -15,7 +34,7 @@ Pour une clé facultative, indique une variable du service telle que
 
 Un cockpit local pour piloter des agents Codex et Oh My Pi, suivre le travail et conserver des preuves. Interface en français, sombre, utilisable dans un navigateur ; shell desktop optionnel pour le vrai ChatGPT. Le backend utilise Python standard et ne nécessite pas de clé API supplémentaire pour Codex.
 
-## Démarrer
+## Démarrer depuis les sources
 
 Depuis ce dossier :
 
@@ -89,7 +108,7 @@ Les sessions OMP intégrées ne disposent que de la lecture locale et, si autori
 
 Claude Code est accessible dans le terminal natif ; son adaptateur de session structurée et celui d'Ollama ne sont pas encore implémentés. Les benchmarks évaluent des réponses textuelles. Une review par modèle est un avis, pas une preuve de compilation ni une certification de sécurité. Les oracles de code et les recettes visuelles des benchmarks sont à ajouter ; Duplica dispose de ses propres recettes indépendantes.
 
-GitHub est optionnel, en lecture. Création/merge de PR, scheduler par sous-tâche, worktrees parallèles et packaging d'installation desktop restent à développer. Le shell desktop de développement est disponible ; il n'importe pas les conversations ChatGPT ni `/mnt/data`. Les ressources locales ne sont transmises au site que par une action de l'utilisateur. Le contexte natif et sa compaction ne sont pas entièrement exposés. La jauge CLI concerne le dernier appel, l'estimation caractères/4 ne vaut pas token facturé. L'inventaire des processus externes ne démontre pas une activité du modèle. Voir les [limites et TODO](docs/audit/2026-10-01-workbench.md).
+GitHub est optionnel, en lecture. Création/merge de PR, scheduler par sous-tâche, worktrees parallèles restent à développer. Le shell desktop de développement est disponible ; il n'importe pas les conversations ChatGPT ni `/mnt/data`. Les ressources locales ne sont transmises au site que par une action de l'utilisateur. Le contexte natif et sa compaction ne sont pas entièrement exposés. La jauge CLI concerne le dernier appel, l'estimation caractères/4 ne vaut pas token facturé. L'inventaire des processus externes ne démontre pas une activité du modèle. Voir les [limites et TODO](docs/audit/2026-10-01-workbench.md).
 
 ## Données et reprise
 

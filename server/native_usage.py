@@ -1,4 +1,4 @@
-"""Read only native CLI counters; never import transcripts or authentication."""
+"""Read native counters and explicit lifecycle events, never transcripts or authentication."""
 import json
 import os
 import threading
@@ -11,6 +11,7 @@ from .store import now
 TOKEN_FIELDS = {'input_tokens': 'inputTokens', 'output_tokens': 'outputTokens',
                 'cached_input_tokens': 'cachedInputTokens', 'total_tokens': 'totalTokens',
                 'reasoning_output_tokens': 'reasoningOutputTokens', 'cache_write_input_tokens': 'cacheWriteTokens'}
+NATIVE_HEARTBEAT_MAX_AGE_SECONDS = 30
 
 
 def counts(raw: dict) -> dict | None:
@@ -21,7 +22,7 @@ def counts(raw: dict) -> dict | None:
     return counters or None
 
 
-def read_cli_rollout(path: Path, counters: bool = True) -> dict | None:
+def read_native_rollout(path: Path, counters: bool = True) -> dict | None:
     with path.open('rb') as stream:
         first = stream.readline(1024 * 1024)
         try:
@@ -31,10 +32,23 @@ def read_cli_rollout(path: Path, counters: bool = True) -> dict | None:
         if not isinstance(record, dict):
             return None
         metadata = record.get('payload', {})
-        if not isinstance(metadata, dict) or record.get('type') != 'session_meta' or metadata.get('source') != 'cli':
+        if not isinstance(metadata, dict) or record.get('type') != 'session_meta':
+            return None
+        source = metadata.get('source')
+        spawn = source.get('subagent') if isinstance(source, dict) else None
+        spawn = spawn.get('thread_spawn', {}) if isinstance(spawn, dict) else {}
+        parent_id = metadata.get('parent_thread_id') or (spawn.get('parent_thread_id') if isinstance(spawn, dict) else None)
+        is_child = isinstance(source, dict) and 'subagent' in source and isinstance(parent_id, str) and bool(parent_id)
+        if source != 'cli' and not is_child:
             return None
         result = {key: metadata.get(key) for key in ('id', 'cwd', 'timestamp')}
-        result.update(source='codex:local-rollout', usage=None)
+        result.update(source='codex:local-rollout', sourceKind='subagent' if is_child else 'cli', usage=None,
+                      parentThreadId=parent_id if is_child else None, activityStatus='unknown')
+        if is_child:
+            for target, key in (('name', 'agent_nickname'), ('role', 'agent_role')):
+                field = metadata.get(key) or (spawn.get(key) if isinstance(spawn, dict) else None)
+                if isinstance(field, str):
+                    result[target] = field[:80]
         if not counters:
             return result
         size = path.stat().st_size
@@ -53,7 +67,26 @@ def read_cli_rollout(path: Path, counters: bool = True) -> dict | None:
                 continue
             if event.get('type') == 'turn_context':
                 result['model'] = payload.get('model')
-            if event.get('type') != 'event_msg' or payload.get('type') != 'token_count':
+            if event.get('type') != 'event_msg':
+                continue
+            event_type = payload.get('type')
+            timestamp = event.get('timestamp')
+            if event_type in ('task_started', 'task_complete', 'turn_aborted'):
+                result['activityStatus'] = {'task_started': 'running', 'task_complete': 'completed', 'turn_aborted': 'interrupted'}[event_type]
+                result['activityObservedAt'] = timestamp
+                if event_type == 'task_started':
+                    result['turnStartedAt'] = timestamp
+                    result['lastCompletedAt'] = None
+                    result['lastTurnDurationMs'] = None
+                else:
+                    result['lastCompletedAt'] = timestamp
+                    try:
+                        elapsed = datetime.fromisoformat(timestamp.replace('Z', '+00:00')) - datetime.fromisoformat(result['turnStartedAt'].replace('Z', '+00:00'))
+                        if elapsed.total_seconds() >= 0:
+                            result['lastTurnDurationMs'] = round(elapsed.total_seconds() * 1000)
+                    except (KeyError, ValueError, TypeError, AttributeError):
+                        pass
+            if event_type != 'token_count':
                 continue
             info = payload.get('info')
             if isinstance(info, dict):
@@ -68,6 +101,11 @@ def read_cli_rollout(path: Path, counters: bool = True) -> dict | None:
                     'windowDurationMins': window.get('window_minutes'), 'resetsAt': window.get('resets_at')}
                     for key in ('primary', 'secondary') if isinstance(window := limits.get(key), dict)}}
     return result
+
+
+def read_cli_rollout(path: Path, counters: bool = True) -> dict | None:
+    observed = read_native_rollout(path, counters)
+    return observed if observed and observed['sourceKind'] == 'cli' else None
 
 
 class NativeUsage:
@@ -97,7 +135,7 @@ class NativeUsage:
             sessions = self.store.all('nativeSession')
             if not any(session.get('runtime') == 'codex' for session in sessions):
                 return
-            candidates = {}
+            discovered = {}
             for offset in (0, 1):
                 day = datetime.now(timezone.utc) - timedelta(days=offset)
                 folder = self.directory / day.strftime('%Y/%m/%d')
@@ -106,12 +144,14 @@ class NativeUsage:
                     for path in paths:
                         if path.is_symlink():
                             continue
-                        metadata = read_cli_rollout(path, counters=False)
+                        metadata = read_native_rollout(path, counters=False)
                         if metadata and isinstance(metadata['id'], str) and metadata.get('cwd'):
-                            candidates[metadata['id']] = {**metadata, '_path': path}
+                            discovered[metadata['id']] = {**metadata, '_path': path}
                 except (OSError, ValueError):
                     continue
+            candidates = {identifier: candidate for identifier, candidate in discovered.items() if candidate['sourceKind'] == 'cli'}
             self.candidates = candidates
+            observed_children = set()
             claimed = {session.get('nativeThreadId') for session in sessions if session.get('nativeThreadId')}
             for session in sessions:
                 if session.get('runtime') != 'codex':
@@ -132,12 +172,57 @@ class NativeUsage:
                 if linked:
                     try:
                         observed = read_cli_rollout(linked['_path'])
+                        if not self._has_recent_heartbeat(session) and observed['activityStatus'] == 'running':
+                            observed['activityStatus'] = 'unknown'
                         self.store.update('nativeSession', session['id'], nativeThreadId=session['nativeThreadId'],
                             association=session.get('association'), usage=observed['usage'], model=observed.get('model') or session.get('model'),
                             accountPlan=observed.get('plan'), accountLimits=observed.get('limits'), observedAt=observed.get('observedAt'),
-                            usageSource=observed['source'])
+                            usageSource=observed['source'], activityStatus=observed['activityStatus'],
+                            activityObservedAt=observed.get('activityObservedAt'), turnStartedAt=observed.get('turnStartedAt'),
+                            lastCompletedAt=observed.get('lastCompletedAt'), lastTurnDurationMs=observed.get('lastTurnDurationMs'))
+                        observed_children.update(self._refresh_subagents(session, linked['id'], discovered))
                     except (OSError, ValueError, TypeError):
                         continue
+            # A vanished rollout is not evidence that its last running turn is still active.
+            for child in self.store.all('nativeSubagent'):
+                if child['id'] not in observed_children and child.get('activityStatus') == 'running':
+                    self.store.update('nativeSubagent', child['id'], activityStatus='unknown')
+
+    def _refresh_subagents(self, terminal: dict, thread_id: str, discovered: dict) -> set:
+        observed_ids, parents = set(), {thread_id}
+        pending = [candidate for candidate in discovered.values() if candidate['sourceKind'] == 'subagent']
+        # Observe only explicit descendants of a terminal associated with Atelier.
+        while pending:
+            children = [candidate for candidate in pending if candidate.get('parentThreadId') in parents and candidate['id'] not in parents]
+            if not children:
+                break
+            for candidate in children:
+                pending.remove(candidate)
+                parents.add(candidate['id'])
+                try:
+                    observed = read_native_rollout(candidate['_path'])
+                    if not observed:
+                        continue
+                    child = {key: observed.get(key) for key in ('id', 'name', 'role', 'parentThreadId', 'model', 'usage',
+                        'activityStatus', 'activityObservedAt', 'turnStartedAt', 'lastCompletedAt', 'lastTurnDurationMs', 'observedAt')}
+                    child.update(projectId=terminal['projectId'], terminalId=terminal['id'], source=observed['source'], status='observed')
+                    if not self._has_recent_heartbeat(terminal) and child['activityStatus'] == 'running':
+                        child['activityStatus'] = 'unknown'
+                    self.store.put('nativeSubagent', child)
+                    observed_ids.add(child['id'])
+                except (OSError, ValueError, TypeError):
+                    continue
+        return observed_ids
+
+    @staticmethod
+    def _has_recent_heartbeat(terminal: dict) -> bool:
+        if terminal.get('status') != 'open':
+            return False
+        try:
+            elapsed = datetime.now(timezone.utc) - datetime.fromisoformat(terminal['updatedAt'].replace('Z', '+00:00'))
+            return 0 <= elapsed.total_seconds() <= NATIVE_HEARTBEAT_MAX_AGE_SECONDS
+        except (KeyError, ValueError, TypeError, AttributeError):
+            return False
 
     def choices(self, terminal_id: str) -> list:
         self.refresh()

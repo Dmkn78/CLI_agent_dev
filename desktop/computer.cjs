@@ -85,7 +85,8 @@ function registerComputerController({getWindow,request,fixture}) {
       const control=current.controls.find(control => control.index === action.index);
       if (!sameControl(control,expected) || !control.enabled || !control.visible ||
           ['x','y','width','height'].some(key => Math.abs(control.rect[key]-expected.rect[key]) > 2)) throw staleObservation('Le contrôle a changé depuis l’observation ; aucun clic émis.');
-      const x=Math.round(control.rect.x+control.rect.width/2), y=Math.round(control.rect.y+control.rect.height/2);
+      const factor=contents.getZoomFactor();
+      const x=Math.round((control.rect.x+control.rect.width/2)*factor), y=Math.round((control.rect.y+control.rect.height/2)*factor);
       const count=action.kind === 'double_click' ? 2 : 1;
       for (let index=1; index<=count; index++) {
         contents.sendInputEvent({type:'mouseMove',x,y});

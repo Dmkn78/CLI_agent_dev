@@ -1,5 +1,13 @@
 const {contextBridge,ipcRenderer}=require('electron');
 contextBridge.exposeInMainWorld('atelierDesktop',Object.freeze({
+  updateState:() => ipcRenderer.invoke('updates:state'),
+  updatePreferences:preferences => ipcRenderer.invoke('updates:preferences',preferences),
+  checkUpdates:() => ipcRenderer.invoke('updates:check'),
+  downloadUpdate:() => ipcRenderer.invoke('updates:download'),
+  installUpdate:() => ipcRenderer.invoke('updates:install'),
+  onUpdateState:callback => { const listener=(_event,status) => callback(status); ipcRenderer.on('updates:state',listener); return () => ipcRenderer.removeListener('updates:state',listener); },
+  setZoom:percent => ipcRenderer.invoke('display:zoom',percent),
+  onZoomShortcut:callback => { const listener=(_event,direction) => callback(direction); ipcRenderer.on('display:zoom-shortcut',listener); return () => ipcRenderer.removeListener('display:zoom-shortcut',listener); },
   createBrowser:id => ipcRenderer.invoke('browser:create',id),
   closeBrowser:id => ipcRenderer.invoke('browser:close',id),
   showBrowser:id => ipcRenderer.send('browser:show',id),

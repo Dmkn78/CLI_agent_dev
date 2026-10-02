@@ -1,30 +1,41 @@
 "use strict";
-let duplicaPanel='discussion', telegramPairing=null;
+let duplicaPanel='discussion';
 
 function duplicaConversation() {
   const conversation=duplicaData().discussion?.conversations.find(chat => chat.projectId === projectId);
-  return state.sessions.find(session => session.id === conversation?.sessionId);
+  return state.sessions.find(session => session.id === conversation?.sessionId && !session.removedAt);
 }
 
 function duplicaView() {
   const data=duplicaData(), session=duplicaConversation();
   const active=data.settings.status === 'active', scoped=duplicaScopeValue('project',projectId) === true || data.settings.globalEnabled;
-  const toolbar=`<header class="duplica-workspace-header"><div><h1>Duplica</h1><span class="muted">Votre projet, avec vous.</span></div><label class="duplica-project-choice">Projet<select id="duplica-project-choice" aria-label="Projet de Duplica">${state.projects.map(project => `<option value="${esc(project.id)}" ${project.id === projectId ? 'selected' : ''}>${esc(project.name)}</option>`).join('')}</select></label>
+  const toolbar=`${agentModeNavigation()}<header class="duplica-workspace-header"><div><h1>Duplica</h1><span class="muted">Votre projet, avec vous.</span></div>${sessionUsageChip(session,provider(),{label:'Consommation de Duplica'})}${newPanelButton()}
     ${btn('duplica-work','Travailler pour moi','spark','primary')}
     <details class="action-menu"><summary aria-label="Options Duplica" title="Options">⋯</summary><div>${btn('duplica-permissions','Permissions','shield','quiet')}${btn('duplica-telegram','Telegram','external','quiet')}${btn('duplica-control','Pause','pause','quiet','data-control="pause"')}${btn('duplica-control','Reprendre la main','shield','quiet','data-control="take_control"')}${btn('duplica-control','Stop','close','quiet','data-control="stop"')}</div></details></header>
-    <div class="duplica-mode-tabs"><button data-action="duplica-panel" data-panel="discussion" class="${duplicaPanel === 'discussion' ? 'selected' : ''}">Discussion</button><button data-action="duplica-panel" data-panel="suivi" class="${duplicaPanel === 'suivi' ? 'selected' : ''}">Suivi ${data.counts.supervised ? `<small>${data.counts.supervised}</small>` : ''}</button><span class="duplica-project-status"><i class="duplica-light ${active && scoped ? 'active' : 'off'}"></i>${active && scoped ? 'Projet supervisé' : 'Supervision désactivée'}</span></div>`;
+    <div class="duplica-mode-tabs"><button data-action="duplica-panel" data-panel="discussion" class="${duplicaPanel === 'discussion' ? 'selected' : ''}">Discussion</button><button data-action="duplica-panel" data-panel="suivi" class="${duplicaPanel === 'suivi' ? 'selected' : ''}">Suivi ${data.counts.supervised ? `<small>${data.counts.supervised}</small>` : ''}</button><button data-action="duplica-panel" data-panel="telegram" class="${duplicaPanel === 'telegram' ? 'selected' : ''}">Telegram</button><span class="duplica-project-status"><i class="duplica-light ${active && scoped ? 'active' : 'off'}"></i>${active && scoped ? 'Projet supervisé' : 'Supervision désactivée'}</span></div>`;
+  if (duplicaPanel === 'telegram') return `<div class="duplica-shell">${toolbar}${telegramView()}</div>`;
   if (duplicaPanel === 'suivi') return `<div class="duplica-shell">${toolbar}<div class="duplica-manager">${duplicaManagerView()}</div></div>`;
   const delivery=data.discussion?.deliveries.filter(delivery => delivery.projectId === projectId).at(-1);
   const busy=delivery && ['queued','dispatching','sent'].includes(delivery.status);
   const messages=session?.messages || [];
-  const pending=delivery && ['queued','dispatching'].includes(delivery.status) ? `<article class="duplica-chat-message user"><p>${esc(delivery.text)}</p></article>` : '';
+  const pending=delivery && ['queued','dispatching'].includes(delivery.status) ? `<article class="duplica-chat-message user"><div class="message-markdown">${messageMarkdown(delivery.text)}</div></article>` : '';
   const approvals=state.approvals.filter(approval => approval.sessionId === session?.id || data.agents.some(agent => agent.id === approval.sessionId && agent.supervised));
   const models=provider().models || [], selectedModel=session?.model || models.find(model => model.isDefault)?.model;
   return `<div class="duplica-shell">${toolbar}<section class="duplica-discussion"><div class="duplica-chat-history" data-scroll="duplica-${esc(projectId)}">
-    ${messages.length ? messages.map(message => `<article class="duplica-chat-message ${esc(message.role)}"><small>${message.role === 'user' ? message.source === 'telegram' ? 'Vous · Telegram' : 'Vous' : 'Duplica'}</small><p>${esc(message.text)}</p></article>`).join('') : `<div class="duplica-chat-welcome"><span>${icon('spark')}</span><h2>Que souhaitez-vous faire avancer ?</h2><p>Parlez du projet ${esc(project().name)}. Duplica partage cette discussion avec Telegram et garde votre contexte.</p></div>`}
+    ${messages.length ? messages.map(message => `<article class="duplica-chat-message ${esc(message.role)}"><small>${message.role === 'user' ? message.source === 'telegram' ? 'Vous · Telegram' : 'Vous' : 'Duplica'}</small><div class="message-markdown">${messageMarkdown(message.text)}</div>${message.attachments?.length ? `<div class="chat-attachments">${attachmentMarkup(message.attachments)}</div>` : ''}</article>`).join('') : `<div class="duplica-chat-welcome"><span>${icon('spark')}</span><h2>Que souhaitez-vous faire avancer ?</h2><p>Parlez du projet ${esc(project().name)}. Ajoutez vos fichiers, images ou dossiers ; tapez / pour choisir une commande.</p></div>`}
     ${pending}${busy ? '<p class="duplica-chat-progress">Duplica réfléchit…</p>' : ''}${delivery && ['failed','interrupted'].includes(delivery.status) ? `<p class="inline-error">${esc(delivery.error || 'Discussion interrompue. Vous pouvez écrire à nouveau.')}</p>` : ''}${session && ['failed','stopped','closed'].includes(session.status) ? btn('resume','Reprendre la discussion','arrow','quiet',`data-id="${esc(session.id)}"`) : ''}${approvals.map(approvalCard).join('')}</div>
-    <form data-form="duplica-chat" class="duplica-chat-composer"><textarea id="duplica-message" name="text" aria-label="Message à Duplica" placeholder="Discutez avec Duplica…" rows="3" maxlength="16000" required></textarea><div><label class="duplica-model-choice">${session ? esc(session.model) : `<select name="model" aria-label="Modèle de Duplica">${models.map(model => `<option value="${esc(model.model)}" ${model.model === selectedModel ? 'selected' : ''}>${esc(model.displayName)}</option>`).join('')}</select>`}</label><span>${data.telegram.running ? 'Telegram connecté' : 'Discussion en lecture seule'}</span>${busy && session ? btn('interrupt','Interrompre','','quiet',`data-id="${esc(session.id)}"`) : ''}<button type="submit" class="button primary send-btn" aria-label="Envoyer à Duplica" ${busy ? 'disabled' : ''}>${icon('arrow')}</button></div></form>
-    ${session ? sessionUsageSummary(session,provider()) : ''}
+    <form data-form="duplica-chat" class="duplica-chat-composer">${attachmentComposer()}
+      <textarea id="duplica-message" name="text" aria-label="Message à Duplica" placeholder="Écrivez en Markdown ; Entrée pour une nouvelle ligne…" rows="3" maxlength="16000"></textarea>
+      <div class="duplica-compose-tools">
+        ${btn('duplica-attach','','attachment','icon-btn','type="button" title="Joindre des fichiers et images" aria-label="Joindre des fichiers et images"')}
+        ${btn('duplica-attach-folder','','folder','icon-btn','type="button" title="Joindre un dossier" aria-label="Joindre un dossier"')}
+        ${btn('duplica-commands','/','','icon-btn','type="button" title="Commandes et skills" aria-label="Commandes et skills"')}
+        ${btn('duplica-structure','','code','icon-btn','type="button" title="Structurer la consigne · Markdown et XML" aria-label="Structurer la consigne"')}
+        <label class="duplica-model-choice">${session ? esc(session.model) : `<select name="model" aria-label="Modèle de Duplica">${models.map(model => `<option value="${esc(model.model)}" ${model.model === selectedModel ? 'selected' : ''}>${esc(model.displayName)}</option>`).join('')}</select>`}</label>
+        <span>${duplicaUploading.has(projectId) ? 'Ajout des fichiers…' : data.telegram.running && data.telegram.projectId === projectId ? 'Telegram connecté' : 'Lecture seule'}</span>
+        ${busy && session ? btn('interrupt','Interrompre','','quiet',`data-id="${esc(session.id)}"`) : ''}
+        <button type="submit" class="button primary send-btn" aria-label="Envoyer à Duplica" ${busy || duplicaUploading.has(projectId) ? 'disabled' : ''}>${icon('arrow')}</button>
+      </div></form>
     <div class="duplica-discussion-links">${btn('duplica-memory','Mémoire du projet','folder','quiet')}${btn('duplica-telegram',data.telegram.running ? 'Ouvrir Telegram' : 'Connecter Telegram','external','quiet')}</div></section></div>`;
 }
 
@@ -41,38 +52,41 @@ function duplicaMemoryModal() {
   modal('Mémoire de Duplica',project().name,`<form data-form="duplica-context"><div class="modal-body">${area('Préférences et priorités','preferences',context.preferences || '',3)}${area('Contexte et contraintes du projet','project',context.project || '',4)}${area('Critères de réussite','testing',context.testing || '',3)}</div>${formFooter('Enregistrer le contexte')}</form>`);
 }
 
-function duplicaTelegramModal() {
-  const telegram=duplicaData().telegram;
-  modal('Discuter avec Duplica sur Telegram',project().name,`<div class="modal-body telegram-connect"><p>Créez votre bot avec <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer">@BotFather</a> et la commande <code>/newbot</code>.</p>${telegram.running ? `<p class="inline-success">Telegram est connecté${telegram.botUsername ? ' · @'+esc(telegram.botUsername) : ''}.</p><p>Envoyez <code>/project ${esc(projectId)}</code> au bot, puis discutez. Les messages et réponses apparaissent aussi dans Atelier.</p>` : `<form data-form="duplica-telegram"><label>Token fourni par BotFather<input type="password" name="botToken" autocomplete="off" required aria-label="Token du bot Telegram"></label><p class="muted small">Conservé chiffré pour le compte Windows du service.</p><button type="submit" class="button primary">Connecter mon bot</button></form><div id="telegram-pairing"></div>`}</div>`);
-}
-
 async function handleDuplicaChatSubmit(form, fields) {
   if (form.dataset.form === 'duplica-chat') {
-    await api('duplica/discussion',{projectId,text:fields.text,...(fields.model ? {model:fields.model} : {})});
+    const submittedProject=projectId;
+    if (duplicaUploading.has(projectId)) throw new Error('Attends la fin de l’ajout des fichiers.');
+    const attachments=draftAttachments().map(attachment=>attachment.id);
+    const text=fields.text.trim() || (attachments.length ? 'Consulte ces pièces jointes.' : '');
+    if (!text) throw new Error('Écris un message ou ajoute une pièce jointe.');
+    await api('duplica/discussion',{projectId,text,attachments,...(fields.model ? {model:fields.model} : {})});
+    duplicaDraftAttachments.delete(submittedProject);
     form.reset();
+  } else if (form.dataset.form === 'duplica-command') {
+    await api('commands',{...fields,projectId});
+    await loadDuplicaCommands();
+    $('#modal').close();
   } else if (form.dataset.form === 'duplica-work') {
     await api('duplica/work',{...fields,projectId});
     $('#modal').close();
     duplicaPanel='suivi';
-  } else if (form.dataset.form === 'duplica-telegram') {
-    telegramPairing=await api('duplica/telegram/connect',{projectId,botToken:fields.botToken});
-    form.reset();
-    $('#telegram-pairing').innerHTML=`<p>Ouvrez <a href="https://t.me/${encodeURIComponent(telegramPairing.botUsername)}" target="_blank" rel="noopener noreferrer">@${esc(telegramPairing.botUsername)}</a> et envoyez <code>/start ${esc(telegramPairing.pairingCode)}</code>.</p>${btn('duplica-telegram-pair','Vérifier la connexion','check','primary')}<p class="muted small">Code valable cinq minutes. Seule votre conversation privée sera acceptée.</p>`;
-    return;
   }
   await refresh(true);
 }
 
 Object.assign(duplicaActions,{
+  'duplica-attach':()=>$('#duplica-files').click(),
+  'duplica-attach-folder':()=>$('#duplica-folder').click(),
+  'duplica-remove-attachment':element=>{duplicaDraftAttachments.set(projectId,draftAttachments().filter(attachment=>attachment.id !== element.dataset.id));render();},
+  'duplica-commands':duplicaCommandsModal,
+  'duplica-structure':structureDuplicaInstruction,
+  'duplica-new-command':()=>duplicaCommandEditor(),
+  'duplica-edit-command':element=>duplicaCommandEditor(element.dataset.id),
+  'duplica-delete-command':async element=>{await api('commands/remove',{projectId,id:element.dataset.id});await duplicaCommandsModal();},
+  'duplica-use-command':element=>{const draft=$('#duplica-message');draft.value='/'+element.dataset.name+' ';draft.focus();renderSlashMenu();},
   'duplica-panel':element => {duplicaPanel=element.dataset.panel;render();},
   'duplica-work':duplicaWorkModal,
   'duplica-memory':duplicaMemoryModal,
-  'duplica-telegram':duplicaTelegramModal,
-  'duplica-telegram-pair':async () => {
-    const result=await api('duplica/telegram/pair',{});
-    if (!result.connected) {toast('Envoyez le code au bot, puis vérifiez à nouveau.');return;}
-    $('#modal').close();await refresh(true);toast('Telegram connecté à votre discussion Duplica.');
-  },
 });
 
 document.addEventListener('change',event => {

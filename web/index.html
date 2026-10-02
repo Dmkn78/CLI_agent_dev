@@ -11,6 +11,11 @@
     <link rel="stylesheet" href="/vendor/xterm.css" />
     <link rel="stylesheet" href="/style.css" />
     <link rel="stylesheet" href="/channels.css" />
+    <link rel="stylesheet" href="/workbench.css" />
+    <link rel="stylesheet" href="/agent_workspace.css" />
+    <link rel="stylesheet" href="/display.css" />
+    <link rel="stylesheet" href="/telegram.css" />
+    <link rel="stylesheet" href="/workspace_chrome.css" />
     <script src="/core.js" defer></script>
     <script src="/views.js" defer></script>
     <script src="/cockpit.js" defer></script>
@@ -22,22 +27,40 @@
     <script src="/design.js" defer></script>
     <script src="/webchat.js" defer></script>
     <script src="/vendor/xterm.js" defer></script>
+    <script src="/terminal_layout.js" defer></script>
+    <script src="/floating_panels.js" defer></script>
     <script src="/terminal.js" defer></script>
+    <script src="/agent_dashboard.js" defer></script>
     <script src="/duplica.js" defer></script>
+    <script src="/duplica_resources.js" defer></script>
+    <script src="/message_markdown.js" defer></script>
     <script src="/duplica_chat.js" defer></script>
+    <script src="/vendor/qrcode.js" defer></script>
+    <script src="/telegram.js" defer></script>
     <script src="/api_connections.js" defer></script>
     <script src="/channels.js" defer></script>
+    <script src="/workspace_panels.js" defer></script>
     <script src="/shell.js" defer></script>
+    <script src="/display.js" defer></script>
+    <script src="/updates.js" defer></script>
     <script src="/app.js" defer></script>
   </head>
   <body>
     <div class="app-shell">
+      <nav class="navigation-rail" aria-label="Accès rapides">
+        <button data-action="navigate" data-view="overview" data-nav-preview="home" aria-label="Accueil" title="Accueil"></button>
+        <button data-action="navigation-preview" data-nav-preview="spaces" aria-label="Espaces de travail" title="Espaces de travail"></button>
+        <button data-action="navigation-preview" data-nav-preview="tools" aria-label="Outils du projet" title="Outils du projet"></button>
+        <span class="rail-spacer"></span>
+        <button data-action="navigate" data-view="settings" aria-label="Connexions" title="Connexions"></button>
+      </nav>
       <aside class="sidebar">
         <a class="brand" href="#overview"
-          ><img src="/icon.svg" alt="" width="31" height="31" /><span
+          ><img src="/icon.svg" alt="" width="24" height="24" /><span
             >atelier<span class="brand-dot">.</span></span
           ><small>LOCAL</small></a
         >
+        <button class="icon-btn navigation-pin" data-action="toggle-sidebar" aria-label="Épingler la navigation" title="Épingler la navigation"></button>
         <button
           class="project-switch"
           id="project-switch"
@@ -49,18 +72,14 @@
             ><small>Espace de travail</small></span
           ><span class="chevrons">⌃<br />⌄</span>
         </button>
-        <details id="workspace-section" class="sidebar-section" open>
-          <summary class="nav-label">ESPACE DE TRAVAIL</summary>
-          <nav id="main-nav" aria-label="Navigation principale"></nav>
-        </details>
         <div class="sidebar-projects">
           <details id="projects-section" class="sidebar-section" open>
-          <summary class="nav-label">MES PROJETS</summary>
+          <summary class="nav-label">ESPACES DE TRAVAIL</summary>
           <div class="project-section-tools">
             <button
               id="add-project"
-              title="Ajouter un projet"
-              aria-label="Ajouter un projet"
+              title="Ajouter un espace de travail"
+              aria-label="Ajouter un espace de travail"
             >
               +
             </button>
@@ -68,6 +87,10 @@
           <div id="project-list"></div>
           </details>
         </div>
+        <details id="workspace-section" class="sidebar-section" open>
+          <summary class="nav-label">OUTILS</summary>
+          <nav id="main-nav" aria-label="Navigation principale"></nav>
+        </details>
         <div class="sidebar-bottom">
           <div class="local-status">
             <span class="status-dot"></span> Stockage local
@@ -89,12 +112,14 @@
             <span id="breadcrumb-project">Atelier</span><span>/</span
             ><strong id="breadcrumb-view">Vue d’ensemble</strong>
           </div>
+          <nav id="mode-nav" class="workspace-modes" aria-label="Mode de travail"></nav>
+          <label class="workspace-selector"><select id="workspace-selector" name="codeWorkspace" aria-label="Espace de travail"></select></label>
           <div class="topbar-actions">
             <button id="duplica-global" class="button quiet duplica-global" data-action="duplica-open" title="Duplica Agent" aria-label="Duplica Agent"></button>
             <button id="duplica-quick-pause" class="icon-btn" data-action="duplica-control" data-control="pause" title="Pause Duplica" aria-label="Pause Duplica" hidden>Ⅱ</button>
             <button id="notifications-button" class="icon-btn" data-action="notifications" title="Notifications" aria-label="Notifications"></button>
-            <button class="search-trigger" id="global-search">
-              ⌕ <span>Rechercher dans le projet</span><kbd>⌘ K</kbd></button
+            <button class="search-trigger" id="global-search" aria-label="Rechercher dans le projet" title="Rechercher dans le projet · Ctrl K" aria-keyshortcuts="Control+k Meta+k">
+              <span>Rechercher dans le projet</span><kbd>Ctrl K</kbd></button
             ><span class="topbar-divider"></span
             ><button
               class="icon-btn"
@@ -110,7 +135,7 @@
           <span><i class="status-dot"></i> Serveur local connecté</span
           ><span id="footer-sessions">Aucune session active</span
           ><span class="statusbar-right"
-            >Atelier <span>0.1</span><span>↗</span></span
+            >Atelier <span>__ATELIER_VERSION__</span><span>↗</span></span
           >
         </footer>
       </div>

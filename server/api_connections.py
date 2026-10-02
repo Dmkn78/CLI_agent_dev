@@ -181,6 +181,10 @@ class ApiConnections:
             response = self._request(connection, 'systemone', {'model': configuration['model'],
                 'state': state, 'questions': DECISION_QUESTIONS})
             text = self._decision_text(response.get('answers'))
+            if participant.get('roundMode') == 'auto':
+                answers = response['answers']
+                ready = answers['next_step']['choice'] in ('plan', 'review')
+                text += '\n[[ATELIER:READY]]' if ready else '\n[[ATELIER:CONTINUE]]'
             if len(state) < len(transcript):
                 text += '\nAvis sur un extrait : sujet et derniers messages publics.'
         else:
