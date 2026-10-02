@@ -1,6 +1,7 @@
 # Distribuer et mettre à jour Atelier
 
-Version préparée : **0.3.0-beta.1**, depuis `branch_dev_laptop` du dépôt
+**0.3.0-beta.1 publiée le 3 octobre 2026**, depuis
+[`branch_dev_laptop`](https://github.com/Dmkn78/CLI_agent_dev/tree/branch_dev_laptop) du dépôt
 [Dmkn78/CLI_agent_dev](https://github.com/Dmkn78/CLI_agent_dev).
 Les preuves de build, tests et publication sont consignées dans le
 [rapport de livraison](audit/2026-10-02-desktop-release.md).
@@ -8,20 +9,28 @@ L'[aperçu du système](SYSTEM.md) décrit les composants et leurs frontières.
 
 ## Installer et se connecter
 
-Télécharger la version adaptée depuis les
-[releases effectivement publiées](https://github.com/Dmkn78/CLI_agent_dev/releases).
-Un brouillon n'est pas public et ne déclenche aucune mise à jour.
+La [release v0.3.0-beta.1](https://github.com/Dmkn78/CLI_agent_dev/releases/tag/v0.3.0-beta.1)
+est publique ; les téléchargements suivants sont disponibles.
 
-| Cible initiale | Fichier | Installation |
+| Cible initiale | Téléchargement | Installation |
 |---|---|---|
-| Windows x64 | `Atelier-0.3.0-beta.1-win-x64.exe` | Ouvrir l'installateur, choisir le dossier, puis lancer Atelier depuis le menu Démarrer. |
-| macOS Apple Silicon / arm64 | `Atelier-0.3.0-beta.1-mac-arm64.dmg` | Ouvrir le DMG et copier Atelier dans Applications. Le ZIP accompagne les mises à jour. |
-| Linux x64 | `Atelier-0.3.0-beta.1-linux-x86_64.AppImage` | Autoriser l'exécution dans les propriétés du fichier, puis l'ouvrir depuis un dossier utilisateur accessible en écriture. |
+| Windows x64 | [Atelier-0.3.0-beta.1-win-x64.exe](https://github.com/Dmkn78/CLI_agent_dev/releases/download/v0.3.0-beta.1/Atelier-0.3.0-beta.1-win-x64.exe) | Ouvrir l'installateur, choisir le dossier, puis lancer Atelier depuis le menu Démarrer. |
+| macOS Apple Silicon / arm64 | [Atelier-0.3.0-beta.1-mac-arm64.dmg](https://github.com/Dmkn78/CLI_agent_dev/releases/download/v0.3.0-beta.1/Atelier-0.3.0-beta.1-mac-arm64.dmg) | Ouvrir le DMG et copier Atelier dans Applications. Le ZIP accompagne les mises à jour. |
+| Linux x64 | [Atelier-0.3.0-beta.1-linux-x86_64.AppImage](https://github.com/Dmkn78/CLI_agent_dev/releases/download/v0.3.0-beta.1/Atelier-0.3.0-beta.1-linux-x86_64.AppImage) | Autoriser l'exécution dans les propriétés du fichier, puis l'ouvrir depuis un dossier utilisateur accessible en écriture. |
 
-Ces formats sont les cibles de livraison. Les fichiers macOS/Linux deviennent
-disponibles après réussite de leurs builds natifs ; le tableau n'atteste pas
-leur publication. L'installateur Windows a été construit localement et le
-desktop empaqueté a passé sa recette avec Python et Node.js retirés du PATH.
+Les artefacts de publication proviennent de checkouts CI figés sur chaque
+plateforme, avec les trois jobs natifs réussis.
+Le [tag v0.3.0-beta.1](https://github.com/Dmkn78/CLI_agent_dev/tree/v0.3.0-beta.1)
+désigne le commit source `246c62c181e2de57e4a77ac513c9f428904cf5fe`.
+Les 13 fichiers de release ont été contrôlés par liste autorisée, SHA-256
+et SHA-512 des manifestes ; leurs tailles et SHA-256 sur GitHub correspondent
+aux artefacts validés.
+L'installateur Windows a également été construit localement et le desktop
+empaqueté a passé sa recette avec Python et Node.js retirés du PATH. Les résultats
+de validation et le statut de publication sont conservés dans le rapport.
+Sous Linux, la CI construit l'AppImage et vérifie le desktop décompacté avec
+service et PTY sous Xvfb. Elle ne lance pas l'AppImage lui-même ; ce parcours
+reste à vérifier sur le poste utilisateur.
 
 Atelier embarque Electron, le service Python figé et le CLI Codex natif.
 **Python, Node.js et npm ne sont pas requis sur le poste utilisateur.**
@@ -72,7 +81,11 @@ développement n'est pas migré automatiquement et reste conservé. Avant une
 migration manuelle, fermer Atelier et sauvegarder les deux profils ; ne pas
 écraser un profil existant sans avoir vérifié son contenu.
 
-Les installateurs excluent `.atelier/`, `.env`, comptes et journaux personnels.
+Les installateurs excluent les profils `.atelier/`, les fichiers `.env`, les
+comptes et journaux personnels, ainsi que les demandes archivées et captures de
+développement. Les nouveaux profils contiennent uniquement
+des règles produit neutres ; aucune mémoire personnelle de développement n'est
+initialisée chez l'utilisateur.
 Le build prend le service, les ressources web, Codex et les licences. Les uploads
 ne retiennent que les installateurs attendus, métadonnées du canal, blockmaps
 et empreintes SHA-256. Une bêta ne publie pas de fichier `latest.yml` périmé.
@@ -140,10 +153,12 @@ fichiers `beta-mac.yml` dans la même release serait incorrect.
 
 ## Signature et passage en stable
 
-La bêta autorise les essais sans certificats de distribution. Les systèmes
-peuvent afficher des avertissements ou bloquer son lancement selon leur
-politique. L'installation sur machine vierge et la mise à jour signée restent
-à vérifier avant une distribution stable.
+La bêta ne porte pas de certificat d'éditeur Windows/macOS et n'est pas
+notarisée par Apple. Les systèmes peuvent afficher des avertissements ou
+bloquer son lancement selon leur politique. L'installation sur poste utilisateur
+neuf hors CI et le cycle de mise à jour signé restent à vérifier avant une
+distribution stable. La recette Windows CI installe et désinstalle NSIS et
+contrôle la conservation du profil.
 
 | Secrets GitHub requis pour une stable | Usage |
 |---|---|
@@ -159,7 +174,8 @@ immédiate d'avertissement SmartScreen. Références :
 [signature electron-builder](https://www.electron.build/docs/features/code-signing/),
 [builds par système](https://www.electron.build/docs/features/multi-platform-build/).
 
-La recette entre deux versions publiées doit vérifier le téléchargement au
+Le cycle entre deux versions publiées n'a pas encore été testé. Sa recette doit
+vérifier le téléchargement au
 choix, l'annulation du redémarrage, le refus pendant un travail actif, le
 redémarrage sur la nouvelle version et la conservation du projet. Corriger une
 régression dans une version supérieure ; ne pas remplacer les assets publics

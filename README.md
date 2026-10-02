@@ -2,11 +2,22 @@
 
 ## Télécharger l’application
 
-Les installateurs sont distribués dans les [releases GitHub](https://github.com/Dmkn78/CLI_agent_dev/releases).
-La version `0.3.0-beta.1` prépare la première distribution : Windows `.exe`,
-macOS Apple Silicon `.dmg` et Linux x64 `.AppImage`, selon les builds validés.
-Cette bêta n’est pas signée ; la version de production Windows/macOS requiert
-les certificats d’éditeur et la notarisation Apple.
+**Atelier `0.3.0-beta.1` est disponible**, publié le 3 octobre 2026 dans la
+[release bêta](https://github.com/Dmkn78/CLI_agent_dev/releases/tag/v0.3.0-beta.1).
+
+| Système | Téléchargement |
+|---|---|
+| Windows x64 | [Installateur `.exe`](https://github.com/Dmkn78/CLI_agent_dev/releases/download/v0.3.0-beta.1/Atelier-0.3.0-beta.1-win-x64.exe) |
+| macOS Apple Silicon / arm64 | [Installateur `.dmg`](https://github.com/Dmkn78/CLI_agent_dev/releases/download/v0.3.0-beta.1/Atelier-0.3.0-beta.1-mac-arm64.dmg) |
+| Linux x64 | [Application `.AppImage`](https://github.com/Dmkn78/CLI_agent_dev/releases/download/v0.3.0-beta.1/Atelier-0.3.0-beta.1-linux-x86_64.AppImage) |
+
+Les sources de cette version sont sur
+[`branch_dev_laptop`](https://github.com/Dmkn78/CLI_agent_dev/tree/branch_dev_laptop).
+Le [tag v0.3.0-beta.1](https://github.com/Dmkn78/CLI_agent_dev/tree/v0.3.0-beta.1)
+identifie le commit source validé des installateurs.
+Cette bêta ne porte pas de certificat d’éditeur Windows/macOS et n’est pas
+notarisée par Apple. La production Windows/macOS requiert les certificats et
+la notarisation ; le cycle de mise à jour entre deux versions reste à valider.
 
 L’installateur contient Chromium, le service Python et Codex. Aucun Node ou
 Python à installer pour utiliser Atelier. Ouvrez Atelier, puis **Se connecter
@@ -19,6 +30,10 @@ redémarrer**, après arrêt des travaux actifs. Les données restent dans le pr
 utilisateur, séparées du programme. Le [guide de livraison](docs/RELEASE.md)
 précise les architectures, les signatures, les données et les commandes de build.
 L'[aperçu du système](docs/SYSTEM.md) décrit les composants et les permissions.
+Les installateurs et artefacts de release excluent les profils personnels,
+credentials, journaux, demandes archivées et captures d’écran du développement.
+Les trois builds natifs ont réussi. Sous Linux, la recette valide le desktop
+décompacté et son PTY ; le lancement de l’AppImage lui-même reste à vérifier.
 
 Les **Canaux d’agents** réunissent jusqu’à huit agents, consultants,
 orchestrateurs ou Duplica autour d’un sujet. Choisis chaque modèle, lance des
@@ -50,8 +65,8 @@ Pour ouvrir la fenêtre Windows directement, exécuter
 vérifie qu'il appartient à ce projet, puis ouvre ou réaffiche Atelier.
 `./scripts/install-atelier-shortcuts.ps1` ajoute **Atelier** au menu Démarrer et
 au bureau de l'utilisateur, avec la version de PowerShell utilisée pour cette
-installation. Ces raccourcis sont disponibles sur le poste de Damien. Le dossier
-du projet, Python et les dépendances Node doivent rester présents ; il s'agit
+installation. Le dossier du projet, Python et les dépendances Node doivent
+rester présents ; il s'agit
 d'un accès au desktop local, sans installateur autonome. Aucun changement de
 politique d'exécution n'est nécessaire pour ces deux scripts locaux.
 
@@ -66,7 +81,7 @@ Après démarrage du service, `npm run desktop` ouvre **Atelier desktop** avec C
 
 Sur macOS, vous pouvez aussi ouvrir **Lancer Atelier.command**. Le service écoute exclusivement sur [127.0.0.1:4317](http://127.0.0.1:4317). Fermez-le avec `Ctrl+C` dans son terminal.
 
-Prérequis : Python 3.9 ou plus et le CLI Codex installé, connecté avec `codex login`. Si le compte est déjà connecté, Atelier le retrouve par le protocole officiel. L’application ne lit pas son fichier de credentials. Vous pouvez lancer l’interface sans Codex et utiliser les tâches, les sprints, la mémoire et les fichiers.
+Prérequis depuis les sources : Python 3.12, utilisé par la CI, et le CLI Codex installé, connecté avec `codex login`. Si le compte est déjà connecté, Atelier le retrouve par le protocole officiel. L’application ne lit pas son fichier de credentials. Vous pouvez lancer l’interface sans Codex et utiliser les tâches, les sprints, la mémoire et les fichiers.
 
 ```sh
 python3 run.py --no-open --port 4318
@@ -97,7 +112,7 @@ Une seule instance doit utiliser le même dossier de données. `--data /chemin/v
 
 ## Périmètre de cette version
 
-Les sessions restent des conversations outillées, avec mémoire et preuves structurées. La vue **Code** du desktop est désormais un véritable terminal PTY (node-pty / xterm) : Codex, Claude Code ou OMP, clavier, redimensionnement et onglets fermables. Aucun prompt n'est envoyé au lancement. Claude démarre en plan ; Codex garde son sandbox choisi et on-request ; OMP ne propose que les outils de lecture. Les tokens, durées de tour, TODO et rapports du terminal brut ne sont pas importés dans les sessions structurées. Fermer son onglet termine le processus ; les données natives du CLI restent conservées.
+Les sessions restent des conversations outillées, avec mémoire et preuves structurées. La vue **Code** du desktop est un véritable terminal PTY (node-pty / xterm) : Codex, Claude Code, OpenCode ou OMP, clavier et redimensionnement. Aucun prompt n'est envoyé au lancement. Claude démarre en plan ; Codex garde son sandbox choisi et on-request ; OMP ne propose que les outils de lecture. Les tokens, durées de tour, TODO et rapports du terminal brut ne sont pas importés dans les sessions structurées. Fermer le panneau conserve le processus ; **Options → Arrêter le terminal** le termine. Les données natives du CLI restent conservées.
 
 Plusieurs terminaux restent visibles simultanément dans la grille Code : une à
 trois colonnes, déplacement par le titre, séparateurs redimensionnables,
@@ -123,7 +138,7 @@ Après redémarrage, les sessions passent en état arrêté et se reprennent via
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
 ```
 
-Les tests utilisent un fournisseur fictif et un dépôt Git temporaire. Ils ne consomment pas votre quota. Le contrôle fournisseur normal reste limité au protocole/catalogue. Une inférence réelle exige une autorisation explicite et un modèle exact, sans fallback ; le test autorisé du 1 octobre avec GPT-6-Luna est documenté dans le rapport courant.
+Les tests utilisent un fournisseur fictif et un dépôt Git temporaire. Ils ne consomment pas votre quota. Le contrôle fournisseur normal reste limité au protocole/catalogue. Une inférence réelle exige une autorisation explicite et un modèle exact, sans fallback.
 
 Sous Windows : `$env:PYTHONDONTWRITEBYTECODE='1'; python -m unittest discover -s tests -v`. Vérifier aussi `node --check` sur chaque fichier `web/*.js`.
 
@@ -133,11 +148,13 @@ Recette navigateur isolée : lancer `python -B tests/browser_fixture.py`, puis `
 
 `node tests/workbench_acceptance.cjs` vérifie les nouvelles vues ; `node tests/desktop_acceptance.cjs` vérifie le navigateur isolé et un vrai processus PowerShell avec echo clavier et fin native, sans CLI de modèle, login ni upload réel. Exécuter les recettes séquentiellement sur un serveur fictif neuf, car elles modifient leurs données de recette. Le script `scripts/probe-provider.py` ne fait que lire les métadonnées par défaut. Ne pas lui passer `--model` sans autorisation de consommer du quota.
 
-La carte du projet et les références visuelles sont dans [docs/memory/INDEX.md](docs/memory/INDEX.md). Le contrat de cette version est dans [docs/memory/IMPLEMENTATION.md](docs/memory/IMPLEMENTATION.md).
+L'[aperçu du système](docs/SYSTEM.md) décrit l'architecture et les permissions.
+Le [rapport de livraison](docs/audit/2026-10-02-desktop-release.md) distingue
+les tests observés, la publication et les limites restantes.
 
 L’intégration suit [Codex App Server](https://learn.chatgpt.com/docs/app-server) et [l’authentification Codex](https://learn.chatgpt.com/docs/auth), vérifiés le 30 septembre 2026 avec Codex CLI 0.157.1.
 
-L’adaptateur OMP a été vérifié le 1 octobre 2026 avec Oh My Pi 18.1.10 : [RPC](https://github.com/can1357/oh-my-pi/blob/main/docs/rpc.md), [CLI](https://github.com/can1357/oh-my-pi/blob/main/docs/cli-reference.md) et [fournisseurs](https://github.com/can1357/oh-my-pi/blob/main/docs/providers.md). La demande et les cinq captures de cette évolution sont archivées dans `docs/`.
+L’adaptateur OMP a été vérifié le 1 octobre 2026 avec Oh My Pi 18.1.10 : [RPC](https://github.com/can1357/oh-my-pi/blob/main/docs/rpc.md), [CLI](https://github.com/can1357/oh-my-pi/blob/main/docs/cli-reference.md) et [fournisseurs](https://github.com/can1357/oh-my-pi/blob/main/docs/providers.md).
 ## Duplica Agent
 
 Ouvrir **Duplica Agent** dans la navigation ou le bouton permanent **Duplica**.
@@ -183,7 +200,7 @@ saisir son token dans le champ local masqué, puis envoyer au bot le code
 Le token est chiffré avec DPAPI pour le compte Windows qui lance le service,
 dans `.atelier/duplica/telegram-token.bin`. Il n'est pas transmis aux processus
 des agents ni des recettes. Seul le compte ayant utilisé le code dans une
-conversation privée est accepté. Aucun bot n'a encore été configuré ici.
+conversation privée est accepté.
 
 `/project` liste les projets ; `/project identifiant` choisit la conversation.
 Les messages libres et `/chat texte` rejoignent la discussion du projet dans
