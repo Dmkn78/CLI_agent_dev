@@ -1,0 +1,93 @@
+{
+  "id": "demo-intuition",
+  "title": "L’intuition du hasard",
+  "subtitle": "Du mouvement d’une trajectoire à la forme d’une distribution.",
+  "status": "ready",
+  "origin": "example",
+  "createdAt": "2026-10-02T00:00:00+00:00",
+  "sources": [],
+  "warnings": [],
+  "chapters": [
+    {
+      "id": "brownian",
+      "title": "Le mouvement brownien",
+      "kicker": "01 · EXPLORER LE HASARD",
+      "intro": "Un mouvement brownien est une accumulation de petits déplacements aléatoires. On ne peut pas prédire le chemin d’une trajectoire, mais on peut décrire comment un ensemble de trajectoires se disperse.",
+      "intuition": "Plus le temps passe, plus les chemins s’écartent. Leur dispersion augmente comme la racine carrée du temps.",
+      "prerequisites": "Une variable aléatoire représente une issue incertaine. Sa moyenne décrit son centre ; sa variance mesure l’écart quadratique autour de ce centre.",
+      "formula": "Xₜ = μt + σWₜ",
+      "variables": [
+        {"symbol": "μ", "meaning": "La dérive : le déplacement moyen par unité de temps."},
+        {"symbol": "σ", "meaning": "L’amplitude du hasard : elle multiplie chaque déplacement brownien."},
+        {"symbol": "Wₜ", "meaning": "Le brownien standard : E[Wₜ] = 0 et Var(Wₜ) = t."}
+      ],
+      "proof": [
+        {"title": "1. Découper le temps", "body": "Sur un intervalle Δt, on simule ΔW = √Δt · Z, où Z suit une loi normale de moyenne 0 et de variance 1. Les incréments sont indépendants. Ce sont les valeurs exactes du brownien aux instants de la grille ; les segments entre points sont une interpolation visuelle."},
+        {"title": "2. Additionner les incréments", "body": "À t = nΔt, Wₜ = Σᵢ √Δt · Zᵢ. La moyenne de cette somme est n × 0 = 0. Par indépendance, les variances s’additionnent : Var(Wₜ) = nΔt = t."},
+        {"title": "3. Ajouter dérive et amplitude", "body": "Le terme μt est déterministe, donc E[Xₜ] = μt. Multiplier une variable par σ multiplie sa variance par σ². Ainsi Var(Xₜ) = σ²t et son écart-type vaut σ√t. Par exemple, σ = 0,8 et t = 2 donnent une variance de 1,28."}
+      ],
+      "prediction": {"question": "Si tu doubles σ, que devient la variance à un instant fixé ?", "choices": ["Elle double", "Elle est multipliée par 4", "Elle ne change pas"], "answer": 1, "explanation": "La variance vaut σ²t. Doubler σ donne (2σ)²t = 4σ²t. L’écart-type, lui, double."},
+      "exercise": {"question": "Sans rouvrir la preuve : pourquoi les trajectoires se dispersent-elles alors que leur moyenne théorique reste nulle lorsque μ = 0 ?", "hint": "Les déplacements positifs et négatifs se compensent en moyenne. Leurs carrés peuvent-ils se compenser ?", "solution": "Chaque incrément est centré, donc leur somme est centrée. Mais la variance de chaque incrément est positive et les variances s’additionnent par indépendance : Var(Wₜ) = t. Une moyenne empirique calculée sur un nombre fini de trajectoires peut s’écarter de zéro."},
+      "pitfall": "Une trajectoire qui monte n’est pas une preuve de dérive positive. Mets μ à 0 et observe plusieurs chemins. Puis mets σ à 0 : tous les chemins deviennent la droite μt.",
+      "application": "En finance quantitative, le brownien sert de source d’incertitude dans des modèles de prix. Xₜ peut être négatif : ce modèle arithmétique n’est donc pas un prix géométrique. Dans le modèle géométrique, on utilise Sₜ = S₀ exp((μ − σ²/2)t + σWₜ).",
+      "questions": ["Que reste-t-il quand σ = 0 ?", "Pourquoi la moyenne empirique n’est-elle pas exactement μt ?", "Quel horizon faut-il pour doubler l’écart-type ?"],
+      "lab": {"kind": "brownian", "title": "Des chemins imprévisibles. Une structure précise.", "description": "Modifie l’amplitude du hasard. Observe ce qui change, et ce qui reste stable.", "html": ""},
+      "sourceRefs": []
+    },
+    {
+      "id": "expectation",
+      "title": "L’espérance, un équilibre",
+      "kicker": "02 · TROUVER LE CENTRE",
+      "intro": "L’espérance est une moyenne pondérée des issues possibles. Imagine des masses posées sur une règle : leur position d’équilibre dépend de la place et du poids de chacune.",
+      "intuition": "L’espérance est le centre de gravité de la distribution. Ce centre n’est pas forcément une issue possible.",
+      "prerequisites": "Une probabilité est un poids positif. Les probabilités des issues mutuellement exclusives et exhaustives somment à 1.",
+      "formula": "E[X] = Σᵢ pᵢxᵢ",
+      "variables": [{"symbol": "xᵢ", "meaning": "Une issue possible : ici −2, 1 ou 5."}, {"symbol": "pᵢ", "meaning": "La probabilité associée, obtenue en normalisant les poids."}],
+      "proof": [{"title": "1. Partir des fréquences", "body": "Sur N répétitions, l’issue xᵢ apparaît Nᵢ fois. La moyenne observée vaut (Σᵢ Nᵢxᵢ)/N = Σᵢ (Nᵢ/N)xᵢ."}, {"title": "2. Passer à la moyenne théorique", "body": "Pour des tirages indépendants de même loi, les fréquences Nᵢ/N tendent vers pᵢ. La moyenne tend donc vers Σᵢpᵢxᵢ. Avec trois issues équiprobables −2, 1, 5 : E[X] = (−2 + 1 + 5)/3 = 4/3."}],
+      "prediction": {"question": "Avec les issues −2, 1 et 5 équiprobables, peut-on obtenir exactement l’espérance en un seul tirage ?", "choices": ["Oui, forcément", "Non, elle vaut 4/3"], "answer": 1, "explanation": "4/3 ne figure pas parmi les trois issues. Une moyenne n’a pas besoin d’être réalisable en un seul essai."},
+      "exercise": {"question": "Place 50 % de probabilité sur −2 et 50 % sur 5. Calcule l’espérance et explique pourquoi elle ne suffit pas à décrire le risque.", "hint": "Compare ce jeu avec un paiement certain de 1,5.", "solution": "E[X] = 0,5 × (−2) + 0,5 × 5 = 1,5. Le paiement certain de 1,5 a la même espérance mais une variance nulle. Le jeu a une variance de 12,25 : la moyenne ne décrit pas la dispersion."},
+      "pitfall": "La valeur la plus probable et l’espérance sont deux choses différentes. Donne le plus grand poids à 1, puis augmente un peu le poids de 5 : le centre se déplace sans changer l’issue la plus probable.",
+      "application": "Une table de gains et pertes permet de séparer rendement moyen et risque. En apprentissage automatique, l’erreur moyenne attendue est aussi une espérance sur des exemples possibles.",
+      "questions": ["L’espérance est-elle toujours possible en un tirage ?", "Que fait une issue rare mais très grande ?", "Deux jeux de même espérance ont-ils le même risque ?"],
+      "lab": {"kind": "expectation", "title": "Déplace les poids. Trouve l’équilibre.", "description": "Les probabilités s’ajustent automatiquement pour toujours sommer à 100 %.", "html": ""},
+      "sourceRefs": []
+    },
+    {
+      "id": "derivative",
+      "title": "La dérivée, de près",
+      "kicker": "03 · MESURER LE CHANGEMENT",
+      "intro": "Une pente moyenne relie deux points. La dérivée demande ce que devient cette pente lorsque le deuxième point se rapproche indéfiniment du premier.",
+      "intuition": "À très petite échelle, une courbe dérivable ressemble à une droite. La dérivée est la pente de cette droite.",
+      "prerequisites": "Une pente est un rapport : variation verticale divisée par variation horizontale. Une limite décrit une tendance, sans obliger à atteindre la valeur limite.",
+      "formula": "f′(x) = limₕ→₀ [f(x+h) − f(x)] / h",
+      "variables": [{"symbol": "x", "meaning": "Le point où l’on veut mesurer la pente."}, {"symbol": "h", "meaning": "La distance au deuxième point, non nulle dans le quotient."}, {"symbol": "f(x)", "meaning": "Ici x² : une parabole."}],
+      "proof": [{"title": "1. Développer le carré", "body": "Pour f(x) = x² : f(x+h) − f(x) = (x+h)² − x² = 2xh + h²."}, {"title": "2. Diviser tant que h ≠ 0", "body": "Le quotient vaut (2xh+h²)/h = 2x+h. On a simplifié h sans jamais diviser par zéro."}, {"title": "3. Prendre la limite", "body": "Quand h tend vers zéro, 2x+h tend vers 2x. Donc f′(x)=2x. Au point x=1, la pente exacte vaut 2 ; avec h=0,2, la sécante a une pente de 2,2."}],
+      "prediction": {"question": "Au point x = 1 sur f(x) = x², vers quelle pente tend la sécante ?", "choices": ["0", "1", "2"], "answer": 2, "explanation": "Le quotient vaut 2x+h. Avec x=1 et h→0, sa limite est 2."},
+      "exercise": {"question": "Reconstruis la dérivée de x² sans citer une règle de dérivation. Explique à quel moment tu utilises h ≠ 0.", "hint": "Commence par développer (x+h)² puis factorise h.", "solution": "[(x+h)²−x²]/h = h(2x+h)/h = 2x+h pour h≠0. C’est ensuite la limite de cette expression lorsque h→0 qui vaut 2x. On ne remplace jamais h par 0 dans le quotient initial."},
+      "pitfall": "Une pente négative ne veut pas dire que la fonction est négative. Place x à −1 : x² vaut 1, mais sa pente vaut −2.",
+      "application": "Le gradient étend cette idée à plusieurs paramètres. En IA, il indique une direction de variation locale de la perte. En finance, une sensibilité mesure aussi une variation locale, sous les hypothèses du modèle.",
+      "questions": ["Pourquoi ne pas mettre directement h=0 ?", "Une fonction positive peut-elle avoir une pente négative ?", "Que mesure une dérivée par rapport à une variation totale ?"],
+      "lab": {"kind": "derivative", "title": "Une sécante qui devient tangente.", "description": "Rapproche les deux points et observe la pente moyenne rejoindre la pente locale.", "html": ""},
+      "sourceRefs": []
+    },
+    {
+      "id": "surface",
+      "title": "La dépendance en 3D",
+      "kicker": "04 · VOIR LA DISTRIBUTION",
+      "intro": "Une densité jointe décrit deux variables ensemble. Ici, chacune suit une loi normale standard. La corrélation modifie la forme de leur distribution commune.",
+      "intuition": "Quand la corrélation augmente, les valeurs se concentrent autour d’une diagonale. La hauteur de la surface est une densité, pas une probabilité en un point.",
+      "prerequisites": "La covariance décrit la variation conjointe de deux variables centrées. La corrélation normalise cette covariance par leurs écarts-types.",
+      "formula": "f(x,y) = exp[−(x²−2ρxy+y²)/(2(1−ρ²))] / (2π√(1−ρ²))",
+      "variables": [{"symbol": "ρ", "meaning": "La corrélation, strictement entre −1 et 1 pour cette densité."}, {"symbol": "x, y", "meaning": "Les deux variables, chacune centrée et de variance 1."}],
+      "proof": [{"title": "1. Construire deux variables", "body": "Soient U et V deux normales standard indépendantes. Posons X=U et Y=ρU+√(1−ρ²)V. On obtient E[Y]=0, Var(Y)=ρ²+(1−ρ²)=1 et Cov(X,Y)=ρ."}, {"title": "2. Changer de coordonnées", "body": "On inverse : U=X et V=(Y−ρX)/√(1−ρ²). Le jacobien absolu vaut 1/√(1−ρ²). En substituant dans la densité (2π)⁻¹exp[−(u²+v²)/2], on obtient la formule affichée."}, {"title": "3. Lire les limites", "body": "Quand ρ=0, la densité se factorise en deux normales indépendantes. Quand |ρ| approche 1, la distribution se concentre autour d’une droite. À |ρ|=1, la formule de densité 2D n’est plus valable."}],
+      "prediction": {"question": "Quand ρ devient positif, autour de quelle diagonale la densité s’allonge-t-elle ?", "choices": ["y = x", "y = −x", "Aucune"], "answer": 0, "explanation": "Une corrélation positive favorise des écarts de même signe : les points s’alignent autour de y=x."},
+      "exercise": {"question": "Pourquoi ρ = 0 implique-t-il ici l’indépendance, mais pas pour toutes les distributions ?", "hint": "Examine la factorisation de cette densité précise.", "solution": "Dans le cas conjointement gaussien, poser ρ=0 factorise la densité en fX(x)fY(y), ce qui prouve l’indépendance. En général, une covariance nulle n’exclut qu’une dépendance linéaire. Par exemple, pour X uniforme sur [−1,1], X et X² sont dépendants mais leur covariance est nulle."},
+      "pitfall": "Corrélation nulle n’est pas indépendance en général. Et une densité haute en un point ne donne pas la probabilité de ce point : pour une loi continue, on intègre sur une région.",
+      "application": "La covariance intervient dans la variance d’un portefeuille : Var(wX+(1−w)Y)=w²+(1−w)²+2w(1−w)ρ dans cet exemple. La distribution jointe détermine ce que la diversification peut changer.",
+      "questions": ["Que signifie la hauteur de la surface ?", "Que se passe-t-il quand ρ change de signe ?", "Pourquoi exclut-on exactement ρ=1 ?"],
+      "lab": {"kind": "surface", "title": "Tourne autour de la probabilité.", "description": "Fais glisser la surface pour la regarder sous un autre angle. Change la corrélation.", "html": ""},
+      "sourceRefs": []
+    }
+  ]
+}
+
