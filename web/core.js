@@ -62,6 +62,7 @@ const nav = [
   ["tasks", "Tableau des tâches", "tasks"],
   ["sprints", "Sprints", "sprint"],
   ["memory", "Mémoire", "memory"],
+  ["brain", "My Brain", "memory"],
   ["usage", "Consommation", "usage"],
   ["benchmarks", "Benchmarks", "bench"],
   ["files", "Explorateur", "folder"],
@@ -279,6 +280,7 @@ function render() {
     tasks: tasksView,
     sprints: sprintsView,
     memory: memoryView,
+    brain: brainView,
     usage: consumptionView,
     benchmarks: benchmarksView,
     files: filesView,
@@ -298,6 +300,7 @@ function render() {
   mountDuplicaResources();
   mountGraphZoom();
   mountTelegram();
+  mountBrain();
   $('#main').querySelectorAll('.prompt-form textarea').forEach(updateDraftEstimate);
   $("#main")
     .querySelectorAll("[data-scroll]")

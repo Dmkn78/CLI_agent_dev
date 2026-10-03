@@ -22,7 +22,21 @@ function sessionUsageSummary(session, account) {
     ? `<small>${safe(compact(percent))}% compte partagé, ne mesure pas cette session</small>`
     : '';
 
-  return `<div class="session-usage"><strong>${tokenText(total?.totalTokens)}</strong>${tokenLine('Entrée', 'inputTokens')}${tokenLine('Réponse', 'outputTokens')}${tokenLine('Cache', 'cachedInputTokens')}<span>Abonnement : ${safe(plan || 'non communiqué')}</span>${quotaLine}</div>`;
+  return `<div class="session-usage"><strong title="Total cumulé reçu du fournisseur">${tokenText(total?.totalTokens)}</strong>${tokenLine('Entrée', 'inputTokens')}${tokenLine('Réponse', 'outputTokens')}${tokenLine('Cache lu', 'cachedInputTokens')}<small class="session-cache-note">Le cache est inclus dans l’entrée, pas ajouté au total.</small><span>Abonnement : ${safe(plan || 'non communiqué')}</span>${quotaLine}</div>`;
+}
+
+function sessionMessageContent(message) {
+  const text=String(message.text || '');
+  if (message.role === 'user') return esc(text);
+  let proposal;
+  try { proposal=JSON.parse(text.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'')); } catch {}
+  if (!proposal || typeof proposal !== 'object' || typeof proposal.explanation !== 'string' || !Array.isArray(proposal.graph?.nodes) || !Array.isArray(proposal.graph?.edges)) {
+    return typeof messageMarkdown === 'function' ? `<div class="message-markdown">${messageMarkdown(text)}</div>` : esc(text);
+  }
+  const nodes=proposal.graph.nodes.filter(node => node && typeof node === 'object' && typeof node.id === 'string').slice(0,80), edges=proposal.graph.edges.filter(edge => edge && typeof edge === 'object' && typeof edge.sourceNodeId === 'string' && typeof edge.targetNodeId === 'string').slice(0,200);
+  const nodeName=node => typeof node?.text === 'string' ? node.text : String(node?.text?.value || node?.id || 'Bloc');
+  const names=new Map(nodes.map(node => [node.id,nodeName(node)]));
+  return `<section class="architecture-response"><small>Proposition d’architecture · à relire</small><h3>${esc(proposal.title || 'Architecture proposée')}</h3><div class="message-markdown">${typeof messageMarkdown === 'function' ? messageMarkdown(proposal.explanation) : esc(proposal.explanation)}</div><div class="architecture-response-nodes">${nodes.map(node => `<span>${esc(nodeName(node))}</span>`).join('') || '<p>Aucun bloc proposé.</p>'}</div>${edges.length ? `<details><summary>${edges.length} relations entre les blocs</summary><ul>${edges.map(edge => `<li><strong>${esc(names.get(edge.sourceNodeId) || edge.sourceNodeId)}</strong> → <strong>${esc(names.get(edge.targetNodeId) || edge.targetNodeId)}</strong>${edge.text ? ' · '+esc(typeof edge.text === 'string' ? edge.text : edge.text.value || '') : ''}</li>`).join('')}</ul></details>` : ''}<details class="architecture-response-source"><summary>Consulter le JSON source</summary><pre>${esc(JSON.stringify(proposal,null,2))}</pre></details></section>`;
 }
 
 function conversationUsage(messages) {
@@ -55,7 +69,7 @@ function sessionUsageChip(session, account={}, options={}) {
 function sessionEquivalentCost(session) {
   if (!session?.id || typeof state === 'undefined' || typeof estimateCost !== 'function') return '<small>Coût non communiqué</small>';
   const requests=(state.requests || []).filter(request => request.sessionId === session.id);
-  const costs=requests.map(request => estimateCost(request.usage,(state.tariffs || []).find(tariff => tariff.projectId === session.projectId && tariff.model === request.model && tariff.provider === request.provider)));
+  const costs=requests.map(request => estimateCost(request.usage,typeof requestTariff === 'function' ? requestTariff(request,session.projectId) : (state.tariffs || []).find(tariff => tariff.projectId === session.projectId && tariff.model === request.model && tariff.provider === request.provider)));
   if (!costs.length || costs.some(cost => cost === null || !Number.isFinite(cost))) return '<small>Coût non communiqué</small>';
   const total=costs.reduce((sum,cost) => sum+cost,0);
   return `<small>Équivalent API : ${total.toFixed(4)} USD<br>Selon les tarifs enregistrés · distinct de l’abonnement</small>`;

@@ -8,7 +8,7 @@ async function main(){
   const evidence=path.resolve('.atelier/channel-evidence');fs.mkdirSync(evidence,{recursive:true});
   try{
     await page.goto('http://127.0.0.1:4324/#channels');
-    await page.getByRole('heading',{name:'Canaux d’agents',exact:true}).waitFor();
+    await page.getByRole('heading',{name:'Canaux',exact:true}).waitFor();
     await page.getByRole('button',{name:'Créer mon premier canal',exact:true}).click();
     await page.getByLabel('Nom du canal').fill('Architecture partagée');
     await page.getByLabel('Sujet et résultat attendu').fill('Préparer un plan pour un canal où les agents discutent avant action.');
@@ -56,8 +56,7 @@ async function main(){
       await page.locator('#modal').waitFor({state:'hidden'});
     }
     await page.getByLabel('Votre message au canal').fill('Comparez deux solutions et proposez les vérifications nécessaires.');
-    await page.getByRole('button',{name:'Envoyer au canal',exact:true}).click();
-    await page.getByRole('button',{name:'Lancer la discussion',exact:true}).click();
+    await page.getByRole('button',{name:'Envoyer et lancer',exact:true}).click();
     await page.waitForFunction(()=>state.discussions?.channels[0]?.status==='ready_for_review');
     const snapshot=await page.evaluate(()=>api('state'));
     assert.equal(snapshot.discussions.messages.length,10); // user + two rounds of four peers + one plan

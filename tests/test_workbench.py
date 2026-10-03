@@ -127,7 +127,8 @@ class WorkbenchTests(unittest.TestCase):
 
     def test_desktop_launch_is_literal_local_and_clears_node_mode(self):
         from server.desktop import open_desktop
-        with patch('server.desktop.Path.is_file', return_value=True), patch('server.desktop.subprocess.Popen') as launch:
+        with patch('server.desktop.Path.is_file', return_value=True), patch('server.desktop.subprocess.Popen') as launch, \
+                patch('server.desktop.shutil.which', return_value='/usr/bin/node'):
             launch.return_value.pid = 123
             with patch.dict('os.environ', {'ELECTRON_RUN_AS_NODE': '1'}):
                 result = open_desktop(self.app.root, 4320, 'code')
@@ -137,6 +138,26 @@ class WorkbenchTests(unittest.TestCase):
             self.assertEqual(launch.call_args.args[0][-1], '--atelier-code')
             with self.assertRaises(ValueError):
                 open_desktop(self.app.root, 4320, 'code; command')
+
+    def test_macos_without_node_uses_console_bootstrap_for_branded_atelier(self):
+        from server.desktop import open_desktop
+        with patch('server.desktop.sys.platform', 'darwin'), patch('server.desktop.Path.is_file', return_value=True), \
+                patch('server.desktop.shutil.which', return_value=None), patch('server.desktop.subprocess.Popen') as launch, \
+                patch.dict('os.environ', {}, clear=True):
+            launch.return_value.pid = 123
+            open_desktop(self.app.root, 4320, 'project')
+            self.assertEqual(launch.call_args.kwargs['env']['ELECTRON_RUN_AS_NODE'], '1')
+            self.assertEqual(launch.call_args.args[0][1:], [str(self.app.root / 'scripts/launch-desktop.cjs'), '--atelier-project'])
+
+    def test_packaged_desktop_keeps_installed_executable_and_uses_no_bootstrap(self):
+        from server.desktop import open_desktop
+        executable = '/Applications/Atelier.app/Contents/MacOS/Atelier'
+        with patch('server.desktop.Path.is_file', return_value=True), patch('server.desktop.subprocess.Popen') as launch, \
+                patch.dict('os.environ', {'ATELIER_DESKTOP_EXECUTABLE': executable, 'ELECTRON_RUN_AS_NODE': '1'}):
+            launch.return_value.pid = 123
+            open_desktop(self.app.root, 4320, 'chat')
+            self.assertEqual(launch.call_args.args[0], [executable, '--atelier-chat'])
+            self.assertNotIn('ELECTRON_RUN_AS_NODE', launch.call_args.kwargs['env'])
 
     def test_todo_plan_holds_claim_until_approval_then_requests_review(self):
         task = self.app.upsert('task', {'title': 'Un bug'})

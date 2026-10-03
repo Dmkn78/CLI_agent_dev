@@ -1,16 +1,18 @@
 let webChatTabs=[], activeWebChatId=null, browserResourcePath='', browserResources=null, browserResourceContent=null;
 let browserResourceGeneration=0;
 let observedBrowserPanel=null;
+const BROWSER_ZOOM_STEPS=[25,33,50,67,75,80,90,100,110,125,150,175,200];
 const browserPanelObserver=new ResizeObserver(() => syncBrowserPanel());
 
 function webChatView() {
   const tabs=webChatTabs.filter(tab => tab.projectId === projectId);
   const active=tabs.find(tab => tab.id === activeWebChatId) || tabs.at(-1);
   if (active) activeWebChatId=active.id;
+  const accountNotice=`<div class=\"browser-session-notice\"><strong>${provider().connected ? 'Codex est connecté.' : 'Connexion Codex non vérifiée.'}</strong><span>Le chat intégré utilise une connexion web séparée. Connecte-toi une fois dans le chat ci-dessous : Atelier conservera cette session. Ton compte peut être le même, mais chaque navigateur garde sa propre session.</span></div>`;
   const tools=btn('toggle-resources','','folder','icon-btn','title="Afficher / masquer les ressources" aria-label="Afficher / masquer les ressources"')+btn('chat-focus','','external','icon-btn','title="Agrandir / restaurer le chat" aria-label="Agrandir / restaurer le chat"')+sessionUsageChip(null,{}, {label:'Consommation de ChatGPT',notice:'Le site ChatGPT ne communique pas ses tokens à Atelier.'})+newPanelButton();
   const navigation=['back','forward','reload','home'].map((action,index) => btn('browser-navigate','',['arrow','arrow','refresh','grid'][index],'icon-btn',`data-navigation="${action}" title="${['Précédent','Suivant','Actualiser la page','Accueil ChatGPT'][index]}" aria-label="${['Précédent','Suivant','Actualiser la page','Accueil ChatGPT'][index]}" ${!active || (action === 'back' && !active.back) || (action === 'forward' && !active.forward) ? 'disabled' : ''}`)).join('');
   const resources=(browserResources?.entries || []).map(file => `<button class="file-entry" data-action="browser-resource" data-path="${esc(file.path)}" draggable="true" title="${file.directory ? 'Ouvrir ou glisser les fichiers de ce dossier' : 'Ouvrir ou glisser ce fichier'}">${icon(file.directory ? 'folder' : 'code')}<span>${esc(file.name)}</span></button>`).join('');
-  return `<div class="workspace-toolbar chat-workspace-toolbar"><h1>ChatGPT</h1><span class="workspace-toolbar-spacer"></span>${tools}</div><div class="browser-tabbar">${tabs.map(tab => `<div class="browser-tab ${tab.id === activeWebChatId ? 'selected' : ''}"><button data-action="browser-select" data-id="${esc(tab.id)}">${esc(tab.title)}</button><button class="icon-btn" data-action="browser-close" data-id="${esc(tab.id)}" title="Fermer ce chat" aria-label="Fermer ce chat">${icon('close')}</button></div>`).join('')}</div><div class="browser-navigation">${navigation}<input id="browser-address" aria-label="Adresse du chat" value="${esc(active?.url || 'https://chatgpt.com/')}" readonly><span id="browser-load-state">${active?.loading ? 'Chargement…' : ''}</span></div><div class="browser-workspace"><aside class="browser-resources"><div class="panel-heading"><h2>Ressources</h2>${btn('toggle-resources','','close','icon-btn','title="Masquer les ressources" aria-label="Masquer les ressources"')}</div><div class="resource-navigation">${btn('browser-root','','folder','icon-btn','title="Dossier du projet" aria-label="Dossier du projet"')}${btn('browser-up','','arrow','icon-btn',`title="Dossier parent" aria-label="Dossier parent" ${!browserResourcePath ? 'disabled' : ''}`)}<span class="resource-path">${esc(browserResourcePath || project().name)}</span></div><div class="browser-file-list">${resources}</div>${browserResourceContent ? `<section class="resource-preview"><strong>${esc(browserResourceContent.path)}</strong><textarea id="browser-resource-text" rows="8" aria-label="Contenu de la ressource" readonly>${esc(browserResourceContent.content)}</textarea>${btn('browser-copy-resource','Copier','code','quiet')}</section>` : ''}<section class="browser-instructions"><h3>Consignes</h3><textarea id="browser-instructions" rows="5" aria-label="Consignes à copier pour ChatGPT" placeholder="Contexte SQL, méthode, contraintes…">${esc(localStorage.getItem('atelier-chat-instructions-'+projectId) || '')}</textarea>${btn('browser-copy-instructions','Copier','code','quiet')}</section><div class="browser-privacy">Connexion web indépendante de Codex, conservée dans Atelier desktop. Dépôt volontaire des fichiers à OpenAI. Tokens du site non exposés.</div></aside><section id="browser-panel" class="browser-panel">${active ? `<div class="browser-loading"><p>${active.loading ? 'Chargement du navigateur…' : 'ChatGPT'}</p>${btn('focus-browser-panel','Afficher le navigateur','external','quiet')}</div>` : `<div class="browser-external"><h2>${window.atelierDesktop ? 'Ouvrir ChatGPT' : 'ChatGPT dans Atelier desktop'}</h2>${btn('browser-new',window.atelierDesktop ? 'Nouveau chat' : 'Ouvrir Atelier desktop','plus','primary')}</div>`}</section></div>`;
+  return `<div class="workspace-toolbar chat-workspace-toolbar"><h1>ChatGPT</h1><span class="workspace-toolbar-spacer"></span>${tools}</div>${accountNotice}<div class="browser-tabbar">${tabs.map(tab => `<div class="browser-tab ${tab.id === activeWebChatId ? 'selected' : ''}"><button data-action="browser-select" data-id="${esc(tab.id)}">${esc(tab.title)}</button><button class="icon-btn" data-action="browser-rename" data-id="${esc(tab.id)}" title="Renommer ce chat" aria-label="Renommer ${esc(tab.title)}">${icon('settings')}</button><button class="icon-btn" data-action="browser-close" data-id="${esc(tab.id)}" title="Fermer ce chat" aria-label="Fermer ce chat">${icon('close')}</button></div>`).join('')}</div><div class="browser-navigation">${navigation}<div class="browser-zoom" role="group" aria-label="Zoom du chat">${btn('browser-zoom','−','','icon-btn',`data-direction="out" title="Dézoomer le chat" aria-label="Dézoomer le chat" ${!active ? 'disabled' : ''}`)}${btn('browser-zoom',(active?.zoom || 100)+' %','','quiet',`data-direction="reset" id="browser-zoom-label" title="Rétablir le zoom du chat" aria-label="Rétablir le zoom du chat" ${!active ? 'disabled' : ''}`)}${btn('browser-zoom','+','','icon-btn',`data-direction="in" title="Zoomer le chat" aria-label="Zoomer le chat" ${!active ? 'disabled' : ''}`)}</div><input id="browser-address" aria-label="Adresse du chat" value="${esc(active?.url || 'https://chatgpt.com/')}" readonly><span id="browser-load-state">${active?.loading ? 'Chargement…' : ''}</span></div><div class="browser-workspace"><aside class="browser-resources"><div class="panel-heading"><h2>Ressources</h2>${btn('toggle-resources','','close','icon-btn','title="Masquer les ressources" aria-label="Masquer les ressources"')}</div><div class="resource-navigation">${btn('browser-root','','folder','icon-btn','title="Dossier du projet" aria-label="Dossier du projet"')}${btn('browser-up','','arrow','icon-btn',`title="Dossier parent" aria-label="Dossier parent" ${!browserResourcePath ? 'disabled' : ''}`)}<span class="resource-path">${esc(browserResourcePath || project().name)}</span></div><div class="browser-file-list">${resources}</div>${browserResourceContent ? `<section class="resource-preview"><strong>${esc(browserResourceContent.path)}</strong><textarea id="browser-resource-text" rows="8" aria-label="Contenu de la ressource" readonly>${esc(browserResourceContent.content)}</textarea>${btn('browser-copy-resource','Copier','code','quiet')}</section>` : ''}<section class="browser-instructions"><h3>Consignes</h3><textarea id="browser-instructions" rows="5" aria-label="Consignes à copier pour ChatGPT" placeholder="Contexte SQL, méthode, contraintes…">${esc(localStorage.getItem('atelier-chat-instructions-'+projectId) || '')}</textarea>${btn('browser-copy-instructions','Copier','code','quiet')}</section><div class="browser-privacy">Connexion web indépendante de Codex, conservée dans Atelier desktop. Dépôt volontaire des fichiers à OpenAI. Tokens du site non exposés.</div></aside><section id="browser-panel" class="browser-panel">${active ? `<div class="browser-loading"><p>${active.loading ? 'Chargement du navigateur…' : 'ChatGPT'}</p>${btn('focus-browser-panel','Afficher le navigateur','external','quiet')}</div>` : `<div class="browser-external"><h2>${window.atelierDesktop ? 'Ouvrir ChatGPT' : 'ChatGPT dans Atelier desktop'}</h2>${btn('browser-new',window.atelierDesktop ? 'Nouveau chat' : 'Ouvrir Atelier desktop','plus','primary')}</div>`}</section></div>`;
 }
 
 async function loadBrowserResources(path='') {
@@ -26,7 +28,7 @@ async function loadBrowserResources(path='') {
 function syncBrowserPanel() {
   const desktop=window.atelierDesktop;
   const tab=webChatTabs.find(tab => tab.id === activeWebChatId && tab.projectId === projectId);
-  const visible=Boolean($('#browser-panel') && tab) && !$('#modal').open && $('#work-popover').hidden && !navigationPreview && !workspacePanelGesture && !document.querySelector('.usage-chip[open],.action-menu[open]') && !browserPanelOccluded();
+  const visible=Boolean($('#browser-panel') && tab) && !$('#modal').open && $('#work-popover').hidden && !navigationPreview && !workspacePanelGesture && !document.querySelector('.usage-chip[open],.action-menu[open],#navigation-tooltip:not([hidden])') && !browserPanelOccluded();
   if (desktop) {
     desktop.showBrowser(visible ? tab.id : null);
     if (visible && $('#browser-panel')) {
@@ -62,11 +64,20 @@ function installWebChatActions() {
   actions['focus-browser-panel']=() => {focusFloatingPanel('tools');syncBrowserPanel();};
   actions['browser-new']=async () => {
     if (!window.atelierDesktop) { await api('desktop/open',{mode:'chat'}); toast('Atelier desktop ouvert.'); return; }
-    const tab={id:crypto.randomUUID(),projectId,title:'ChatGPT',url:'https://chatgpt.com/'};
+    const key='atelier-chat-sequence:'+projectId;
+    const sequence=(Number(localStorage.getItem(key)) || 0)+1;
+    localStorage.setItem(key,String(sequence));
+    const tab={id:crypto.randomUUID(),projectId,title:'Chat '+sequence,zoom:100,url:'https://chatgpt.com/'};
     webChatTabs.push(tab); activeWebChatId=tab.id;
     try { await window.atelierDesktop.createBrowser(tab.id); render(); }
     catch (error) { webChatTabs=webChatTabs.filter(item => item.id !== tab.id); activeWebChatId=null; render(); throw error; }
   };
+  actions['browser-rename']=el => {
+    const tab=webChatTabs.find(tab => tab.id === el.dataset.id);
+    if (tab) modal('Renommer le chat','Ce nom apparaît dans la barre des onglets Atelier.',`<form data-form="browser-rename" data-id="${esc(tab.id)}"><div class="modal-body">${field('Nom du chat','chatName',tab.title,'text','required maxlength="80"')}</div>${formFooter('Enregistrer')}</form>`);
+  };
+  actions['browser-zoom']=el => changeBrowserZoom(activeWebChatId,el.dataset.direction);
+  window.atelierDesktop?.onBrowserZoomShortcut(({id,direction}) => changeBrowserZoom(id,direction).catch(error => toast(error.message,true)));
   actions['browser-select']=el => { activeWebChatId=el.dataset.id; render(); };
   actions['browser-close']=async el => {
     await window.atelierDesktop.closeBrowser(el.dataset.id);
@@ -83,7 +94,8 @@ function installWebChatActions() {
   window.atelierDesktop?.onBrowserState(update => {
     const tab=webChatTabs.find(tab => tab.id === update.id);
     if (!tab) return;
-    Object.assign(tab,update);
+    const {title:pageTitle,...status}=update;
+    Object.assign(tab,status,{pageTitle});
     if (tab.id !== activeWebChatId || !$('#browser-address')) return;
     $('#browser-address').value=tab.url;
     $('#browser-load-state').textContent=tab.error || (tab.loading ? 'Chargement…' : '');
@@ -102,4 +114,25 @@ document.addEventListener('dragstart',event => {
   if (!resource) return;
   if (window.atelierDesktop) { event.preventDefault(); window.atelierDesktop.dragFile({projectId,path:resource.dataset.path}).catch(error => toast(error.message,true)); }
   else event.dataTransfer.setData('text/plain',resource.dataset.path);
+});
+
+async function changeBrowserZoom(id,direction) {
+  const tab=webChatTabs.find(tab => tab.id === id);
+  if (!tab) return;
+  const current=tab.zoom || 100;
+  const percent=direction === 'reset' ? 100 : direction === 'in' ? BROWSER_ZOOM_STEPS.find(step => step > current) || 200 : [...BROWSER_ZOOM_STEPS].reverse().find(step => step < current) || 25;
+  await window.atelierDesktop.zoomBrowser(id,percent);
+  tab.zoom=percent;
+  if (id === activeWebChatId && $('#browser-zoom-label')) $('#browser-zoom-label').textContent=percent+' %';
+}
+
+document.addEventListener('submit',event => {
+  const form=event.target.closest('[data-form="browser-rename"]');
+  if (!form) return;
+  event.preventDefault();
+  const tab=webChatTabs.find(tab => tab.id === form.dataset.id);
+  const title=new FormData(form).get('chatName').trim().slice(0,80);
+  if (!title) return toast('Saisis un nom pour ce chat.',true);
+  if (tab) tab.title=title;
+  $('#modal').close();render();
 });

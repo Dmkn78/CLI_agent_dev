@@ -1,5 +1,6 @@
 "use strict";
 let selectedChannelId = null;
+const channelActivityOpen = new Set();
 const channelRoleLabels = {agent: 'Agent', consultant: 'Consultant', orchestrator: 'Orchestrateur', duplica: 'Duplica'};
 const channelStatusLabels = {draft: 'À composer', running: 'En discussion', stopped: 'Arrêté', interrupted: 'Reprise requise', failed: 'Erreur', ready_for_review: 'Plan à relire', needs_more_discussion:'Discussion à poursuivre', execution_started:'Travail lancé'};
 const discussionData = () => state.discussions || {channels:[],participants:[],messages:[],rounds:[]};
@@ -9,7 +10,7 @@ function channelsView() {
   const channels = projectChannels();
   const channel = channels.find(entry => entry.id === selectedChannelId) || channels[0];
   selectedChannelId = channel?.id || null;
-  return `${agentModeNavigation()}<div class="workspace-toolbar"><h1>Canaux</h1><span class="workspace-toolbar-spacer"></span>${channel ? sessionUsageChip(conversationUsage(discussionData().messages.filter(message => message.channelId === channel.id)),{},{label:'Consommation du canal'}) : ''}${newPanelButton()}</div>
+  return `${agentModeNavigation()}<div class="workspace-toolbar"><h1>Canaux</h1><span class="workspace-toolbar-spacer"></span>${channel ? sessionUsageChip(channel.usage ? {usage:channel.usage,partialUsage:channel.usage.partialFields?.includes('totalTokens')} : conversationUsage(discussionData().messages.filter(message => message.channelId === channel.id)),{},{label:'Consommation du canal',notice:'Tokens communiqués par les appels fournisseurs, y compris les appels interrompus lorsque mesurés.'}) : ''}${newPanelButton()}</div>
     <div class="channels-layout"><aside class="channel-list" aria-label="Canaux du projet">${channels.length ? channels.map(entry => `<button data-action="channel-select" data-id="${esc(entry.id)}" class="channel-list-item ${entry.id === channel?.id ? 'selected' : ''}"><span class="channel-hash">#</span><span><strong>${esc(entry.name)}</strong><small>${esc(channelStatusLabels[entry.status] || entry.status)}</small></span></button>`).join('') : '<p class="muted small">Vos canaux seront conservés dans ce projet.</p>'}</aside>
     ${channel ? channelContent(channel) : `<section class="channel-empty work-band">${icon('network')}<h2>Composer une discussion</h2><p>Invitez des agents, un consultant, un orchestrateur ou Duplica. Chaque participant prépare sa réponse, puis les réponses sont partagées au tour suivant.</p>${btn('channel-new','Créer mon premier canal','plus','primary')}<small>Historique public conservé · contexte privé séparé · arrêt à tout moment</small></section>`}</div>`;
 }
@@ -26,20 +27,30 @@ function channelContent(channel) {
   const currentRound = rounds.findLast(round => round.status === 'running');
   return `<section class="channel-room"><header class="channel-header"><div><span class="channel-name"># ${esc(channel.name)}</span><h2>${esc(channel.topic)}</h2><p class="muted small">${esc(channel.isStopping ? 'Arrêt en cours' : workflow ? 'Implémentation · '+(labels[workflow.status] || workflow.status) : channelStatusLabels[channel.status] || channel.status)} · ${channel.roundMode === 'auto' ? 'Les participants décident quand conclure' : channel.maxRounds+' tours maximum + synthèse'}${channel.execution ? ' · Implémentation automatique activée' : ''}${currentRound ? ` · ${currentRound.purpose === 'plan' ? 'Synthèse' : 'Tour ' + currentRound.number} en cours` : ''}</p></div><div class="row-actions">${btn('channel-options','','settings','icon-btn',`data-id="${esc(channel.id)}" aria-label="Options du canal" title="Options du canal" ${blocked ? 'disabled' : ''}`)}${btn(running ? 'channel-stop' : 'channel-start',channel.isStopping ? 'Arrêt en cours' : running ? 'Arrêter' : rounds.length ? 'Reprendre la discussion' : 'Lancer la discussion',running ? 'pause' : 'play',running ? 'secondary' : 'primary',`data-id="${esc(channel.id)}" ${channel.isStopping || (!participants.length && !running) ? 'disabled' : ''}`)}</div></header>
     ${workflow ? `<section class="channel-execution"><strong>Discussion → Implémentation → Vérification → Audit</strong><div>${workflow.steps.map(step=>`<span>${esc(step.role)} ${badge(step.status)}</span>`).join('')}</div>${workflow.error ? `<p class="inline-error">${esc(workflow.error)}</p>` : ''}${btn('channel-open-workflow','Voir le travail et les preuves','arrow','quiet',`data-id="${esc(workflow.id)}"`)}<small>La tâche reste En revue après le travail. Les permissions du projet et les demandes d’approbation s’appliquent.</small></section>` : ''}
+    ${channel.cancellationError ? `<p class="inline-error" role="alert">Arrêt du fournisseur : ${esc(channel.cancellationError)}</p>` : ''}
     ${channel.error ? `<p class="inline-error" role="alert">${esc(channel.error)}</p>` : ''}
     <div class="channel-room-layout"><div class="channel-thread"><div class="channel-transcript" data-scroll="channel-${esc(channel.id)}" role="log" aria-label="Réponses publiques du canal">
       <div class="channel-public-note">${icon('shield')} Seules les réponses publiques circulent. Chaque tour démarre avec le même historique pour tous.</div>
       ${messages.length ? messages.map(message => channelMessage(message,participants,rounds)).join('') : '<div class="channel-first-message"><p>Posez le problème, puis invitez vos participants.</p><small>La discussion prépare un plan ; elle ne déclenche pas le travail.</small></div>'}
+      ${!participants.length ? '<p class="channel-waiting" role="status">'+(messages.length ? 'Message enregistré. ' : '')+'Invitez des participants pour lancer la discussion.</p>' : ''}
       ${channel.status === 'running' ? '<p class="channel-waiting" role="status">Les participants préparent leurs contributions… Elles apparaîtront à la fin du tour.</p>' : ''}</div>
-      <form data-form="channel-message" data-id="${esc(channel.id)}" class="channel-compose"><label for="channel-message-${esc(channel.id)}">Votre message au canal</label><textarea id="channel-message-${esc(channel.id)}" name="text" rows="3" maxlength="16000" required placeholder="Résultat souhaité, contraintes, questions…" ${blocked ? 'disabled' : ''}></textarea><div><span class="muted small">${channel.isStopping ? 'Attente de la fin de l’appel fournisseur en cours.' : running ? 'Arrêtez la discussion pour ajouter une précision.' : 'Ce message sera lu par les participants au prochain lancement.'}</span><button type="submit" class="button secondary" ${blocked ? 'disabled' : ''}>Envoyer au canal ${icon('arrow')}</button></div></form>
+      <form data-form="channel-message" data-id="${esc(channel.id)}" class="channel-compose"><label for="channel-message-${esc(channel.id)}">Votre message au canal</label><textarea id="channel-message-${esc(channel.id)}" name="text" rows="3" maxlength="16000" required placeholder="Résultat souhaité, contraintes, questions…" ${blocked ? 'disabled' : ''}></textarea><div><span class="muted small">${channel.isStopping ? 'Attente de la fin de l’appel fournisseur en cours.' : running ? 'Arrêtez la discussion pour ajouter une précision.' : participants.length ? 'Envoyer démarre la discussion avec les participants choisis.' : 'Invitez ensuite vos participants pour leur transmettre ce message.'}</span><button type="submit" class="button secondary" ${blocked ? 'disabled' : ''}>${participants.length ? 'Envoyer et lancer' : 'Enregistrer le message'} ${icon('arrow')}</button></div></form>
       ${channel.plan ? `<section class="channel-plan work-band"><div class="panel-heading"><h3>${icon('check')} Plan proposé</h3><span class="micro-pill">${channel.status === 'ready_for_review' ? 'À RELIRE' : 'DISCUSSION PRÉCÉDENTE'}</span></div><pre>${esc(channel.plan)}</pre>${channel.status === 'ready_for_review' ? `<div class="row-actions">${btn('channel-prepare-task',channel.preparedTaskId ? 'Voir la tâche en revue' : 'Préparer une tâche en revue','tasks','primary',`data-id="${esc(channel.id)}"`)}${btn('channel-duplica-plan','Discuter du plan avec Duplica','spark','secondary',`data-id="${esc(channel.id)}"`)}</div><p class="muted small">La tâche reste En revue. Vous choisissez ensuite sa mise au travail.</p>` : ''}</section>` : ''}</div>
       <aside class="channel-participants"><div class="panel-heading"><h3>Participants <small>${participants.length} / 8</small></h3>${btn('channel-invite','Inviter','plus','quiet',`data-id="${esc(channel.id)}" ${blocked || participants.length >= 8 ? 'disabled' : ''}`)}</div>
-        ${participants.map(participant => `<article class="channel-participant"><div class="channel-participant-icon role-${esc(participant.role)}">${icon(participant.role === 'duplica' ? 'spark' : participant.role === 'consultant' ? 'shield' : 'agents')}</div><div><strong>${esc(participant.name)}</strong><span>${esc(channelRoleLabels[participant.role])}</span><small>${esc(participant.configuration.model)}</small><small>${esc(channelProviderName(participant.configuration))}${participant.sourceSessionId ? ' · configuration copiée' : ''}</small></div>${btn('channel-remove-participant','Retirer','close','quiet',`data-id="${esc(channel.id)}" data-participant-id="${esc(participant.id)}" ${blocked ? 'disabled' : ''}`)}</article>`).join('') || '<p class="muted small">Choisissez un modèle par participant. Vous pouvez copier la configuration d’un agent déjà au travail.</p>'}
+        ${participants.map(participant => `<article class="channel-participant"><div class="channel-participant-icon role-${esc(participant.role)}">${icon(participant.role === 'duplica' ? 'spark' : participant.role === 'consultant' ? 'shield' : 'agents')}</div><div><strong>${esc(participant.name)}</strong><span>${esc(channelRoleLabels[participant.role])}</span><small>${esc(participant.configuration.model)} · ${esc(participant.configuration.effort)}</small><small>${esc(channelProviderName(participant.configuration))}${participant.sourceSessionId ? ' · configuration copiée' : ''}</small>${channelParticipantActivity(participant, messages)}</div>${btn('channel-remove-participant','Retirer','close','quiet',`data-id="${esc(channel.id)}" data-participant-id="${esc(participant.id)}" ${blocked ? 'disabled' : ''}`)}</article>`).join('') || '<p class="muted small">Choisissez un modèle par participant. Vous pouvez copier la configuration d’un agent déjà au travail.</p>'}
         <div class="channel-workflow-note"><strong>Votre workflow</strong><p>Propositions indépendantes → avis des consultants → discussion → plan par l’orchestrateur ou Duplica → votre relecture.</p><small>Les consultants SystemOne évaluent des choix et des risques. Un agent LLM rédige la synthèse.</small></div></aside></div></section>`;
 }
 
 function channelProviderName(configuration) {
   return configuration.runtime === 'api' ? (state.apiConnections || []).find(connection => connection.id === configuration.connectionId)?.name || 'API retirée' : configuration.runtime === 'omp' ? 'Oh My Pi' : 'Codex';
+}
+
+function channelParticipantActivity(participant, messages) {
+  const activity=participant.activity || {};
+  const statuses={connecting:'Connexion au fournisseur…',responding:'Message transmis · réponse en cours',completed:'Contribution reçue',failed:'Échec du fournisseur',stopped:'Interrompu',interrupted:'Interrompu'};
+  const status=statuses[activity.status] || 'Prêt au prochain lancement';
+  const replies=messages.filter(message=>message.participantId === participant.id);
+  return `<details class="channel-activity" data-channel-activity="${esc(participant.id)}" ${channelActivityOpen.has(participant.id) ? 'open' : ''}><summary>${esc(status)}</summary><p>${activity.roundNumber ? esc((activity.purpose === 'plan' ? 'Synthèse' : 'Tour '+activity.roundNumber)+' · ') : ''}${esc(status)}</p>${activity.sessionId ? `<small>Session native : ${esc(activity.sessionId)}</small>` : activity.requestId ? `<small>Appel API : ${esc(activity.requestId)}</small>` : ''}${activity.updatedAt ? `<small>Dernier état : ${esc(new Date(activity.updatedAt).toLocaleTimeString('fr-FR'))}</small>` : ''}${activity.error || activity.transportError ? `<p class="inline-error">${esc(activity.error || activity.transportError)}${activity.retrying ? ' · nouvelle tentative du fournisseur' : ''}</p>` : ''}<small>Activité observable et réponses publiques du participant. Le raisonnement privé n’est pas transmis.</small>${replies.length ? replies.map(message=>`<p class="channel-activity-reply">${esc(message.text)}</p>`).join('') : '<p>Aucune contribution publique reçue pour le moment.</p>'}</details>`;
 }
 
 function channelMessage(message,participants,rounds) {
@@ -64,7 +75,7 @@ function channelInviteModal(channelId) {
   const candidates = objects('sessions').filter(session => session.consumer !== 'channel' && ['codex','omp','api'].includes(session.runtime || 'codex'));
   modal('Inviter un participant','Une configuration propre, avec uniquement les échanges publics du canal.',`<form data-form="channel-participant" data-id="${esc(channelId)}"><div class="modal-body">
     ${select('Configuration du participant','origin',[['new','Choisir un modèle'],['clone','Copier celle d’un agent existant']],'new')}
-    <div class="form-grid">${field('Nom du participant','name','Spécialiste','text','required maxlength="100"')}${select('Rôle dans le canal','role',Object.entries(channelRoleLabels),'agent')}</div>
+    <div class="form-grid">${field('Nom du participant','name','Participant '+(discussionData().participants.filter(entry=>entry.channelId === channelId).length+1),'text','required maxlength="100"')}${select('Rôle dans le canal','role',Object.entries(channelRoleLabels),'agent')}</div>
     <div id="channel-new-configuration">${select('Fournisseur du participant','channelProvider',configurations,'codex')}<div class="form-grid" id="channel-model-fields"></div></div>
     <div id="channel-clone-configuration" hidden>${select('Agent à copier','sessionId',candidates.map(session=>[session.id,session.name+' · '+session.model]),candidates[0]?.id)}<p class="muted small">Seuls le fournisseur et les réglages du modèle sont copiés. L’agent au travail poursuit sa mission ; son contexte reste séparé.</p></div>
     <p class="muted small">Chaque participant est en mode discussion. Ajoutez un orchestrateur ou Duplica pour rédiger le plan.</p>
@@ -83,6 +94,8 @@ function updateChannelModels(form) {
   const first = models.find(model=>model.isDefault) || models[0];
   $('#channel-model-fields').innerHTML = select('Modèle du participant','channelModel',models.map(model=>[model.model,model.displayName]),first?.model) + select('Effort du participant','channelEffort',[],null);
   updateChannelEfforts(form);
+  form.querySelector('button[type="submit"]').disabled = !models.length;
+  if (!models.length) $('#channel-model-fields').insertAdjacentHTML('beforeend','<p class="inline-error" role="status">Aucun modèle découvert. Vérifiez les connexions puis rouvrez cette invitation.</p>');
   for (const option of form.elements.role.options) option.disabled = selectedProvider.protocol === 'systemone' && option.value !== 'consultant';
   if (selectedProvider.protocol === 'systemone') form.elements.role.value = 'consultant';
 }
@@ -105,11 +118,17 @@ async function handleChannelSubmit(form,values) {
       {configuration:{runtime:values.channelProvider,model:values.channelModel,effort:values.channelEffort}};
     await api('channels/participants',{id:form.dataset.id,name:values.name,role:values.role,...configuration});
     $('#modal').close();
+    toast('Participant ajouté au canal.');
   } else {
     await api('channels/messages',{id:form.dataset.id,text:values.text});
     form.reset();
     const draft = document.getElementById('channel-message-'+form.dataset.id);
     if (draft) draft.value = '';
+    toast('Message reçu et enregistré.');
+    if (discussionData().participants.some(participant=>participant.channelId === form.dataset.id)) {
+      try { await api('channels/start',{id:form.dataset.id}); toast('Discussion lancée : connexion aux participants…'); }
+      catch(error) { await refresh(true); throw new Error('Message enregistré. La discussion n’a pas démarré : '+error.message); }
+    }
   }
   await refresh(true);
 }
@@ -121,12 +140,18 @@ function installChannelActions() {
     'channel-open-workflow':element=>{graphWorkflowId=element.dataset.id;selectedGraphNode=null;route('overview');},
     'channel-select': element => { selectedChannelId=element.dataset.id; render(); },
     'channel-invite': element => channelInviteModal(element.dataset.id),
-    'channel-start': async element => { await api('channels/start',{id:element.dataset.id}); await refresh(true); },
-    'channel-stop': async element => { await api('channels/stop',{id:element.dataset.id}); await refresh(true); },
+    'channel-start': async element => { await api('channels/start',{id:element.dataset.id}); toast('Discussion lancée : connexion aux participants…'); await refresh(true); },
+    'channel-stop': async element => { await api('channels/stop',{id:element.dataset.id}); toast('Arrêt demandé. Les réponses tardives ne seront pas publiées.'); await refresh(true); },
     'channel-remove-participant': async element => { await api('channels/remove-participant',{id:element.dataset.id,participantId:element.dataset.participantId}); await refresh(true); },
     'channel-prepare-task': async element => { const task=await api('channels/prepare-task',{id:element.dataset.id}); await refresh(true); route('tasks'); taskModal(task.id || task.taskId); },
     'channel-duplica-plan': async element => { const channel=discussionData().channels.find(entry=>entry.id === element.dataset.id); route('duplica'); const draft=$('[data-form="duplica-chat"] textarea[name="text"]'); if (draft) { draft.value='Aidons-moi à relire ce plan avant action. Signale les questions à trancher.\n\nSujet : '+channel.topic+'\n\n'+channel.plan; draft.focus(); } },
   });
+  document.addEventListener('toggle', event => {
+    const identifier=event.target.dataset?.channelActivity;
+    if (identifier && event.target.isConnected) {
+      if (event.target.open) channelActivityOpen.add(identifier); else channelActivityOpen.delete(identifier);
+    }
+  }, true);
   document.addEventListener('change', event => {
     const options=event.target.closest('[data-form="channel-create"]');
     if(options) {
@@ -139,7 +164,10 @@ function installChannelActions() {
     if (event.target.name === 'origin') {
       $('#channel-new-configuration').hidden=event.target.value === 'clone';
       $('#channel-clone-configuration').hidden=event.target.value !== 'clone';
-      if (event.target.value === 'clone') for (const option of form.elements.role.options) option.disabled=false;
+      if (event.target.value === 'clone') {
+        for (const option of form.elements.role.options) option.disabled=false;
+        form.querySelector('button[type="submit"]').disabled = !form.elements.sessionId.value;
+      }
       else updateChannelModels(form);
     } else if (event.target.name === 'channelProvider') updateChannelModels(form);
     else if (event.target.name === 'channelModel') updateChannelEfforts(form);

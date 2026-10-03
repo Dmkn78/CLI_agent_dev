@@ -49,13 +49,16 @@ async function main() {
       contents.sendInputEvent({type:'keyDown',keyCode:'-',modifiers:['control']});
       contents.sendInputEvent({type:'keyUp',keyCode:'-',modifiers:['control']});
     },browserContents);
-    await page.waitForFunction(() => appZoom === 90);
+    await page.waitForFunction(() => webChatTabs.find(tab => tab.id === activeWebChatId)?.zoom === 90);
+    assert.equal(await page.evaluate(() => appZoom),100);
+    await waitForZoomFactor(readShellZoom,1);
     await waitForZoomFactor(readBrowserZoom,0.9);
     await application.evaluate((_electron,contents) => {
       contents.sendInputEvent({type:'keyDown',keyCode:'0',modifiers:['control']});
       contents.sendInputEvent({type:'keyUp',keyCode:'0',modifiers:['control']});
     },browserContents);
-    await page.waitForFunction(() => appZoom === 100);
+    await page.waitForFunction(() => webChatTabs.find(tab => tab.id === activeWebChatId)?.zoom === 100);
+    assert.equal(await page.evaluate(() => appZoom),100);
     await waitForZoomFactor(readBrowserZoom,1);
     await page.locator('[data-action="browser-close"]').click();
     await browserContents.dispose();

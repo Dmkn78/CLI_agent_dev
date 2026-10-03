@@ -42,7 +42,44 @@ def prepare_codex(cwd, settings, models):
     command = [executable, '--model', model['model'], '--sandbox', sandbox, '--ask-for-approval', 'on-request',
                '-c', 'model_reasoning_effort=' + json.dumps(settings['effort']), '-c', 'features.multi_agent=false',
                '-c', 'developer_instructions=' + json.dumps(instructions, ensure_ascii=False)]
+    for image in codex_images(settings.get('images', []), cwd):
+        command += ['--image', image]
     return terminal_plan(cwd, command, sandbox, 'codex')
+
+
+def codex_images(images, cwd):
+    """Validate user-selected files and preserve each path as a literal CLI argument."""
+    if not isinstance(images, list) or len(images) > 12:
+        raise ValueError('Choisis au maximum 12 images.')
+    selected = []
+    total = 0
+    for value in images:
+        if not isinstance(value, str) or not value or len(value) > 4096:
+            raise ValueError('Chemin image invalide.')
+        file = Path(value).expanduser()
+        if not file.is_absolute():
+            file = Path(cwd) / file
+        try:
+            file = file.resolve(strict=True)
+            if not file.is_file():
+                raise ValueError('Choisis un fichier image.')
+            size = file.stat().st_size
+            total += size
+            if not 0 < size <= 8 * 1024 * 1024 or total > 32 * 1024 * 1024:
+                raise ValueError('Images trop volumineuses (8 Mo par fichier, 32 Mo au total).')
+            with file.open('rb') as stream:
+                header = stream.read(16)
+            extension = file.suffix.lower()
+            valid = (extension == '.png' and header.startswith(b'\x89PNG\r\n\x1a\n')
+                     or extension in ('.jpg', '.jpeg') and header.startswith(b'\xff\xd8\xff')
+                     or extension == '.webp' and header.startswith(b'RIFF') and header[8:12] == b'WEBP')
+            if not valid:
+                raise ValueError('Choisis une image PNG, JPEG ou WebP valide.')
+        except OSError as error:
+            raise ValueError('Image inaccessible : ' + str(file)) from error
+        if str(file) not in selected:
+            selected.append(str(file))
+    return selected
 
 
 def prepare_claude(cwd, settings):

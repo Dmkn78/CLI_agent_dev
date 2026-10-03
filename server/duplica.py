@@ -14,6 +14,7 @@ from .duplica_telegram import TelegramRelay
 from .duplica_discussion import DuplicaDiscussion
 from .prompt_format import duplica_prompt, json_markdown
 from .store import now, redact, uid
+from .architecture_proposal import is_architecture
 
 
 class Duplica:
@@ -32,6 +33,7 @@ class Duplica:
         self.last_watchdog = {}
         self.native_agents = {}
         self.manual_checks = set()
+        self.plan_attempts = set()
         self.telegram = TelegramRelay(self)
         self.discussion = DuplicaDiscussion(self)
         existing = self.store.all('duplicaSettings')
@@ -52,7 +54,9 @@ class Duplica:
         self.telegram.start()
 
     def settings(self) -> dict:
-        return self.store.get('duplicaSettings', 'global')
+        settings = self.store.get('duplicaSettings', 'global')
+        settings['permissions'] = {**DEFAULT_PERMISSIONS, **settings.get('permissions', {})}
+        return settings
 
     def event(self, name: str, facts: dict = None, session: dict = None) -> dict:
         event = self.store.event('duplica.' + name, {'actor': 'duplica', **(facts or {})},
@@ -252,7 +256,15 @@ class Duplica:
                 raise ValueError('Cette demande est déjà résolue ou périmée.')
             session = self.store.get('session', request['sessionId'])
             detail = request['detail']
-            if detail.get('approvalId'):
+            if detail.get('planSessionId'):
+                if accepted and self.settings()['permissions'].get(detail.get('planCategory')) == 'deny':
+                    raise ValueError('La validation de ce plan par Duplica est interdite dans Permissions.')
+                if session.get('currentRequestId') != detail.get('planRequestId'):
+                    raise ValueError('La proposition a changé ; inspecte la nouvelle demande.')
+                if not self.supervised(session):
+                    raise ValueError('La supervision de cette session doit être active pour cette décision Duplica.')
+                self.app.approve_plan(session['id'], accepted, actor='user')
+            elif detail.get('approvalId'):
                 approval = self.store.get('approval', detail['approvalId'])
                 if approval['method'] == 'item/tool/requestUserInput':
                     questions = approval['params'].get('questions', [])
@@ -316,13 +328,115 @@ class Duplica:
                     self._approval(backend, session, approval)
             session = backend.observe()
             if session['status'] == 'waiting_plan':
-                self.request('plan:' + session['id'] + ':' + str(session.get('currentRequestId')), 'Plan à valider', session,
-                             {'reason': 'La validation du plan reste explicite dans la session.'})
+                self._plan(session)
+                session = backend.observe()
             if session['status'] == 'ready' and session.get('lastTurnStatus') == 'completed':
                 mission = next((mission for mission in self.store.all('duplicaMission') if mission['sessionId'] == session['id']), None)
                 if mission and mission.get('autoVerify') and mission['status'] not in ('completed', 'interrupted') and mission.get('lastVerifiedRequest') != session.get('currentRequestId'):
                     self.verify_mission(mission['id'])
         self._expire_requests()
+
+    def _plan(self, session):
+        """Use the configured delegation, keeping the session's sandbox unchanged."""
+        category = 'approve_architecture' if is_architecture(session) else 'approve_plan'
+        mode = self.settings()['permissions'][category]
+        key = 'plan:' + session['id'] + ':' + str(session.get('currentRequestId'))
+        if mode == 'auto':
+            try:
+                with self.lock:
+                    current = self.store.get('session', session['id'])
+                    if (not self.supervised(current) or current['status'] != 'waiting_plan' or
+                            current.get('currentRequestId') != session.get('currentRequestId') or
+                            self.settings()['permissions'][category] != 'auto'):
+                        return
+                    generation = self.generation
+                    interaction = self.settings()['interactionMode']
+                    use_computer = interaction == 'computer' or interaction == 'auto' and self.bridge.available()
+                    if use_computer:
+                        if key in self.plan_attempts:
+                            return
+                    else:
+                        self.app.approve_plan(session['id'], True, actor='duplica', request_id=session.get('currentRequestId'))
+                if use_computer:
+                    self.request(key, 'Proposition déléguée à Duplica', session,
+                                 {'reason': 'Validation déléguée dans l’interface.', 'planSessionId': session['id'],
+                                  'planRequestId': session.get('currentRequestId'), 'planCategory': category, 'mode': mode})
+                    self._gui_plan(session, generation)
+                    current = self.store.get('session', session['id'])
+                    if category == 'approve_architecture' and current.get('importedDesignId'):
+                        design = self.store.get('design', current['importedDesignId'])
+                        if design.get('sourceRequestId') == session.get('currentRequestId'):
+                            self.store.update('design', design['id'], validatedBy='duplica', validationChannel='computer')
+                self.event('plan_resolved', {'category': category, 'source': 'permissions:' + category,
+                                           'requestId': session.get('currentRequestId'),
+                                           'channel': 'computer' if use_computer else 'backend'}, session)
+                return
+            except ValueError as error:
+                reason = str(error)
+        else:
+            label = 'Importer une proposition d’architecture' if category == 'approve_architecture' else 'Valider un plan'
+            reason = ('Duplica attend votre validation. Déléguez « ' + label + ' » dans Permissions pour les prochaines propositions.'
+                      if mode == 'ask' else 'La validation de ce plan par Duplica est interdite dans Permissions.')
+        request = self.request(key, 'Dessin à importer' if category == 'approve_architecture' else 'Plan à valider', session,
+                     {'reason': reason, 'planSessionId': session['id'], 'planRequestId': session.get('currentRequestId'),
+                      'planCategory': category, 'mode': mode})
+        # Update an already-created GUI request with the observed failure, without retrying its action.
+        if request['detail'].get('reason') != reason:
+            self.store.update('duplicaRequest', request['id'], detail={**request['detail'], 'reason': reason})
+
+    def _gui_plan(self, session, generation):
+        permissions = self.settings()['permissions']
+        if permissions['computer_control'] != 'auto' or permissions['keyboard_mouse'] != 'auto':
+            raise ValueError('Activer les permissions de contrôle du PC pour valider cette proposition dans l’interface.')
+        observation = self.computer.observe('platform')
+        deadline = time.monotonic() + 8
+        navigated = False
+        retried = False
+        while time.monotonic() < deadline:
+            with self.lock:
+                current = self.store.get('session', session['id'])
+                if generation != self.generation or not self.supervised(current):
+                    raise ValueError('Contrôle repris ; proposition non validée par Duplica.')
+                if current['status'] != 'waiting_plan' or current.get('currentRequestId') != session.get('currentRequestId'):
+                    raise ValueError('La proposition a changé ; inspecte son état actuel.')
+            controls = observation.get('controls', [])
+            targets = [control for control in controls if control.get('enabled') and control.get('action') == 'approve-plan' and
+                       control.get('objectId') == session['id'] and control.get('planRequestId') == session.get('currentRequestId')]
+            if len(targets) == 1:
+                target = targets[0]
+                if not target.get('visible', True):
+                    observation = self.computer.act(observation['id'], {'kind': 'scroll_to', 'index': target['index']})
+                    continue
+                try:
+                    # Consume the validation attempt only when a click is about to be sent.
+                    self.plan_attempts.add('plan:' + session['id'] + ':' + str(session.get('currentRequestId')))
+                    self.computer.act(observation['id'], {'kind': 'click', 'index': target['index']})
+                except ObservationChanged:
+                    if retried:
+                        raise
+                    retried = True
+                    observation = self.computer.observe('platform')
+                    continue
+                # The click can dispatch asynchronously; observe its result without clicking again.
+                while time.monotonic() < deadline and generation == self.generation:
+                    current = self.store.get('session', session['id'])
+                    if current['status'] != 'waiting_plan':
+                        return
+                    self.closed.wait(0.1)
+                raise ValueError('Résultat du clic non confirmé ; inspecte la session. Aucun second clic automatique.')
+            if not navigated:
+                open_agent = [control for control in controls if control.get('action') == 'open-agent' and control.get('objectId') == session['id'] and control.get('enabled')]
+                navigation = open_agent if len(open_agent) == 1 else [control for control in controls if control.get('action') == 'duplica-open' and control.get('enabled')]
+                if len(navigation) == 1:
+                    control = navigation[0]
+                    if not control.get('visible', True):
+                        observation = self.computer.act(observation['id'], {'kind': 'scroll_to', 'index': control['index']})
+                    else:
+                        observation = self.computer.act(observation['id'], {'kind': 'click', 'index': control['index']})
+                        navigated = bool(open_agent)
+            self.closed.wait(0.2)
+            observation = self.computer.observe('platform')
+        raise ValueError('Le bouton de validation de cette proposition n’est pas accessible ; ouvre la session.')
 
     def _approval(self, backend, session: dict, approval: dict) -> None:
         with self.lock:
@@ -573,6 +687,10 @@ class Duplica:
         for request in self.store.all('duplicaRequest'):
             if request['status'] == 'pending' and request['detail'].get('approvalId') and request['detail']['approvalId'] not in pending_ids:
                 self.store.update('duplicaRequest', request['id'], status='expired', resolvedAt=now())
+            elif request['status'] == 'pending' and request['key'].startswith('plan:'):
+                session = self.store.get('session', request['sessionId'])
+                if session['status'] != 'waiting_plan' or session.get('currentRequestId') != request['detail'].get('planRequestId'):
+                    self.store.update('duplicaRequest', request['id'], status='expired', resolvedAt=now())
 
     def native_terminal(self, details: dict) -> dict:
         terminal_id = str(details.get('id', ''))

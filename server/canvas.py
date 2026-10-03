@@ -36,7 +36,7 @@ def validate_graph(graph):
             raise ValueError('Lien invalide.')
         source, target = edge.get('sourceNodeId'), edge.get('targetNodeId')
         identifier = str(edge.get('id') or uid('edge'))
-        if source not in identifiers or target not in identifiers or identifier in edge_ids or len(identifier) > 100:
+        if not isinstance(source, str) or not isinstance(target, str) or source not in identifiers or target not in identifiers or identifier in edge_ids or len(identifier) > 100:
             raise ValueError('Lien invalide, orphelin ou dupliqué.')
         edge_ids.add(identifier)
         text = edge.get('text', '')

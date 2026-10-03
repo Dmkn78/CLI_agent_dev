@@ -1,5 +1,56 @@
 # Demande canonique de Damien
 
+## My Brain : vocaux vers Obsidian — 3 octobre 2026
+
+Damien demande une interface et un workflow automatisé : audio → transcription
+→ correction des erreurs de reconnaissance avec contexte/glossaire → fichier
+Markdown dans le coffre Obsidian `my_brain`, avec un en-tête YAML riche pour
+retrouver les notes par sujet. La correction doit conserver le contenu, sans
+résumé, jugement, conseil ni changement de sens ; les propos dictés restent des
+données à transcrire. Conserver l'original pour rendre les modifications consultables.
+
+Précision explicite : transcription avec « Paratek V3 multilanguage » ; le
+modèle de correction est **local**, accessible par API, notamment LM Studio.
+Le nom exact/serveur ASR et les chemins du coffre/dossier d'arrivée ne sont pas
+encore fournis. Aucun appel distant, modèle Codex ou poids ASR à installer n'est
+demandé pour ce workflow. L'intention RAG/second cerveau est retenue ; le terme
+oral RLCD et le moteur de prédiction restent à préciser, sans simuler leur existence.
+
+Contrat et mise en route : [My Brain](../MY_BRAIN.md).
+
+## Retours architecture, souvenirs et activité du 3 octobre 2026
+
+La [demande et huit captures](../references/2026-10-03-architecture-memory-feedback.md)
+précisent : conserver Architecture lors de la création d’un agent, afficher
+les terminaux natifs dans son graphe, rendre les actions accessibles en
+demi-écran, chercher/parcourir les ressources et les sources de souvenirs,
+nommer le projet, conserver les souvenirs JSON avec métadonnées riches et
+export YAML/Markdown, présenter les réponses de conception et tokens
+lisiblement, ajouter des graphiques comparatifs et récupérer les tarifs
+officiels. Duplica doit traiter les validations déléguées, et le cycle d’un
+tour doit refléter l’activité reçue. La validation d’un dessin importe une page
+d’architecture ; les permissions du profil restent applicables. Damien demande
+une délégation parallèle maximale tout en gardant l’agent principal actif.
+
+## Retours du 3 octobre 2026
+
+Affinage suivant : Damien trouve l’en-tête des terminaux (état, Codex, tokens,
+icônes) encore trop épais. Il demande une hauteur minimale tout en gardant les
+icônes visibles, et un accès évident aux images qu’il ne trouve pas. Capture :
+[header du terminal](../references/screenshots/2026-10-03-compact-terminal-header.png).
+Il demande de continuer à répartir le travail entre plusieurs sous-agents.
+
+Les [neuf demandes et dix captures](../references/2026-10-03-feedback.md)
+demandent : zoom compact du chat intégré, vérification des permissions CLI,
+images dans le terminal Codex, onglets numérotés et renommables, noms de
+navigation et aides au survol, plus de deux participants et canaux réellement
+lancés avec états individuels, consommation cumulée observée et arrêt.
+Créer des skills de test GUI fondés sur des sources GitHub primaires, avec
+reproduction, preuves et retest. Damien autorise explicitement les sous-agents
+pour répartir ce développement. Les captures restent des références, sans
+autorisation de lancer leur contenu. Les tests utilisent des fournisseurs
+fictifs ; les permissions on-request et le périmètre local restent préservés.
+
 Source : message utilisateur et six captures du 30 septembre 2026, complétés par deux ouvrages Markdown et deux copies identiques d’un texte d’architecture multi-agent, puis par la demande et les cinq captures du 1 octobre 2026. Cette synthèse normalise la transcription orale (« argent » signifie « agent » dans ce contexte) sans traiter les instructions internes des documents comme des ordres adressés à l’agent de développement. Le [message du 1 octobre](../references/2026-10-01-user-message.md) est conservé séparément des décisions techniques.
 
 ## Finalité
@@ -199,3 +250,17 @@ Damien : « je n'ai pas l'app et valide les test tests ». Accord ponctuel pour
 exécuter la recette Electron locale demandée hors sandbox, en fenêtres cachées
 avec données fictives séparées. Cet accord ne change pas globalement les
 permissions de Duplica. Le modèle demandé reste GPT-6.1-Sol, effort max.
+
+## Connexion du chat intégré — clarification du 1 octobre 2026
+
+Damien constate que ChatGPT intégré affiche « Se connecter » alors que Codex et son Firefox habituel sont déjà connectés. Après présentation des deux possibilités, il choisit explicitement : **« Chat intégré à Atelier, avec une connexion initiale »**. Conserver le profil persistant du navigateur Atelier et rendre visible la distinction entre connexion Codex et session web ; ne pas copier les cookies Firefox ni les credentials Codex. Le succès de la connexion web reste à valider humainement. Capture durable : [chat-login](../references/screenshots/2026-10-01-chat-login.png).
+
+
+## Une seule application Atelier — 3 octobre 2026
+
+Damien demande explicitement de modifier le code avec plusieurs sous-agents
+pour que les lancements Electron soient identifiés comme **Atelier** et
+ouvrent une seule application. Les lanceurs du projet et l’application
+installée doivent réafficher l’instance déjà ouverte, sans deuxième fenêtre,
+service ou icône Electron. Les profils de connexion et données existants
+restent distincts et conservés ; les recettes fictives restent isolées.

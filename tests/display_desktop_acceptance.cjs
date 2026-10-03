@@ -67,11 +67,12 @@ async function main() {
       view.webContents.sendInputEvent({type:'keyDown',keyCode:'-',modifiers:['control']});
       view.webContents.sendInputEvent({type:'keyUp',keyCode:'-',modifiers:['control']});
     });
-    await page.waitForFunction(() => appZoom === 75);
+    await page.waitForFunction(() => webChatTabs.find(tab => tab.id === activeWebChatId)?.zoom === 90);
+    assert.equal(await page.evaluate(() => appZoom),80);
     await page.evaluate(() => {duplicaPanel='telegram';route('duplica');});
     await page.getByRole('heading',{name:'Votre bot, à portée de main.'}).waitFor();
     console.log('Zoom shortcuts, persistence and embedded bounds passed.');
-    await capture('desktop-telegram-75.png');
+    await capture('desktop-telegram-80.png');
     await sendZoomKey('0');
     await page.waitForFunction(() => appZoom === 100);
     assert.equal(await page.evaluate(() => CSS.supports('appearance','base-select')),true);

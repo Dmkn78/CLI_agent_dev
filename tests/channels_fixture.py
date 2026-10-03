@@ -2,6 +2,7 @@
 import argparse
 import sys
 import threading
+import time
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
@@ -20,6 +21,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, default=4324)
     parser.add_argument('--api-port', type=int, default=4325)
+    parser.add_argument('--reply-delay', type=float, default=0)
     args = parser.parse_args()
     app = Application(ROOT, ROOT / '.atelier' / 'channels-browser-fixture' / uid('run'))
     models = [{'model': name, 'displayName': name, 'isDefault': index == 0,
@@ -28,6 +30,14 @@ def main():
               for index, name in enumerate(('fixture-code', 'fixture-review'))]
     app.provider.update(connected=True, installed=True, models=models, authType='fixture', plan='Fournisseur fictif')
     app.discover = lambda: app.provider
+    if args.reply_delay:
+        native_reply = app.channel_reply
+
+        def delayed_reply(*arguments):
+            time.sleep(min(max(args.reply_delay, 0), 5))
+            return native_reply(*arguments)
+
+        app.channel_reply = delayed_reply
     fake_api = ThreadingHTTPServer(('127.0.0.1', args.api_port), FixtureApi)
     fake_api.base = 'http://127.0.0.1:' + str(args.api_port)
     fake_api.requests, fake_api.response_override, fake_api.status_override = [], None, 200

@@ -83,6 +83,15 @@ class ReleaseTests(unittest.TestCase):
                     request = urllib.request.Request(base + '/api/state', headers={'X-Atelier-Token': token})
                     with urllib.request.urlopen(request, timeout=5) as response:
                         state = json.load(response)
+                    with self.assertRaises(urllib.error.HTTPError) as rejected:
+                        urllib.request.urlopen(base + '/api/desktop/service', timeout=5)
+                    self.assertEqual(rejected.exception.code, 403)
+                    request = urllib.request.Request(base + '/api/desktop/service',
+                                                     headers={'X-Atelier-Token': token})
+                    with urllib.request.urlopen(request, timeout=5) as response:
+                        identity = json.load(response)
+                    self.assertEqual(identity, {'workspace': str(workspace.resolve()),
+                                                'dataPath': str(storage.resolve())})
                     self.assertEqual(state['projects'][0]['path'], str(workspace.resolve()))
                     self.assertEqual(state['sessions'], [])
                     self.assertEqual(state['providers'][0]['status'], 'unchecked')

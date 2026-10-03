@@ -52,3 +52,18 @@ assert.match(context.sessionEquivalentCost(pricedSession),/4\.7500 USD/,'Observe
 context.state.tariffs.pop();
 assert.match(context.sessionEquivalentCost(pricedSession),/Coût non communiqué/,'A missing tariff is not silently omitted from the cost');
 console.log('Session counters passed: totals, cache, missing/zero, shared quota, HTML escaping, scoped API-equivalent costs.');
+const architecture={role:'agent',text:JSON.stringify({title:'Architecture claire',explanation:'Une proposition <script>bad</script>',graph:{nodes:[{id:'one',text:'Entrée'},{id:'two',text:'Sortie'}],edges:[{sourceNodeId:'one',targetNodeId:'two',text:'Transmission'}]}})};
+const proposal=context.sessionMessageContent(architecture);
+assert.match(proposal,/Architecture claire/);assert.match(proposal,/Entrée/);assert.match(proposal,/Transmission/);
+assert.match(proposal,/Consulter le JSON source/);assert.doesNotMatch(proposal,/<script>/);
+assert.equal(context.sessionMessageContent({role:'user',text:'{"explanation":"raw"}'}),'{"explanation":"raw"}');
+context.state.officialPricing={entries:[{provider:'openai',model:'exact-version',input:2,cache:.1,output:10,longInput:4,longCache:.2,longOutput:15,contextThreshold:272000}]};
+const official=context.requestTariff({provider:'codex',model:'exact-version'},'project');
+assert.equal(official.input,2);assert.equal(context.requestTariff({provider:'codex',model:'exact-version-new'},'project'),null);
+assert.equal(context.estimateCost({inputTokens:1000,cachedInputTokens:500,outputTokens:100},official),.00205);
+assert.equal(context.estimateCost({inputTokens:300000,cachedInputTokens:100000,outputTokens:1000},official),.835);
+assert.equal(context.estimateCost({inputTokens:-1,cachedInputTokens:0,outputTokens:1},official),null);
+assert.equal(context.estimateCost({inputTokens:100,cachedInputTokens:0,cacheWriteTokens:40,outputTokens:1},{provider:'anthropic',input:2,cache:.1,output:10,cacheWrite:2.5}),null,'Cache duration must be known');
+console.log('Readable JSON proposals, exact official model matching, long context pricing, unknown cache writes passed.');
+assert.doesNotThrow(()=>context.sessionMessageContent({role:'agent',text:JSON.stringify({explanation:'OK',graph:{nodes:[null,123,{id:'good',text:{value:'safe'}}],edges:[null,{text:'invalid'}]}})}));
+assert.equal(context.estimateCost({inputTokens:100,cachedInputTokens:0,outputTokens:1},{provider:'anthropic',input:2,cache:.1,output:10,cacheWrite:2.5}),null,'Unreported cache writes cannot be priced as zero');

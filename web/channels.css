@@ -54,6 +54,10 @@
 .channel-participant span { font-size:10px; color:var(--accent); display:block; margin-top:4px; }
 .channel-participant small { font-size:10px; color:var(--muted); display:block; margin-top:5px; overflow-wrap:anywhere; }
 .channel-participant>.button { font-size:0; padding:3px; }
+.channel-activity { margin-top:10px; font-size:11px; overflow-wrap:anywhere; }
+.channel-activity summary { cursor:pointer; color:var(--accent); line-height:1.6; }
+.channel-activity p { margin-top:8px; line-height:1.6; white-space:pre-wrap; }
+.channel-activity-reply { max-height:200px; overflow:auto; border-top:1px solid var(--border); padding-top:8px; }
 .channel-workflow-note { border-top:1px solid var(--border); padding-top:16px; margin-top:20px; color:var(--muted); font-size:11px; line-height:1.8; }
 .channel-workflow-note strong { color:var(--text); }
 .channel-workflow-note p { margin:10px 0; }

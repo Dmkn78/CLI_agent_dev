@@ -2,6 +2,32 @@ let sidebarCollapsed=localStorage.getItem('atelier-sidebar-hidden') !== 'no';
 let browserResourcesCollapsed=localStorage.getItem('atelier-resources-hidden') === 'yes';
 let chatFocused=false, popoverTimer=null, popoverPinned=false;
 let navigationPreview=null, navigationPreviewTimer=null, popoverAnchor=null;
+let navigationTooltipAnchor=null;
+
+function hideNavigationTooltip() {
+  const tooltip=$('#navigation-tooltip');
+  if (tooltip) tooltip.hidden=true;
+  navigationTooltipAnchor?.removeAttribute('aria-describedby');
+  navigationTooltipAnchor=null;
+  syncBrowserPanel();
+}
+
+function showNavigationTooltip(anchor) {
+  const tooltip=$('#navigation-tooltip');
+  if (!tooltip) return;
+  hideNavigationTooltip();
+  tooltip.textContent=anchor.getAttribute('aria-label') || anchor.title;
+  if (!tooltip.textContent) return;
+  tooltip.hidden=false;
+  navigationTooltipAnchor=anchor;
+  anchor.setAttribute('aria-describedby','navigation-tooltip');
+  const rect=anchor.getBoundingClientRect();
+  // CSS zoom changes fixed-position coordinates relative to screen coordinates.
+  const scale=window.atelierDesktop ? 1 : (Number(getComputedStyle(document.documentElement).zoom) || 1);
+  tooltip.style.left=Math.max(4,Math.min(innerWidth-tooltip.offsetWidth*scale-8,rect.right+8))/scale+'px';
+  tooltip.style.top=Math.max(4,Math.min(innerHeight-tooltip.offsetHeight*scale-8,rect.top))/scale+'px';
+  syncBrowserPanel();
+}
 
 function applyShellLayout() {
   document.body.classList.toggle('sidebar-collapsed',sidebarCollapsed);
@@ -40,15 +66,19 @@ function notificationPopoverContent() {
 }
 
 function costPopoverContent(id) {
+  if (typeof refreshOfficialPricing === 'function') refreshOfficialPricing();
   const session=state.sessions.find(item => item.id === id);
   const requests=state.requests.filter(item => item.sessionId === id);
   if (!session) return '<p class="popover-empty">Session indisponible.</p>';
-  const costs=requests.map(request => estimateCost(request.usage,(state.tariffs || []).find(t => t.projectId === session.projectId && t.model === request.model && t.provider === request.provider)));
+  const costs=requests.map(request => estimateCost(request.usage,requestTariff(request,session.projectId)));
   const total=costs.length && costs.every(cost => cost !== null) ? '$'+costs.reduce((sum,cost) => sum+cost,0).toFixed(4) : 'Non disponible';
-  return `<div class="popover-heading"><strong>${esc(session.name)}</strong>${btn('close-popover','','close','icon-btn','aria-label="Fermer l’estimation"')}</div><div class="popover-cost"><small>Équivalent API · pas une facture</small><strong>${total}</strong><dl><dt>Entrée</dt><dd>${compact(sumObserved(requests,'inputTokens'))}</dd><dt>Réponse</dt><dd>${compact(sumObserved(requests,'outputTokens'))}</dd><dt>Cache lu</dt><dd>${compact(sumObserved(requests,'cachedInputTokens'))}</dd></dl>${btn('session-cost','Tarifs & détail','settings','quiet',`data-id="${esc(id)}"`)}</div>`;
+  return `<div class="popover-heading"><strong>${esc(session.name)}</strong>${btn('close-popover','','close','icon-btn','aria-label="Fermer l’estimation"')}</div><div class="popover-cost"><small>Équivalent API · pas une facture</small><strong>${total}</strong><dl><dt>Entrée</dt><dd>${compact(session.usage?.total?.inputTokens)}</dd><dt>Réponse</dt><dd>${compact(session.usage?.total?.outputTokens)}</dd><dt>Cache lu</dt><dd>${compact(session.usage?.total?.cachedInputTokens)}</dd></dl>${btn('session-cost','Tarifs & détail','settings','quiet',`data-id="${esc(id)}"`)}</div>`;
 }
 
 function installShellActions() {
+  const tooltip=document.createElement('div');
+  tooltip.id='navigation-tooltip';tooltip.className='navigation-tooltip';tooltip.role='tooltip';tooltip.hidden=true;
+  document.body.append(tooltip);
   actions['toggle-sidebar']=() => { sidebarCollapsed=!sidebarCollapsed;navigationPreview=null; localStorage.setItem('atelier-sidebar-hidden',sidebarCollapsed ? 'yes' : 'no'); applyShellLayout(); };
   actions['navigation-preview']=element => {navigationPreview=navigationPreview === element.dataset.navPreview ? null : element.dataset.navPreview;applyShellLayout();};
   actions['toggle-resources']=() => { browserResourcesCollapsed=!browserResourcesCollapsed; localStorage.setItem('atelier-resources-hidden',browserResourcesCollapsed ? 'yes' : 'no'); applyShellLayout(); };
@@ -97,6 +127,7 @@ document.addEventListener('keydown',event => {
   const anchor=$('#work-popover').hidden ? [...openDetails].find(details => details.contains(document.activeElement))?.querySelector('summary') : popoverAnchor;
   for (const details of openDetails) details.open=false;
   closePopover();navigationPreview=null;
+  hideNavigationTooltip();
   if (anchor?.isConnected) anchor.focus({preventScroll:true});
   if (chatFocused) chatFocused=false;
   applyShellLayout();
@@ -104,20 +135,30 @@ document.addEventListener('keydown',event => {
 
 document.addEventListener('pointerover',event => {
   const anchor=event.target.closest('.navigation-rail [data-nav-preview]');
+  const tooltipAnchor=event.target.closest('.navigation-rail button,.navigation-pin');
+  if (tooltipAnchor && !tooltipAnchor.contains(event.relatedTarget)) showNavigationTooltip(tooltipAnchor);
   if (event.target.closest('.sidebar,.navigation-rail')) clearTimeout(navigationPreviewTimer);
   if (anchor && sidebarCollapsed && !anchor.contains(event.relatedTarget)) {navigationPreview=anchor.dataset.navPreview;applyShellLayout();}
 });
 document.addEventListener('pointerout',event => {
+  if (navigationTooltipAnchor?.contains(event.target) && !navigationTooltipAnchor.contains(event.relatedTarget)) hideNavigationTooltip();
   if (sidebarCollapsed && event.target.closest('.sidebar,.navigation-rail') && !event.relatedTarget?.closest('.sidebar,.navigation-rail')) navigationPreviewTimer=setTimeout(() => {navigationPreview=null;applyShellLayout();},200);
 });
 document.addEventListener('pointerdown',event => {
+  hideNavigationTooltip();
   if (!event.target.closest('.sidebar,.navigation-rail,[data-action="toggle-sidebar"]') && navigationPreview) {navigationPreview=null;applyShellLayout();}
   for (const details of document.querySelectorAll('.usage-chip[open],.action-menu[open]')) if (!details.contains(event.target)) details.open=false;
 });
 document.addEventListener('focusin',event => {
+  const tooltipAnchor=event.target.closest('.navigation-rail button,.navigation-pin');
+  if (tooltipAnchor) showNavigationTooltip(tooltipAnchor);
   const anchor=event.target.closest('.navigation-rail [data-nav-preview]');
   if (anchor && sidebarCollapsed) {navigationPreview=anchor.dataset.navPreview;applyShellLayout();}
 });
+document.addEventListener('focusout',event => {
+  if (navigationTooltipAnchor?.contains(event.target)) hideNavigationTooltip();
+});
+window.addEventListener('resize',hideNavigationTooltip);
 document.addEventListener('toggle',event => {
   if (!event.target.matches('.usage-chip')) {if (event.target.matches('.action-menu')) syncBrowserPanel();return;}
   const details=event.target.querySelector('.usage-details'), anchor=event.target.querySelector('summary').getBoundingClientRect();

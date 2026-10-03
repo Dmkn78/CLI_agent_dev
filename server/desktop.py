@@ -1,5 +1,6 @@
 """Explicit local desktop launches and native folder selection. No account copying."""
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -18,7 +19,15 @@ def open_desktop(root, port, mode):
         raise ValueError('Shell desktop non installé. Exécute npm ci et npm run vendor.')
     env = {**agent_environment(), 'ATELIER_URL': f'http://127.0.0.1:{port}/'}
     env.pop('ELECTRON_RUN_AS_NODE', None)
-    arguments = [str(executable), '--atelier-' + mode] if packaged else [str(executable), str(root / 'desktop/main.cjs'), '--atelier-' + mode]
+    if not packaged and sys.platform == 'darwin':
+        # Electron runs as a console-only Node bootstrap, then opens a branded
+        # Atelier.app. The bootstrap cannot create another Dock application.
+        node = env.get('ATELIER_NODE_EXECUTABLE') or shutil.which('node', path=env.get('PATH'))
+        if not node:
+            env['ELECTRON_RUN_AS_NODE'] = '1'
+        arguments = [node or str(executable), str(root / 'scripts/launch-desktop.cjs'), '--atelier-' + mode]
+    else:
+        arguments = [str(executable), '--atelier-' + mode] if packaged else [str(executable), str(root / 'desktop/main.cjs'), '--atelier-' + mode]
     process = subprocess.Popen(arguments,
                                cwd=str(root), env=env, creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
     return {'opened': True, 'pid': process.pid, 'mode': mode}

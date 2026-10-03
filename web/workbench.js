@@ -28,6 +28,10 @@ function durationLabel(milliseconds) {
   return `${Math.floor(seconds / 60)} min ${seconds % 60} s`;
 }
 
+function isArchitectureSession(session) {
+  return session.purpose === 'architecture' || (session.name?.startsWith('Conception · ') && /graph/.test(session.mission || '') && /nodes/.test(session.mission || '') && /edges/.test(session.mission || '') && /Ne modifie aucun fichier/.test(session.mission || ''));
+}
+
 function sessionObservability(session) {
   const duration = session.turnId && session.turnStartedAt ? Date.now() - Date.parse(session.turnStartedAt) : session.lastTurnDurationMs;
   return `<div class="session-observability"><span title="Processus local vivant, pas une preuve de travail réussi">${session.processAlive ? 'Moteur connecté' : 'Moteur arrêté'}${session.processId ? ' · PID '+session.processId : ''}</span><span title="Durée du tour, incluant attente réseau et permissions">${icon('clock')} <b data-turn-clock="${esc(session.id)}">${durationLabel(duration)}</b></span>${btn('session-cost','','usage','icon-btn',`data-id="${esc(session.id)}" title="Estimation de coût" aria-label="Estimation de coût"`)}</div>${sessionUsageSummary(session,provider(session.runtime || 'codex'))}`;
@@ -40,7 +44,10 @@ function mountWorkbench() {
     const pane = button.closest('.session-pane');
     pane.querySelector('.session-config').insertAdjacentHTML('afterend',sessionObservability(session));
     if (session.transportError) pane.querySelector('.transcript').insertAdjacentHTML('afterbegin',`<div class="inline-error"><strong>${session.retrying ? 'Reconnexion en cours' : 'Erreur du moteur'}</strong><p>${esc(session.transportError)}</p>${/UnknownIssuer|certificate/i.test(session.transportError) ? '<small>Certificat TLS non reconnu. La vérification reste activée. Relance Atelier avec scripts/start-atelier.ps1 dans ton contexte Windows.</small>' : ''}</div>`);
-    if (session.status === 'waiting_plan') pane.querySelector('footer').insertAdjacentHTML('beforebegin',`<div class="plan-validation"><strong>Diagnostic terminé · plan en attente</strong><div>${btn('approve-plan','Valider & implémenter','play','primary',`data-id="${esc(session.id)}"`)}${btn('decline-plan','Refuser','close','secondary',`data-id="${esc(session.id)}"`)}</div></div>`);
+    if (session.status === 'waiting_plan') {
+      const architecture=isArchitectureSession(session);
+      pane.querySelector('footer').insertAdjacentHTML('beforebegin',`<div class="plan-validation"><strong>${architecture ? 'Architecture proposée · dessin à valider' : 'Diagnostic terminé · plan en attente'}</strong><div>${btn('approve-plan',architecture ? 'Valider & importer le dessin' : 'Valider & implémenter',architecture ? 'network' : 'play','primary',`data-id="${esc(session.id)}" data-plan-request="${esc(session.currentRequestId || '')}"`)}${btn('decline-plan','Refuser','close','secondary',`data-id="${esc(session.id)}"`)}</div></div>`);
+    }
   }
   for (const workflow of objects('workflows').filter(item => item.status === 'waiting_plan')) {
     $('#main').insertAdjacentHTML('beforeend',`<section class="team-plan work-band"><h2>${esc(workflow.title)} · plan à valider</h2>${workflow.plan.map(task => `<div><strong>${esc(task.title)}</strong><p>${esc(task.prompt)}</p></div>`).join('')}${btn('approve-team-plan','Valider & lancer l’équipe','play','primary',`data-id="${esc(workflow.id)}"`)}${btn('decline-team-plan','Refuser','close','secondary',`data-id="${esc(workflow.id)}"`)}</section>`);
@@ -66,28 +73,71 @@ function quotaWorkbenchView() {
   }).join('')}</div></div>`).join('') || `<p class="muted">${esc(codex.limitsError || (codex.connected ? 'Quotas non communiqués par le CLI.' : 'Compte non connecté.'))}</p>`}<small>Quotas partagés par le compte, tous projets et clients confondus. Pas des tokens de cette session.${codex.limitsUpdatedAt ? ' Actualisés à '+stamp(codex.limitsUpdatedAt)+'.' : ''}</small></section>`;
 }
 
+function requestTariff(request, workspaceId) {
+  const manual=(state.tariffs || []).find(item => item.model === request.model && item.provider === request.provider && item.projectId === workspaceId);
+  if (manual) return manual;
+  const vendor={codex:'openai','openai-codex':'openai',openai:'openai',claude:'anthropic',anthropic:'anthropic'}[request.provider];
+  if (!vendor) return null;
+  const model=String(request.model || '').replace(/^(?:openai|anthropic)\//,'');
+  return (state.officialPricing?.entries || []).find(item => item.provider === vendor && (item.model === model || (vendor === 'anthropic' && model.replace(/-20\d{6}$/,'') === item.model))) || null;
+}
+
 function estimateCost(usage, tariff) {
-  if (!tariff || !usage || ['inputTokens','outputTokens','cachedInputTokens'].some(key => !Number.isFinite(usage[key]))) return null;
+  if (!tariff || !usage || ['inputTokens','outputTokens','cachedInputTokens'].some(key => !Number.isSafeInteger(usage[key]) || usage[key] < 0)) return null;
   if (usage.cachedInputTokens > usage.inputTokens) return null;
-  if ((usage.cacheWriteTokens || usage.cacheWriteInputTokens || 0) > 0) return null;
-  return ((usage.inputTokens-usage.cachedInputTokens)*tariff.input + usage.cachedInputTokens*tariff.cache + usage.outputTokens*tariff.output) / 1e6;
+  const long=tariff.contextThreshold && usage.inputTokens > tariff.contextThreshold;
+  const prices=long ? {input:tariff.longInput,cache:tariff.longCache,output:tariff.longOutput,cacheWrite:tariff.longCacheWrite} : tariff;
+  if (!Number.isFinite(prices.input) || !Number.isFinite(prices.output)) return null;
+  if (usage.cachedInputTokens && !Number.isFinite(prices.cache)) return null;
+  if (tariff.provider === 'anthropic' && usage.cacheWriteTokens == null && usage.cacheWriteInputTokens == null) return null;
+  const writes=usage.cacheWriteTokens ?? usage.cacheWriteInputTokens ?? 0;
+  if (!Number.isSafeInteger(writes) || writes < 0 || (writes && !Number.isFinite(prices.cacheWrite))) return null;
+  if (tariff.provider === 'anthropic' && writes && usage.cacheWriteDuration !== '5m') return null;
+  // Native usage includes cache reads/writes in input. Unknown cache duration cannot be priced.
+  if (usage.cachedInputTokens+writes > usage.inputTokens || usage.cacheWriteHourTokens > 0) return null;
+  return ((usage.inputTokens-usage.cachedInputTokens-writes)*prices.input + usage.cachedInputTokens*(prices.cache || 0) + writes*(prices.cacheWrite || 0) + usage.outputTokens*prices.output) / 1e6;
+}
+
+let lastOfficialPricingCheck=0;
+async function refreshOfficialPricing(force=false) {
+  if (!force && Date.now()-lastOfficialPricingCheck < 3600000) return;
+  lastOfficialPricingCheck=Date.now();
+  try {
+    state.officialPricing=await api('tariffs/refresh',{force});
+    if (force) toast(state.officialPricing.refreshing ? 'Actualisation des sources officielles en cours.' : 'Tarifs officiels récemment vérifiés.');
+    for (let attempt=0; state.officialPricing.refreshing && attempt < 25; attempt++) {
+      await new Promise(resolve=>setTimeout(resolve,1200));
+      state.officialPricing=await api('tariffs/refresh',{});
+    }
+    const openCost=document.querySelector('#modal[open] [data-pricing-session]');
+    if (openCost && ![...openCost.querySelectorAll('input')].some(input=>input.value)) sessionCostModal(openCost.dataset.pricingSession);
+    if (typeof view !== 'undefined' && view === 'usage') render();
+  } catch(error) { if (force) toast(error.message,true); }
+}
+
+function officialPricingNotice() {
+  const pricing=state.officialPricing;
+  return `<div class="official-pricing-notice"><strong>Tarifs API officiels · USD / million de tokens</strong><p>Vérification automatique à l’ouverture, cache de 24 h. Équivalent API standard, distinct de votre abonnement et de toute facture. Contexte long et écritures de cache appliqués seulement lorsque mesurés.</p><div>${[['OpenAI','https://developers.openai.com/api/docs/pricing'],['Anthropic','https://platform.claude.com/docs/en/about-claude/pricing']].map(([label,url]) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${label} ↗</a>`).join(' · ')}</div>${(pricing?.sources || []).map(source => `<small>${esc(source.id)} : ${source.checkedAt ? 'vérifié le '+esc(new Date(source.checkedAt).toLocaleString('fr-FR')) : 'non vérifié'}${source.error ? ' · actualisation échouée, dernier tarif conservé' : ''}</small>`).join('')}${pricing?.refreshing ? '<small>Récupération des pages officielles en cours…</small>' : ''}${btn('refresh-tariffs','Actualiser les tarifs','refresh','quiet')}</div>`;
 }
 
 function sessionCostModal(id) {
   const session = state.sessions.find(item => item.id === id);
+  if (!session) return;
+  refreshOfficialPricing();
   const requests = objects('requests').filter(item => item.sessionId === id);
   const estimates=[];
   const lines = requests.map(request => {
-    const tariff = (state.tariffs || []).find(item => item.model === request.model && item.provider === request.provider && item.projectId === session.projectId);
-    const cost = estimateCost(request.usage,tariff);
+    const tariff=requestTariff(request,session.projectId), cost=estimateCost(request.usage,tariff);
     estimates.push(cost);
-    return `<tr><td>${esc(request.model)}</td><td>${compact(request.usage?.inputTokens)}</td><td>${compact(request.usage?.outputTokens)}</td><td>${cost == null ? 'Non disponible' : '$'+cost.toFixed(4)}</td></tr>`;
+    return `<tr><td>${esc(request.model)}<small>${tariff ? (tariff.source?.startsWith('https://') ? 'Source officielle · tarif standard' : esc(tariff.source)) : 'Aucun tarif exact publié ou enregistré'}</small></td><td>${compact(request.usage?.inputTokens)}</td><td>${compact(request.usage?.outputTokens)}</td><td>${cost == null ? 'Non disponible' : '$'+cost.toFixed(4)}</td></tr>`;
   });
   const total=estimates.length && estimates.every(value => value !== null) ? '$'+estimates.reduce((sum,value) => sum+value,0).toFixed(4) : 'Non disponible';
-  modal('Estimation de session',session.name,`<div class="modal-body"><p class="muted">Équivalent API calculé avec tes tarifs USD par million de tokens, pas une facture ChatGPT. Cache lu inclus dans l’entrée puis déduit une fois. Données manquantes : aucun coût inventé.</p><p><strong>Total estimé : ${total}</strong></p><div class="metrics-table"><table><thead><tr><th>Modèle</th><th>Entrée</th><th>Réponse</th><th>Estimation USD</th></tr></thead><tbody>${lines.join('')}</tbody></table></div><form data-form="tariff" data-session="${esc(id)}" data-provider="${esc(session.provider || 'codex')}" data-model="${esc(session.model)}"><h3>${esc(session.model)}</h3><div class="form-grid">${field('Entrée / million','input','','number','min="0" step="any" required')}${field('Cache lu / million','cache','','number','min="0" step="any" required')}${field('Réponse / million','output','','number','min="0" step="any" required')}</div>${field('Source du tarif / date','source','','text','required')}<button class="button primary" type="submit">Enregistrer les tarifs</button></form></div>`);
+  const tariff=requestTariff(session,session.projectId);
+  modal('Consommation & tarifs',session.name,`<div class="modal-body" data-pricing-session="${esc(id)}">${sessionUsageSummary(session,provider(session.runtime || 'codex'))}${officialPricingNotice()}<p><strong>Équivalent API estimé : ${total}</strong></p>${tariff ? `<p>${esc(session.model)} · Entrée ${tariff.input} · Cache lu ${tariff.cache ?? '—'} · Réponse ${tariff.output} USD / million${tariff.contextThreshold ? '<br>Contexte long au-delà de '+compact(tariff.contextThreshold)+' tokens d’entrée : '+tariff.longInput+' / '+tariff.longCache+' / '+tariff.longOutput : ''}</p>` : '<p class="muted">Tarif du modèle exact non disponible. Aucun autre modèle n’est substitué.</p>'}<div class="metrics-table"><table><thead><tr><th>Modèle & source</th><th>Entrée</th><th>Réponse</th><th>Équivalent USD</th></tr></thead><tbody>${lines.join('')}</tbody></table></div><details><summary>Ajouter un tarif personnalisé</summary><form data-form="tariff" data-session="${esc(id)}" data-provider="${esc(session.provider || 'codex')}" data-model="${esc(session.model)}"><h3>${esc(session.model)}</h3><div class="form-grid">${field('Entrée / million','input','','number','min="0" step="any" required')}${field('Cache lu / million','cache','','number','min="0" step="any" required')}${field('Réponse / million','output','','number','min="0" step="any" required')}</div>${field('Source du tarif / date','source','','text','required')}<button class="button primary" type="submit">Enregistrer les tarifs</button></form></details></div>`);
 }
 
 function installWorkbenchActions() {
+  actions['refresh-tariffs']=() => refreshOfficialPricing(true);
   actions.notifications = notificationsModal;
   actions['open-notification'] = async el => {
     const notification = state.notifications.find(item => item.id === el.dataset.id);
@@ -99,7 +149,11 @@ function installWorkbenchActions() {
     else if (notification.id.endsWith(':plan')) { graphWorkflowId = notification.id.slice(0,-5); agentLayout='graph'; route('agents'); }
     else route('settings');
   };
-  for (const [action,accepted] of [['approve-plan',true],['decline-plan',false]]) actions[action] = async el => { await api('sessions/plan',{id:el.dataset.id,accepted}); await refresh(true); };
+  for (const [action,accepted] of [['approve-plan',true],['decline-plan',false]]) actions[action] = async el => {
+    const result=await api('sessions/plan',{id:el.dataset.id,accepted,requestId:el.dataset.planRequest || undefined});
+    if (result.design) { designId=result.design.id; designDraft=structuredClone(result.design); route('design'); toast('Architecture validée et importée.'); }
+    await refresh(true);
+  };
   for (const [action,accepted] of [['approve-team-plan',true],['decline-team-plan',false]]) actions[action] = async el => { await api('workflows/plan',{id:el.dataset.id,accepted}); await refresh(true); };
   actions['session-cost'] = el => sessionCostModal(el.dataset.id);
   actions['process-inventory'] = async () => {
@@ -117,8 +171,10 @@ function installWorkbenchActions() {
 
 document.addEventListener('change',async event => {
   if (event.target.name !== 'agentProject') return;
+  const architecture=event.target.closest('form')?.elements.purpose?.value === 'architecture';
   actions.project({dataset:{id:event.target.value}});
-  await newAgent();
+  if (architecture) await actions['design-agent']();
+  else await newAgent();
 });
 document.addEventListener('submit',async event => {
   const form = event.target.closest('[data-form="tariff"]');

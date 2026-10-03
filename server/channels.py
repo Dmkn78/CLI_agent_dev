@@ -81,11 +81,27 @@ class ChannelHub:
                         if round_record['status'] == 'running':
                             round_record.update(status='interrupted', completedAt=now(),
                                                 error=channel['error'])
+                    self._interrupt_rounds(channel, 'interrupted')
                     self._save(channel)
 
     def snapshot(self) -> dict:
         with self.lock:
             channels = self.store.all('channel')
+            sessions = {session['id']: session for session in self.store.all('session')}
+            requests = self.store.all('request')
+            for channel in channels:
+                channel_requests = [request for request in requests if request.get('channelId') == channel['id']
+                    or sessions.get(request.get('sessionId'), {}).get('channelId') == channel['id']]
+                # Native/API request counters include failed and interrupted calls. A reply
+                # fallback supports adapters that return usage without a request projection.
+                channel['usage'] = _usage_summary(channel_requests or [message for message in channel['messages']
+                    if message['role'] != 'user'])
+                for participant in channel['participants']:
+                    activity = participant.get('activity', {})
+                    session = sessions.get(activity.get('sessionId'), {})
+                    if session.get('transportError'):
+                        activity['transportError'] = _public_error(ValueError(session['transportError']))
+                        activity['retrying'] = bool(session.get('retrying'))
             snapshot = {
                 'channels': [self._summary(channel) for channel in channels],
                 'participants': [participant for channel in channels for participant in channel['participants']],
@@ -93,6 +109,23 @@ class ChannelHub:
                 'rounds': [round_record for channel in channels for round_record in channel['rounds']],
             }
             return snapshot
+
+    def participant_activity(self, participant: dict, status: str, **details) -> None:
+        """Publish transport lifecycle facts, never provider reasoning or partial text."""
+        if status not in ('connecting', 'responding', 'completed', 'failed'):
+            raise ValueError('État de participant invalide.')
+        allowed = {key: value for key, value in details.items() if key in ('sessionId', 'requestId', 'error')}
+        if 'error' in allowed:
+            allowed['error'] = _public_error(ValueError(allowed['error']))
+        with self.lock:
+            if self.closed:
+                return
+            channel = self.store.get('channel', participant['channelId'])
+            if channel['status'] != 'running' or channel.get('runId') != participant['runId']:
+                return
+            current = next(entry for entry in channel['participants'] if entry['id'] == participant['id'])
+            current.setdefault('activity', {}).update(status=status, updatedAt=now(), **allowed)
+            self._save(channel)
 
     def create(self, submitted: dict) -> dict:
         _check_fields(submitted, {'projectId', 'name', 'topic', 'maxRounds', 'roundMode', 'autoRoundLimit', 'execution'})
@@ -347,6 +380,7 @@ class ChannelHub:
                     for round_record in channel['rounds']:
                         if round_record['runId'] == run.id and round_record['status'] == 'running':
                             round_record.update(status='failed', error=message, completedAt=now())
+                    self._interrupt_rounds(channel, 'interrupted')
                     self._save(channel)
                     self._event('channel.failed', channel)
             run.cancelled.set()
@@ -371,6 +405,10 @@ class ChannelHub:
                 'messageIds': [], 'error': None,
             }
             channel['rounds'].append(round_record)
+            for participant in channel['participants']:
+                if participant['id'] in round_record['participantIds']:
+                    participant['activity'] = {'status': 'connecting', 'purpose': purpose,
+                        'roundId': round_record['id'], 'roundNumber': number, 'updatedAt': now()}
             self._save(channel)
             topic = channel['topic']
         replies = self._collect_replies(channel_id, run, participants, public_messages, topic, purpose)
@@ -419,11 +457,14 @@ class ChannelHub:
                 public_participant.update(topic=topic, runId=run.id, roundMode=channel.get('roundMode', 'fixed'))
                 response = self.app.channel_reply(public_participant, copy.deepcopy(public_messages), purpose)
                 reply = _public_reply(response, participant.get('sourceSessionId'))
+                self.participant_activity(public_participant, 'completed')
             except _DiscussionStopped:
                 error_message = 'Discussion interrompue.'
             except Exception as error:
                 error_message = _public_error(error)
             finally:
+                if error_message and 'public_participant' in locals():
+                    self.participant_activity(public_participant, 'failed', error=error_message)
                 with condition:
                     results[participant['id']] = (reply, error_message)
                     condition.notify_all()
@@ -596,6 +637,9 @@ class ChannelHub:
         for round_record in channel['rounds']:
             if round_record['status'] == 'running':
                 round_record.update(status=status, error=channel['error'], completedAt=now())
+        for participant in channel['participants']:
+            if participant.get('activity', {}).get('status') in ('connecting', 'responding'):
+                participant['activity'].update(status=status, updatedAt=now())
 
     def _save(self, channel: dict) -> None:
         channel['updatedAt'] = now()
@@ -619,6 +663,19 @@ class ChannelHub:
 
 def _channel_summary(channel: dict) -> dict:
     return copy.deepcopy({key: value for key, value in channel.items() if key not in ('participants', 'messages', 'rounds')})
+
+
+def _usage_summary(calls: list[dict]) -> dict:
+    totals, partial = {}, []
+    for key in ('inputTokens', 'outputTokens', 'totalTokens', 'cachedInputTokens'):
+        values = [(call.get('usage') or {}).get(key) for call in calls]
+        measured = [value for value in values if isinstance(value, int) and not isinstance(value, bool)
+                    and 0 <= value <= 2 ** 53 - 1]
+        if measured and sum(measured) <= 2 ** 53 - 1:
+            totals[key] = sum(measured)
+            if len(measured) < len(values):
+                partial.append(key)
+    return {'total': totals, 'partialFields': partial}
 
 
 def _select_planner(participants: list[dict]) -> dict | None:

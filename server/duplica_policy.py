@@ -9,7 +9,7 @@ from pathlib import Path
 DEFAULT_PERMISSIONS = {
     'workspace_read': 'auto', 'workspace_write': 'ask', 'run_tests': 'auto',
     'run_build': 'auto', 'run_local_application': 'ask', 'continue_agent': 'auto',
-    'answer_known_question': 'auto', 'approve_plan': 'ask',
+    'answer_known_question': 'auto', 'approve_plan': 'ask', 'approve_architecture': 'auto',
     'computer_control': 'ask', 'keyboard_mouse': 'ask', 'browser_control': 'ask',
     'install_project_dependencies': 'ask', 'git_status': 'auto', 'git_diff': 'auto',
     'git_commit': 'ask', 'git_push': 'ask', 'production_deploy': 'ask',
@@ -19,7 +19,7 @@ DEFAULT_PERMISSIONS = {
 }
 PRIVATE_PARTS = {'.atelier', '.duplica', '.git', '.codex', '.aws', '.ssh'}
 SENSITIVE_CATEGORIES = {'git_push', 'production_deploy', 'public_publish', 'payment',
-                        'read_secrets', 'send_private_data', 'unknown', 'approve_plan'}
+                        'read_secrets', 'send_private_data', 'unknown'}
 
 
 @dataclass(frozen=True)

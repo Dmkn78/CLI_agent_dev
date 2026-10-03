@@ -11,7 +11,7 @@
   "private": true,
   "scripts": {
     "vendor": "node scripts/vendor.cjs",
-    "desktop": "electron desktop/main.cjs",
+    "desktop": "node scripts/launch-desktop.cjs",
     "test:ui": "node tests/test_cockpit.cjs",
     "test:release": "node --test tests/test_updates.cjs && python -B -m unittest discover -s tests -p test_release.py -v",
     "build:electron": "node node_modules/electron/install.js",

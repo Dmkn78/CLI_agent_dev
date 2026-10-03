@@ -1,0 +1,9 @@
+.memory-source-picker {margin-top:12px;border:1px solid var(--border, #404440);border-radius:12px;overflow:hidden;}
+.memory-source-picker .resource-navigation {padding:8px;gap:8px;flex-wrap:wrap;}
+.memory-source-picker .browser-file-list {max-height:240px;overflow:auto;padding:8px;}
+.memory-source-picker .file-entry {width:100%;text-align:left;min-height:38px;}
+.memory-source-picker .file-entry span {overflow-wrap:anywhere;white-space:normal;}
+.memory-metadata {display:grid;grid-template-columns:100px minmax(0,1fr);gap:8px 14px;margin:0;}
+.memory-metadata dt {color:var(--muted,#999);}
+.memory-metadata dd {margin:0;white-space:pre-wrap;overflow-wrap:anywhere;}
+.memory-export-actions {display:flex;gap:10px;flex-wrap:wrap;margin:20px 0;}

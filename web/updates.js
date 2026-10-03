@@ -3,7 +3,7 @@ let desktopUpdateStatus = null;
 function updatesView() {
   if (!window.atelierDesktop?.updateState) return '';
   const status = desktopUpdateStatus;
-  if (!status) return '<section id="desktop-updates" class="work-band"><h3>Atelier · mises à jour</h3><p>Chargement…</p></section>';
+  if (!status) return `<section id="desktop-updates" class="updates-card" aria-label="Mises à jour Atelier"><div class="updates-heading"><span class="updates-icon">${icon('download')}</span><div><span class="updates-eyebrow">Mises à jour</span><h3>Atelier</h3></div></div><p class="updates-status" role="status">Chargement…</p></section>`;
   const messages = {
     disabled: 'Les mises à jour sont disponibles dans la version installée.',
     idle: 'Vous pouvez rechercher une nouvelle version.', checking: 'Recherche en cours…',
@@ -14,16 +14,29 @@ function updatesView() {
     installing: 'Préparation du redémarrage…', error: 'La vérification ou le téléchargement a échoué. Vous pouvez réessayer.',
   };
   const canCheck = ['idle', 'current', 'available', 'error'].includes(status.phase);
-  return `<section id="desktop-updates" class="work-band" aria-label="Mises à jour Atelier">
-    <div class="panel-heading"><h3>${icon('download')} Atelier ${esc(status.currentVersion)}</h3></div>
-    <p role="status">${esc(messages[status.phase] || '')}</p>
+  const phaseLabels = {
+    disabled: 'Version de développement', idle: 'À vérifier', checking: 'Recherche…',
+    current: 'À jour', available: 'Nouvelle version', downloading: 'Téléchargement…',
+    downloaded: 'Prête à installer', installing: 'Redémarrage…', error: 'À réessayer',
+  };
+  const preference = (key, title, description) => `<label class="update-option">
+    <span class="update-option-copy"><span class="update-option-title" id="update-${key}-label">${title}</span><span class="update-option-description" id="update-${key}-description">${description}</span></span>
+    <span class="update-switch"><input type="checkbox" role="switch" data-update-preference="${key}" aria-labelledby="update-${key}-label" aria-describedby="update-${key}-description" ${status.preferences[key] ? 'checked' : ''}><span class="update-switch-track" aria-hidden="true"></span></span>
+  </label>`;
+  return `<section id="desktop-updates" class="updates-card" data-phase="${esc(status.phase)}" aria-label="Mises à jour Atelier">
+    <div class="updates-heading"><span class="updates-icon">${icon('download')}</span><div><span class="updates-eyebrow">Mises à jour</span><h3>Atelier ${esc(status.currentVersion)}</h3></div><span class="updates-phase">${esc(phaseLabels[status.phase] || 'Mises à jour')}</span></div>
+    <p class="updates-status" role="status">${esc(messages[status.phase] || '')}</p>
+    ${status.phase === 'downloading' ? `<progress class="updates-progress" max="100" value="${esc(status.percent || 0)}" aria-label="Téléchargement de la mise à jour">${esc(status.percent || 0)} %</progress>` : ''}
     ${status.error ? `<p class="inline-error">${esc(status.error)}</p>` : ''}
-    <p><label><input type="checkbox" data-update-preference="checkAutomatically" ${status.preferences.checkAutomatically ? 'checked' : ''}> Vérifier automatiquement les mises à jour</label></p>
-    <p><label><input type="checkbox" data-update-preference="downloadAutomatically" ${status.preferences.downloadAutomatically ? 'checked' : ''}> Télécharger automatiquement les mises à jour</label></p>
-    <p class="muted small">Le redémarrage vous sera proposé. Vos projets et données restent sur cet ordinateur.</p>
-    ${canCheck ? btn('updates-check','Rechercher une mise à jour','refresh','secondary') : ''}
-    ${status.phase === 'available' ? btn('updates-download','Télécharger','download','primary') : ''}
-    ${status.phase === 'downloaded' ? btn('updates-install','Installer et redémarrer','refresh','primary') : ''}
+    <div class="update-options">
+      ${preference('checkAutomatically', 'Vérification automatique', 'Repérer les nouvelles versions dès leur disponibilité.')}
+      ${preference('downloadAutomatically', 'Téléchargement automatique', 'Préparer l’installation en arrière-plan.')}
+    </div>
+    <div class="updates-footer"><p class="updates-note">${icon('shield')}<span>Le redémarrage vous sera proposé. Vos projets et données restent sur cet ordinateur.</span></p><div class="updates-actions">
+      ${canCheck ? btn('updates-check','Rechercher une mise à jour','search','secondary') : ''}
+      ${status.phase === 'available' ? btn('updates-download','Télécharger','download','primary') : ''}
+      ${status.phase === 'downloaded' ? btn('updates-install','Installer et redémarrer','download','primary') : ''}
+    </div></div>
   </section>`;
 }
 
@@ -31,7 +44,16 @@ function receiveUpdateStatus(status) {
   const previous = desktopUpdateStatus?.phase;
   desktopUpdateStatus = status;
   const panel = document.querySelector('#desktop-updates');
-  if (panel) panel.outerHTML = updatesView();
+  if (panel) {
+    const focused = panel.contains(document.activeElement) ? document.activeElement : null;
+    const preference = focused?.dataset.updatePreference;
+    const action = focused?.dataset.action;
+    panel.outerHTML = updatesView();
+    if (preference || action) {
+      const controls = document.querySelectorAll('#desktop-updates input, #desktop-updates button');
+      [...controls].find(control => preference ? control.dataset.updatePreference === preference : control.dataset.action === action)?.focus({preventScroll: true});
+    }
+  }
   if (status.phase !== previous && status.phase === 'available') toast(`Atelier ${status.nextVersion} disponible dans Connexions.`);
   if (status.phase !== previous && status.phase === 'downloaded') toast('Mise à jour prête : ouvrez Connexions pour redémarrer.');
 }

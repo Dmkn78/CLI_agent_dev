@@ -3,7 +3,7 @@ const {BrowserWindow}=require('electron');
 const {randomUUID}=require('node:crypto');
 const staleObservation=message => Object.assign(new Error(message),{code:'stale_observation'});
 const sameControl=(current,expected) => current && expected &&
-  ['label','role','action','view','approvalId','questionId','decision'].every(key => current[key] === expected[key]);
+  ['label','role','action','view','approvalId','questionId','decision','objectId','planRequestId'].every(key => current[key] === expected[key]);
 
 // Fixed observation program. No caller supplied JS, selectors, or evaluation.
 const observeDocument=String.raw`(() => {
@@ -16,6 +16,7 @@ const observeDocument=String.raw`(() => {
     return {index,label:(element.getAttribute('aria-label') || (element.labels?.[0]?.textContent) || element.innerText || element.placeholder || '').trim().slice(0,500),
       role:element.tagName.toLowerCase(),enabled:!element.disabled,visible:rect.bottom>0 && rect.right>0 && rect.top<innerHeight && rect.left<innerWidth,action:element.dataset.action || '',view:element.dataset.view || '',
       approvalId:approval?.dataset.approvalId || null,questionId:element.dataset.questionId || null,
+      objectId:element.dataset.id || null,planRequestId:element.dataset.planRequest || null,
       decision:element.dataset.approvalDecision || null,
       rect:{x:rect.x,y:rect.y,width:rect.width,height:rect.height}};
   }).filter(Boolean).slice(0,300);

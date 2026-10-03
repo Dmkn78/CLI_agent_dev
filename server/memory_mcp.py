@@ -15,7 +15,9 @@ def search_memories(memories, query, limit=5, project='atelier'):
     for memory in memories:
         if memory.get('scope') != 'user' and memory.get('projectId') != project:
             continue
-        text = ' '.join([memory['title'], memory['body'], ' '.join(memory.get('tags', []))]).casefold()
+        text = ' '.join([memory['title'], memory['body'], ' '.join(memory.get('tags', [])),
+                         memory.get('subject', ''), memory.get('why', ''), memory.get('context', ''),
+                         memory.get('source', '')]).casefold()
         score = sum(3 if term in memory['title'].casefold() else 1 for term in terms if term in text)
         if score:
             hits.append((score, memory))

@@ -1,5 +1,5 @@
 function cockpitView() {
-  const list = objects('sessions');
+  const list = [...objects('sessions'),...dashboardAgents().filter(agent => agent.type === 'native' && agent.projectId === projectId).map(agent => ({...agent.source,status:agent.status === 'working' ? 'running' : agent.source.status}))];
   const active = list.filter(s => ['running','waiting','initializing'].includes(s.status));
   const measured = list.filter(s => s.usage?.total?.totalTokens != null);
   const tokens = measured.reduce((sum, s) => sum + s.usage.total.totalTokens, 0);
@@ -9,9 +9,9 @@ function cockpitView() {
     <div class="cockpit-bottom"><section class="work-band"><div class="panel-heading"><h3>${icon('audit')} Activité du projet</h3>${btn('navigate','Journal','arrow','quiet','data-view="audit"')}</div>${activityList(state.events.filter(e => e.projectId === projectId).slice(0,6))}</section><section class="work-band"><div class="panel-heading"><h3>${icon('tasks')} Tâches</h3>${btn('new-task','Ajouter','plus','quiet')}</div>${objects('tasks').slice(0,5).map(t => `<button class="cockpit-task" data-action="edit-task" data-id="${esc(t.id)}"><strong>${esc(t.title)}</strong>${badge(t.status)}</button>`).join('') || '<p class="muted panel-description">Aucune tâche enregistrée.</p>'}</section></div>`;
 }
 
-function graphNode(id, title, subtitle, status, x, y, kind = 'agents', tone = 'cyan') {
+function graphNode(id, title, subtitle, status, x, y, kind = 'agents', tone = 'cyan', statusText = null) {
   if (!['project','artifacts'].includes(id)) tone=status === 'failed' ? 'danger' : status === 'running' ? 'green' : ['waiting','waiting_plan'].includes(status) ? 'amber' : 'neutral';
-  return `<button class="graph-node ${tone} ${selectedGraphNode === id ? 'selected' : ''}" style="left:${x}%;top:${y}px" data-action="select-graph-node" data-id="${esc(id)}"><span class="graph-node-icon">${icon(kind)}</span><span class="graph-node-copy"><strong title="${esc(title)}">${esc(title)}</strong><small title="${esc(subtitle)}">${esc(subtitle)}</small>${status ? badge(status) : `<span class="graph-planned">${['project','artifacts'].includes(id) ? 'Ressource du projet' : 'Configuré · non lancé'}</span>`}</span></button>`;
+  return `<button class="graph-node ${tone} ${selectedGraphNode === id ? 'selected' : ''}" style="left:${x}%;top:${y}px" data-action="select-graph-node" data-id="${esc(id)}"><span class="graph-node-icon">${icon(kind)}</span><span class="graph-node-copy"><strong title="${esc(title)}">${esc(title)}</strong><small title="${esc(subtitle)}">${esc(subtitle)}</small>${statusText ? `<span class="badge ${esc(status || 'queued')}">${esc(statusText)}</span>` : status ? badge(status) : `<span class="graph-planned">${['project','artifacts'].includes(id) ? 'Ressource du projet' : 'Configuré · non lancé'}</span>`}</span></button>`;
 }
 function removableSession(session) {
   const parent=[...state.workflows,...(state.benchmarks || [])].find(parent=>parent.id === session.parentId);
@@ -28,7 +28,8 @@ function graphEdge(x1, y1, x2, y2, type = '') {
 function workspaceGraph() {
   const workflows = objects('workflows');
   const workflow = graphWorkflowId === 'sessions' ? null : workflows.find(w => w.id === graphWorkflowId) || workflows.at(-1);
-  const independent = objects('sessions').filter(s => !s.parentId);
+  const native=dashboardAgents().filter(agent => agent.type === 'native' && agent.projectId === projectId);
+  const independent = [...objects('sessions').filter(s => !s.parentId),...native.map(agent => ({...agent.source,id:agent.key,name:agent.name,nativeAgent:agent}))];
   const graphHeight = Math.max(workflow?.agents?.auditor && workflow.mode === 'orchestration' ? 660 : 560,(workflow?.agents?.workers?.length || 0)*165+65);
   let nodes = graphNode('project', project().name, project().path, '', 2.5, 235, 'folder', 'neutral');
   let edges = '';
@@ -61,8 +62,11 @@ function workspaceGraph() {
     independent.slice(graphPage*6,graphPage*6+6).forEach((session, index) => {
       const x = index < 3 ? 32 : 69;
       const y = 55 + (index % 3) * 165;
-      nodes += graphNode(session.id, session.name, session.model, session.status, x, y, 'agents', ['green','purple','amber'][index % 3]);
-      edges += graphEdge(205,282,x * 10,y + 47, session.status === 'running' ? 'active' : '');
+      const agent=session.nativeAgent;
+      const status=agent ? agent.status === 'working' ? 'running' : agent.status === 'failed' ? 'failed' : 'queued' : session.status;
+      const description=agent ? ({working:'Tour natif observé',done:'Tour terminé',failed:'Tour en erreur',stopped:'Terminal arrêté'})[agent.status] || (session.pid ? 'Terminal ouvert' : 'Démarrage du terminal') : null;
+      nodes += graphNode(session.id, session.name, session.model || session.runtime, status, x, y, agent ? 'terminal' : 'agents', ['green','purple','amber'][index % 3],description);
+      edges += graphEdge(205,282,x * 10,y + 47, status === 'running' ? 'active' : '');
     });
   } else {
     nodes += `<button class="graph-add" data-action="new-agent" style="left:43%;top:218px">${icon('plus')}<strong>Nouvel agent</strong></button>`;
@@ -75,6 +79,10 @@ function workspaceGraph() {
   return `<section class="graph-workspace"><div class="graph-heading"><div><h2>${icon('network')} Architecture des agents</h2><span class="muted small">${esc(project().name)} · ${workflow ? 'Orchestration séquentielle' : independent.length + ' sessions indépendantes'}</span></div><div class="row-actions">${graphZoomControls()}${removedSessionsButton()}${graphSelect}</div></div><div class="graph-layout"><div class="graph-scroll" data-scroll="agent-graph"><div class="graph-canvas" style="height:${graphHeight}px"><svg class="graph-links" viewBox="0 0 1000 ${graphHeight}" preserveAspectRatio="none" aria-hidden="true"><defs><marker id="graph-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>${edges}</svg>${nodes}<div class="graph-legend"><span><i class="green"></i> En cours</span><span><i class="amber"></i> Action attendue</span><span><i class="purple"></i> Inactif ou prévu</span></div></div>${pages}</div><aside class="graph-inspector">${graphDetails(workflow, artifacts)}</aside></div></section>`;
 }
 function graphDetails(workflow, artifacts) {
+  if (selectedGraphNode?.startsWith('native:')) {
+    const agent=dashboardAgents().find(agent => agent.key === selectedGraphNode && agent.projectId === projectId);
+    if (agent) return `<div class="panel-heading"><h3>Terminal natif</h3>${icon('terminal')}</div><div class="inspector-body"><h3>${esc(agent.name)}</h3><p>${esc(agent.detail)}</p><dl><dt>Moteur</dt><dd>${esc(agent.runtime)}</dd><dt>Modèle</dt><dd>${esc(agent.model || 'Non communiqué')}</dd><dt>Processus</dt><dd>${agent.source.pid ? 'PID '+esc(agent.source.pid) : 'Non communiqué'}</dd><dt>Activité</dt><dd>${esc(DASHBOARD_STATES.find(([id]) => id === agent.status)?.[2] || 'Non communiquée')}</dd><dt>Dossier</dt><dd>${esc(agent.source.workingPath || agent.source.cwd || project().path)}</dd></dl>${sessionUsageSummary(agent.source,provider(agent.runtime))}<p class="muted small">Un terminal ouvert ne prouve pas qu’une mission travaille. L’activité vient des événements natifs disponibles.</p>${btn('dashboard-open','Ouvrir le terminal','terminal','secondary full',`data-key="${esc(agent.key)}"`)}</div>`;
+  }
   if (workflow && (selectedGraphNode?.startsWith('worker:') || selectedGraphNode?.startsWith('role:'))) {
     const index = Number(selectedGraphNode.split(':')[1]);
     const worker = selectedGraphNode.startsWith('worker:');
@@ -113,7 +121,7 @@ function consumptionRecords() {
   return records.filter(r => !usageProvider || r.provider === usageProvider);
 }
 function sumObserved(records, key) {
-  const observed = records.filter(r => typeof r.usage?.[key] === 'number');
+  const observed = records.filter(r => Number.isSafeInteger(r.usage?.[key]) && r.usage[key] >= 0);
   return observed.length ? observed.reduce((sum,r) => sum + r.usage[key],0) : null;
 }
 function csvCell(value) {
@@ -123,9 +131,36 @@ function csvCell(value) {
 }
 function consumptionProviders() {
   return [...new Set(['codex',...(provider('omp').models || []).map(model => model.provider),
-    ...objects('requests').map(request => request.provider),...objects('sessions').map(session => session.provider)].filter(Boolean))];
+    ...objects('requests').map(request => request.provider),...objects('sessions').map(session => session.provider),...objects('nativeSessions').map(session => session.runtime)].filter(Boolean))];
 }
+function consumptionCharts(records, groups) {
+  const measured=records.filter(record => !record.legacy && !String(record.id).startsWith('native:') && Number.isSafeInteger(record.usage?.totalTokens) && record.usage.totalTokens >= 0 && /^\d{4}-\d{2}-\d{2}/.test(record.completedAt || record.createdAt || ''));
+  const dates=[...new Set(measured.map(record => (record.completedAt || record.createdAt).slice(0,10)))].sort().slice(-14);
+  const series=new Map();
+  for (const record of measured) {
+    const day=(record.completedAt || record.createdAt).slice(0,10);
+    if (!dates.includes(day)) continue;
+    if (!series.has(record.provider)) series.set(record.provider,new Map());
+    const totals=series.get(record.provider);totals.set(day,(totals.get(day) || 0)+record.usage.totalTokens);
+  }
+  const maximum=Math.max(1,...[...series.values()].flatMap(totals => [...totals.values()]));
+  const x=index => 60+(dates.length === 1 ? 340 : index/(dates.length-1)*680), y=value => 230-value/maximum*195;
+  const colors=['#d8a184','#8bbfad','#b5a1d8','#87b9d4','#d3be84'];
+  const curves=[...series].map(([name,totals],index) => {
+    const points=dates.map((day,i) => totals.has(day) ? {x:x(i),y:y(totals.get(day)),value:totals.get(day),day} : null);
+    // Missing dates break the line. An absent measure is never a zero.
+    const paths=[];let segment=[];
+    for (const point of [...points,null]) { if (point) segment.push(point); else if (segment.length) { paths.push(segment);segment=[]; } }
+    return `<g style="color:${colors[index%colors.length]}">${paths.map(path => `<polyline fill="none" stroke="currentColor" stroke-width="3" points="${path.map(point => point.x+','+point.y).join(' ')}"/>`).join('')}${points.filter(Boolean).map(point => `<circle cx="${point.x}" cy="${point.y}" r="5" fill="currentColor"><title>${esc(name)} · ${point.day} · ${point.value.toLocaleString('fr-FR')} tokens</title></circle>`).join('')}</g>`;
+  }).join('');
+  const graph=dates.length ? `<svg class="consumption-plot" viewBox="0 0 800 280" role="img" aria-label="Tokens mesurés par jour et par fournisseur ; les dates sans mesure restent absentes">${[0,.5,1].map(fraction => `<line x1="60" x2="750" y1="${y(maximum*fraction)}" y2="${y(maximum*fraction)}" class="plot-grid"/><text x="52" y="${y(maximum*fraction)+4}" text-anchor="end">${compact(maximum*fraction)}</text>`).join('')}${dates.map((day,index) => `<text x="${x(index)}" y="258" text-anchor="middle">${day.slice(5)}</text>`).join('')}${curves}</svg><div class="plot-legend">${[...series.keys()].map((name,index) => `<span><i style="background:${colors[index%colors.length]}"></i>${esc(name)}</span>`).join('')}</div>` : '<p class="plot-empty">Aucune requête horodatée mesurée. Les totaux de sessions restent disponibles ci-dessous.</p>';
+  const rows=[...groups.values()].filter(group => sumObserved(group.records,'totalTokens') !== null).sort((a,b) => sumObserved(b.records,'totalTokens')-sumObserved(a.records,'totalTokens'));
+  const maxGroup=Math.max(1,...rows.map(group => sumObserved(group.records,'totalTokens')));
+  return `<div class="consumption-charts"><section class="consumption-chart"><div class="panel-heading"><h3>Évolution par fournisseur</h3><small>14 jours mesurés · UTC</small></div>${graph}<p class="chart-note">Requêtes horodatées uniquement. Les cumuls de terminaux et mesures antérieures ne sont pas attribués à une journée.</p></section><section class="consumption-chart"><div class="panel-heading"><h3>Comparer ${esc({provider:'les fournisseurs',consumer:'les sessions',task:'les tâches',model:'les modèles',request:'les requêtes'}[usageGrouping])}</h3><small>Total observé</small></div><div class="consumption-comparison">${rows.map(group => `<div class="comparison-row"><div><strong>${esc(group.title)}</strong><span>${compact(sumObserved(group.records,'totalTokens'))} tokens</span></div><div class="comparison-track"><i style="width:${sumObserved(group.records,'totalTokens')/maxGroup*100}%"></i></div><small>Entrée ${compact(sumObserved(group.records,'inputTokens'))} · Réponse ${compact(sumObserved(group.records,'outputTokens'))} · Cache inclus ${compact(sumObserved(group.records,'cachedInputTokens'))}</small></div>`).join('') || '<p class="plot-empty">Aucune consommation communiquée pour ce filtre.</p>'}</div></section></div>`;
+}
+
 function consumptionView() {
+  if (typeof refreshOfficialPricing === 'function' && typeof api === 'function') refreshOfficialPricing();
   const records = consumptionRecords();
   const providers = consumptionProviders();
   const groups = new Map();
@@ -143,15 +178,7 @@ function consumptionView() {
     if (!groups.has(key)) groups.set(key,{title,records:[]});
     groups.get(key).records.push(record);
   }
-  const daily = new Map();
-  for (const record of records) {
-    if (record.usage?.totalTokens == null) continue;
-    const date = (record.completedAt || record.createdAt).slice(0,10);
-    daily.set(date,(daily.get(date)||0) + record.usage.totalTokens);
-  }
-  const days = [...daily.keys()].sort().slice(-7);
-  const maximum = Math.max(1,...daily.values());
-  return `${heading('CONSOMMATION', 'Tokens & requêtes', 'Mesures reçues du fournisseur', btn('export-usage','Exporter CSV','download'))}<div class="stat-grid usage-stats">${[['Entrée','inputTokens'],['Sortie','outputTokens'],['Cache lu','cachedInputTokens'],['Total','totalTokens']].map(([label,key]) => `<article class="stat-card"><span>${label}${icon('usage')}</span><div>${compact(sumObserved(records,key))}<small>tokens</small></div><p>${records.filter(r => r.usage?.[key] != null).length} mesures disponibles</p></article>`).join('')}</div><div class="consumption-trend"><div class="panel-heading"><h3>Tokens par jour</h3><span class="muted small">UTC · REQUÊTES OBSERVÉES</span></div><div class="token-bars">${days.map(day => `<div class="token-day"><strong>${compact(daily.get(day))}</strong><div><i style="height:${Math.max(2,daily.get(day)/maximum*100)}%"></i></div><small>${day.slice(5)}</small></div>`).join('') || '<p class="muted">Aucune mesure reçue.</p>'}</div></div><div class="view-toolbar"><div class="segmented usage-tabs">${[['provider','Fournisseur'],['consumer','Consommateur'],['task','Tâche'],['model','Modèle'],['request','Requête']].map(([key,label]) => `<button data-action="usage-group" data-group="${key}" class="${usageGrouping === key ? 'selected' : ''}">${label}</button>`).join('')}</div><label>Fournisseur<select id="usage-provider"><option value="">Tous</option>${providers.map(p => `<option value="${esc(p)}" ${usageProvider === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></label></div><div class="metrics-table"><table><thead><tr><th>${{provider:'Fournisseur',consumer:'Consommateur',task:'Tâche',model:'Modèle',request:'Requête'}[usageGrouping]}</th><th>Mesures</th><th>Entrée</th><th>Sortie</th><th>Cache lu</th><th>Total</th><th>Coût facturé</th></tr></thead><tbody>${[...groups.values()].map(group => `<tr><td><strong>${esc(group.title)}</strong><small>${esc([...new Set(group.records.map(r => r.provider))].join(' · '))}</small>${usageGrouping === 'request' ? `<small>${esc(group.records[0].id)} · ${esc(group.records[0].status)}</small>` : ''}</td><td>${group.records.filter(r => r.usage).length} / ${group.records.length}</td>${['inputTokens','outputTokens','cachedInputTokens','totalTokens'].map(key => `<td>${compact(sumObserved(group.records,key))}</td>`).join('')}<td>—</td></tr>`).join('')}</tbody></table>${!groups.size ? '<p class="panel-description muted">Aucune requête enregistrée pour ce filtre.</p>' : ''}</div><div class="consumption-notes"><span>${icon('shield')} Facturation réelle et équivalent API non importés.</span><span>${records.filter(r => r.legacy).length} mesures de session non attribuables à une requête.</span><span>${records.filter(r => !r.usage).length} requêtes sans mesure reçue.</span></div>`;
+  return `${heading('CONSOMMATION', 'Tokens & requêtes', 'Mesures reçues du fournisseur', btn('export-usage','Exporter CSV','download'))}<div class="stat-grid usage-stats">${[['Entrée','inputTokens'],['Sortie','outputTokens'],['Cache lu','cachedInputTokens'],['Total','totalTokens']].map(([label,key]) => `<article class="stat-card"><span>${label}${icon('usage')}</span><div>${compact(sumObserved(records,key))}<small>tokens</small></div><p>${records.filter(r => r.usage?.[key] != null).length} mesures disponibles</p></article>`).join('')}</div>${consumptionCharts(records,groups)}<div class="view-toolbar"><div class="segmented usage-tabs">${[['provider','Fournisseur'],['consumer','Consommateur'],['task','Tâche'],['model','Modèle'],['request','Requête']].map(([key,label]) => `<button data-action="usage-group" data-group="${key}" class="${usageGrouping === key ? 'selected' : ''}">${label}</button>`).join('')}</div><label>Fournisseur<select id="usage-provider"><option value="">Tous</option>${providers.map(p => `<option value="${esc(p)}" ${usageProvider === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></label></div><div class="metrics-table"><table><thead><tr><th>${{provider:'Fournisseur',consumer:'Consommateur',task:'Tâche',model:'Modèle',request:'Requête'}[usageGrouping]}</th><th>Mesures</th><th>Entrée</th><th>Sortie</th><th>Cache lu</th><th>Total</th><th>Coût facturé</th></tr></thead><tbody>${[...groups.values()].map(group => `<tr><td><strong>${esc(group.title)}</strong><small>${esc([...new Set(group.records.map(r => r.provider))].join(' · '))}</small>${usageGrouping === 'request' ? `<small>${esc(group.records[0].id)} · ${esc(group.records[0].status)}</small>` : ''}</td><td>${group.records.filter(r => r.usage).length} / ${group.records.length}</td>${['inputTokens','outputTokens','cachedInputTokens','totalTokens'].map(key => `<td>${compact(sumObserved(group.records,key))}</td>`).join('')}<td>—</td></tr>`).join('')}</tbody></table>${!groups.size ? '<p class="panel-description muted">Aucune requête enregistrée pour ce filtre.</p>' : ''}</div>${typeof officialPricingNotice === 'function' ? officialPricingNotice() : ''}<div class="consumption-notes"><span>${icon('shield')} Facturation réelle non importée. Équivalent API consultable dans chaque session.</span><span>${records.filter(r => r.legacy).length} mesures de session non attribuables à une requête.</span><span>${records.filter(r => !r.usage).length} requêtes sans mesure reçue.</span></div>`;
 }
 
 function localConnectionsView() {

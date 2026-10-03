@@ -68,12 +68,27 @@ def make_handler(app, token):
                     state = app.state()
                     state['approvals'] = app.store.all('approval')
                     self.reply(redact(state))
+                elif route == '/api/desktop/service':
+                    self.reply({'workspace': str(app.root.resolve()),
+                                'dataPath': str(app.store.root.resolve())})
                 elif route == '/api/processes':
                     self.reply(process_inventory())
+                elif route == '/api/brain/job':
+                    self.reply(app.brain.job(query['id']))
+                elif route == '/api/brain/search':
+                    self.reply(app.brain.search(query.get('project', 'atelier'), query.get('q', '')))
+                elif route == '/api/brain/note':
+                    self.reply(app.brain.read_note(query.get('project', 'atelier'), query.get('path', '')))
                 elif route == '/api/terminal/usage/choices':
                     self.reply(app.native_usage.choices(query['id']))
                 elif route == '/api/files':
                     self.reply(app.files(query.get('project', 'atelier'), query.get('path', '')))
+                elif route == '/api/files/search':
+                    from server.memory import search_project_files
+                    self.reply(search_project_files(app, query.get('project', 'atelier'), query.get('q', ''), query.get('path', '')))
+                elif route == '/api/memory/export':
+                    from server.memory import export_memory
+                    self.reply(export_memory(app, query['id'], query.get('format', 'json')))
                 elif route == '/api/desktop-file':
                     self.reply(desktop_resources(app, query.get('project', 'atelier'), query.get('path', '')))
                 elif route == '/api/commands':
@@ -121,7 +136,7 @@ def make_handler(app, token):
                 elif route in ('/app.js', '/core.js', '/views.js', '/cockpit.js', '/chat.js', '/forms.js', '/workbench.js', '/design.js', '/webchat.js', '/shell.js', '/terminal.js', '/terminal_layout.js', '/agent_dashboard.js', '/agent_workspace.css', '/workspace_chrome.css', '/workspace_panels.js', '/floating_panels.js', '/display.js', '/display.css', '/telegram.js', '/telegram.css', '/vendor/qrcode.js', '/duplica.js', '/duplica_resources.js', '/message_markdown.js', '/duplica_chat.js', '/session_usage.js', '/channels.js', '/api_connections.js', '/channels.css', '/style.css', '/workbench.css', '/icon.svg', '/vendor/logicflow.js', '/vendor/logicflow.css', '/vendor/xterm.js', '/vendor/xterm.css'):
                     path = ROOT / 'web' / route[1:]
                     self.reply(path.read_bytes(), mime=mimetypes.guess_type(path.name)[0] or 'text/plain')
-                elif route in ('/updates.js', '/floating_panels.js', '/workspace_panels.js', '/workspace_chrome.css'):
+                elif route in ('/updates.js', '/updates.css', '/floating_panels.js', '/workspace_panels.js', '/workspace_chrome.css', '/memory.css', '/brain.js', '/brain.css'):
                     path = ROOT / 'web' / route[1:]
                     self.reply(path.read_bytes(), mime=mimetypes.guess_type(path.name)[0] or 'text/plain')
                 elif route == '/favicon.ico':
@@ -141,12 +156,28 @@ def make_handler(app, token):
             try:
                 route = urlparse(self.path).path
                 length = int(self.headers.get('Content-Length', 0))
-                limit = 12 * 1024 * 1024 if route == '/api/attachments/upload' else 1024 * 1024
+                limit = 30 * 1024 * 1024 if route == '/api/brain/import' else 12 * 1024 * 1024 if route == '/api/attachments/upload' else 1024 * 1024
                 if length < 1 or length > limit:
                     raise ValueError('Requête vide ou trop volumineuse.')
                 data = json.loads(self.rfile.read(length))
                 route = urlparse(self.path).path
-                if route == '/api/attachments/upload':
+                if route == '/api/brain/configure':
+                    result = app.brain.save(data)
+                elif route == '/api/brain/discover':
+                    result = app.brain.discover(data.get('projectId', 'atelier'))
+                elif route == '/api/brain/import':
+                    result = app.brain.submit(data)
+                elif route == '/api/brain/export':
+                    result = app.brain.export(data['id'])
+                elif route == '/api/brain/cancel':
+                    result = app.brain.cancel(data['id'])
+                elif route == '/api/brain/retry':
+                    result = app.brain.retry(data['id'])
+                elif route == '/api/brain/watch':
+                    result = app.brain.watch(data.get('projectId', 'atelier'), data['enabled'])
+                elif route == '/api/brain/ask':
+                    result = app.brain.ask(data.get('projectId', 'atelier'), data.get('query', ''))
+                elif route == '/api/attachments/upload':
                     result = app.attachments.upload(data)
                 elif route == '/api/attachments/project':
                     result = app.attachments.import_project(data)
@@ -245,7 +276,7 @@ def make_handler(app, token):
                 elif route == '/api/sessions/interrupt':
                     result = app.interrupt(data['id'])
                 elif route == '/api/sessions/plan':
-                    result = app.approve_plan(data['id'], data.get('accepted') is True)
+                    result = app.approve_plan(data['id'], data.get('accepted') is True, actor='interface', request_id=data.get('requestId'))
                 elif route == '/api/notifications/read':
                     result = app.store.update('notification', data['id'], read=True)
                 elif route == '/api/sessions/resume':
@@ -271,6 +302,8 @@ def make_handler(app, token):
                     result = app.upsert(data['kind'], data['value'])
                 elif route == '/api/designs':
                     result = save_canvas(app, data)
+                elif route == '/api/tariffs/refresh':
+                    result = app.official_tariffs.refresh(force=data.get('force') is True)
                 elif route == '/api/tariffs':
                     result = save_tariff(app, data)
                 elif route == '/api/memory/search':

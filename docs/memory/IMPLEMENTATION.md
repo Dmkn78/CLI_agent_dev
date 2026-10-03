@@ -1,5 +1,110 @@
 # État de l’implémentation — Duplica, 2 octobre 2026
 
+## Une seule application Atelier — 3 octobre 2026
+
+Le développement et l’installation partagent maintenant le même verrou
+natif Atelier, acquis avant tout démarrage de service. Leurs profils privés
+restent distincts. Deuxième ouverture : même fenêtre, restauration si
+minimisée, mode explicitement demandé transmis même pendant le démarrage.
+Les recettes restent isolées et masquées du Dock.
+
+Le lanceur macOS prépare un moteur avec le nom, l’icône et l’identifiant
+Atelier. `npm run desktop`, les deux `.command` et l’ouverture depuis le
+service passent par ce lancement commun. Le service source démarre après
+le verrou avec Python 3.12+ et un port libre ; il s’arrête avec son parent.
+Une adoption de service existant exige la même racine et le même dossier
+de données, prouvés par `/api/desktop/service` authentifié.
+
+Le seul Electron de test orphelin a été arrêté. L’application installée et
+sa session avec file activée sont conservées ; elle reçoit les demandes
+de réouverture. Les sources seront chargées au prochain lancement depuis
+le projet après fermeture de cette instance. Validation : 209 tests backend
+(207 réussis, 2 ignorés), 9 tests JS, signature locale v2 valide, recette native
+de verrou (ancienne/nouvelle instance), vrai shell source/service/PTY fictif
+et réouverture de l’application utilisateur réussis. Aucun prompt réel.
+Voir le [rapport et les preuves](../audit/2026-10-03-single-app.md).
+
+## My Brain : dictées et Obsidian — 3 octobre 2026
+
+Vue My Brain intégrée : audio/texte → API ASR locale facultative → correction
+fidèle par LLM local → JSON validé → Markdown/frontmatter YAML → nouveau fichier
+dans le coffre configuré. Catalogue réel via `/v1/models`, génération via
+`/v1/chat/completions`, notamment LM Studio. Aucun moteur Codex lancé pour ce flux.
+Contexte/glossaire, original conservé, corrections/incertitudes, aperçu/export,
+déduplication, file séquentielle et dossier surveillé activable. Les instructions
+exactes du correcteur sont consultables dans Mon workflow.
+
+Lecture seule par défaut, permission explicite de création dans le coffre,
+export automatique séparé, aucun écrasement ni symlink. Les sources et fichiers
+d'arrivée restent conservés ; reprise explicite après redémarrage. Recherche
+lexicale dans texte/YAML ; réponse locale basée sur cinq notes, avec extraits et
+sources affichés. Pas d'embeddings, de moteur RLCD entraîné ni de certitude inventée.
+
+Validation : 207 tests backend (205 réussis, 2 ignorés), dont 13 My Brain ;
+syntaxe JS/CJS et recette web en Electron isolé, API/audio/coffre fictifs, aux
+largeurs 1500/900/390/300. Aucun modèle réel utilisé. Interface réelle accessible
+sur `http://127.0.0.1:4357/#brain`, stockage privé `.atelier/my-brain-interface`,
+en attente de configuration. API ASR, modèle réel et chemin my_brain restent
+à renseigner ; leur fonctionnement/qualité ne sont pas vérifiés.
+Voir [mise en route](../MY_BRAIN.md) et [rapport](../audit/2026-10-03-my-brain.md).
+
+## Mises à jour : interrupteurs et carte — 3 octobre 2026
+
+La zone des mises à jour desktop utilise une carte sombre arrondie, un statut
+issu du contrôleur, deux interrupteurs terracotta et une progression native.
+Les préférences existantes restent persistantes ; clavier, libellés accessibles
+et focus conservé après changement sont vérifiés. Le téléchargement et le
+redémarrage gardent leurs actions explicites. Les styles sont isolés dans
+`web/updates.css`, servi par le service local.
+
+Validation : 17 tests unitaires mises à jour réussis ; 194 tests backend
+exécutés, 192 réussis et 2 ignorés ; recette Chromium dans Electron avec système
+de mise à jour fictif, quatre largeurs (1500/900/390/300), sans débordement,
+erreur JS ni requête externe. Sources uniquement : application installée et
+installateurs non remplacés. [Rapport](../audit/2026-10-03-updates-ui.md).
+
+## Affinage des en-têtes et accès images — 3 octobre 2026
+
+L’en-tête terminal/panneaux est ramené à 20 px tout en conservant état, tokens
+et icônes. Le bouton trombone **Images** est directement visible dans chaque
+barre Codex et ouvre la section de sélection/collage avec focus ; la session
+existante reste ouverte, les images sont transmises à un nouveau terminal.
+Recette Electron fictive réussie à 1500/900/390 : dimensions20px, icônes12px,
+aucun débordement, paramètres préservés et image passée au PTY fictif.
+Le [rapport](../audit/2026-10-03-compact-terminal-header.md) décrit aussi la
+reconstruction locale distincte, terminée et vérifiée (service figé quatre
+tests, démarrage desktop et echo PTY fictif sans erreur JS). Le lanceur
+`Ouvrir Atelier corrigé.command` ouvre le bundle sous
+build/local-delivery-compact-20261003/dist/mac-arm64/Atelier.app.
+L’installation existante n’est pas remplacée ; fermer cette version avant
+ouverture du nouveau bundle pour éviter sa réactivation par le verrou d’instance.
+
+## Corrections de l’interface — 3 octobre 2026
+
+Les [retours du 3 octobre](../audit/2026-10-03-feedback-fixes.md) sont intégrés
+dans les sources : zoom du chat indépendant 25–200 %, onglets Chat 1/2
+renommables, sélecteur et collage d’images avant lancement Codex --image,
+navigation lisible à toutes les largeurs et infobulles immédiates.
+Les permissions restent read-only/workspace-write et on-request ; les
+arguments sont vérifiés, leur enforcement OS n’a pas fait l’objet d’une
+inférence réelle pendant cette recette.
+
+Canaux : huit invitations vérifiées par l’UI, modèles/efforts conservés,
+Envoyer et lancer, activité individuelle cliquable avec session/appel observé,
+erreurs, tokens cumulés issus des requêtes et interruption. L’activité et les
+contributions publiques ne constituent pas un accès aux pensées privées.
+
+Quatre [skills de test](../audit/2026-10-03-testing-skills.md) ajoutés au projet :
+exploration UI/PC, navigateur, Electron/PTY et accessibilité. Ils sont découverts
+dans le catalogue et validés ; ils ne donnent pas automatiquement des outils PC
+aux agents. Le contrôleur Atelier conserve son périmètre actuel.
+
+Validation : 175 tests backend exécutés, 173 réussis et 2 ignorés ; sept suites
+unitaires JS réussies ; recettes Electron fictives chat/images, canaux (8
+participants) et navigation (1500/900/390/300) réussies. Aucune inférence réelle,
+connexion ChatGPT ou campagne utilisateur ; aucun nouvel installateur publié.
+Le programme installé dans /Applications n’est pas modifié par ces edits source.
+
 ## Accès Windows à Atelier
 
 Le [correctif de lancement](../audit/2026-10-02-atelier-windows-launcher.md)
@@ -294,3 +399,23 @@ Les deux services existants ont répondu HTTP 401 au catalogue sans clé. Atelie
 Correction macOS : `npm run vendor` rétablit le bit exécutable du `spawn-helper` de node-pty. La recette desktop crée elle-même son dossier de preuves ; elle teste aussi le changement oMLX/Splash/OMP/Codex, les ports proposés et les permissions disponibles.
 
 Validation : **61 tests backend réussis**, syntaxe JS/CJS, calculs cockpit et recette Electron avec fournisseur fictif (echo clavier, sortie, sept PTY, drag/resize/zoom/onglets/mobile/fermeture). Pas d'inférence réelle, ni de login ou dépôt ChatGPT. Voir [rapport local macOS](../audit/2026-10-01-macos-local-providers.md).
+
+
+## Connexion initiale ChatGPT intégrée — 1 octobre 2026
+
+L'utilisateur a choisi de garder ChatGPT dans Atelier et de se connecter une fois dans ce navigateur. La vue ChatGPT distingue maintenant l'état Codex observé et la connexion web séparée, explique la première authentification et la conservation du profil. Le parcours intégré reste principal, sans lancer Firefox ni importer sa session. Le stockage privé Electron et la partition persistante `persist:atelier-chatgpt` existaient déjà ; leur usage réel est vérifié par la recette.
+
+L'écran réel « Connectez-vous ou inscrivez-vous » a été ouvert pour l'utilisateur dans le chat intégré. Aucune saisie de credentials ni soumission n'a été effectuée par l'agent. La fenêtre et le formulaire restent en place : pas de rechargement pendant la connexion, les nouveaux libellés apparaîtront au prochain chargement de l'interface. Connexion effective/reprise après connexion toujours non vérifiées.
+
+Validation : 61 tests backend réussis, syntaxe JS, recette desktop fictive et contrôle visuel de la vue ChatGPT. Rapport : [connexion du chat](../audit/2026-10-01-chat-login.md).
+
+
+## Architecture, souvenirs et consommation — 3 octobre 2026
+
+La création depuis le dessin conserve la vue ; ressources et sources de souvenir peuvent être parcourues et recherchées dans le projet nommé. Les commandes du dessin restent accessibles en fenêtre partagée et à 390 px. Les sessions de conception utilisent une intention architecture en lecture seule : une validation importe une nouvelle page avec provenance, sans lancer de tour d’implémentation. Duplica peut réaliser cette validation par clic observé en mode ordinateur, avec permission dédiée et identité du tour ; une issue incertaine n’est pas rejouée. Les plans de code conservent leur permission distincte et le profil de session.
+
+Les propositions JSON sont lisibles dans le détail des agents, avec source brute consultable. Les états du tour et de la tâche sont distincts : fin de tour ne signifie pas tâche accomplie. Les compteurs cumulés et les courbes par fournisseur affichent uniquement les mesures disponibles. Les tarifs API sont actualisés depuis les pages officielles OpenAI/Anthropic, avec correspondance exacte des modèles, cache de 24 h et valeur inconnue explicite.
+
+Les souvenirs créés/modifiés sont sauvegardés en JSON privé `atelier.memory/v1`, avec projet, sujet, raison, dates, validation, provenance et contexte. Export JSON ou Markdown avec en-tête YAML. Les anciens souvenirs restent exportables sans migration destructive ni métadonnées de validation inventées.
+
+Validation finale de l’état partagé : 207 tests backend (205 réussis, 2 ignorés), syntaxe de 75 fichiers JS/CJS, tests cockpit/usage et recettes Electron à fournisseurs fictifs. Duplica a importé le dessin par clic réel observé, avec zéro tour d’implémentation ; le second message a suivi les états running → waiting_plan → ready. Aucune inférence réelle. Le bundle macOS installé n’a pas été remplacé par cette intervention. Voir [rapport, preuves et limites](../audit/2026-10-03-architecture-memory-usage.md).

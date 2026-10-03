@@ -2,6 +2,11 @@
 
 | Besoin | Source canonique |
 |---|---|
+| Une seule application Atelier : identité, lanceurs et instance partagée | [correction et preuves du 3 octobre](../audit/2026-10-03-single-app.md) |
+| Vocaux, LLM local/LM Studio, YAML Obsidian et recherche My Brain | [mise en route et contrat](../MY_BRAIN.md), [rapport et limites](../audit/2026-10-03-my-brain.md) |
+| Architecture, Duplica, souvenirs JSON/YAML, compteurs et tarifs — 3 octobre | [corrections, preuves et limites](../audit/2026-10-03-architecture-memory-usage.md), [demande et huit captures](../references/2026-10-03-architecture-memory-feedback.md) |
+| En-tête terminal minimal et bouton Images visible | [correction et recette du 3 octobre](../audit/2026-10-03-compact-terminal-header.md) |
+| Zoom, images Codex, noms des chats/navigation, canaux et skills de test — 3 octobre | [corrections et limites](../audit/2026-10-03-feedback-fixes.md), [demande/captures](../references/2026-10-03-feedback.md), [skills de test](../audit/2026-10-03-testing-skills.md) |
 | Retrouver et ouvrir Atelier sous Windows | [raccourcis, lanceur et recette réelle](../audit/2026-10-02-atelier-windows-launcher.md) |
 | Poursuite du travail des canaux par Duplica | [mission et passage de travail](../audit/2026-10-02-duplica-channels-handoff.md), [consolidation et tests validés](../audit/2026-10-02-duplica-channels-consolidation.md) |
 | Canaux d’agents, consultants LAYA/CLEF et API locales | [../audit/2026-10-02-agent-channels.md](../audit/2026-10-02-agent-channels.md), [demande et sources](../references/2026-10-02-agent-channels.md) |
@@ -20,6 +25,7 @@
 | Terminal natif, chat dans Atelier, navigation et sept retours desktop | [../references/2026-10-01-desktop-feedback.md](../references/2026-10-01-desktop-feedback.md) |
 | Livraison PTY, navigation et connexions distinctes | [../audit/2026-10-01-desktop-terminals.md](../audit/2026-10-01-desktop-terminals.md) |
 | Precision : grille de vrais terminaux et deux captures | [../references/2026-10-01-terminal-grid-feedback.md](../references/2026-10-01-terminal-grid-feedback.md) |
+| Connexion initiale ChatGPT intégrée et choix utilisateur | [../audit/2026-10-01-chat-login.md](../audit/2026-10-01-chat-login.md) |
 | Correction Agents : vrais CLI et activation locale | [../audit/2026-10-01-native-cli-correction.md](../audit/2026-10-01-native-cli-correction.md) |
 | Orchestration, logs, handoffs, memory | [../references/multi-agent-audit.txt](../references/multi-agent-audit.txt) |
 | Coûts, benchmark, onboarding | [../references/ingenierie_agentique_cout_benchmark_onboarding.md](../references/ingenierie_agentique_cout_benchmark_onboarding.md) |

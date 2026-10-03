@@ -1,4 +1,4 @@
-const {chromium} = require('playwright');
+const {chromium, _electron} = require('playwright');
 const assert = require('node:assert/strict');
 const {spawn} = require('node:child_process');
 const {EventEmitter} = require('node:events');
@@ -51,9 +51,24 @@ async function main() {
   const errors = [], externalRequests = [], calls = {checks: 0, downloads: 0, installs: 0};
   const widths = [1500, 900, 390, 300];
   try {
-    browser = await chromium.launch({headless: true, channel: process.env.ATELIER_BROWSER_CHANNEL || 'chrome'});
-    const context = await browser.newContext({viewport: {width: 1500, height: 980}});
-    page = await context.newPage();
+    const useElectron = process.env.ATELIER_BROWSER_CHANNEL === 'electron';
+    if (useElectron) {
+      const env = {...process.env};
+      delete env.ELECTRON_RUN_AS_NODE;
+      browser = await _electron.launch({executablePath: require('electron'),
+        args: [path.join(ROOT, 'tests', 'channels_feedback_window.cjs')], env});
+      page = await browser.firstWindow();
+    } else {
+      browser = await chromium.launch({headless: true, channel: process.env.ATELIER_BROWSER_CHANNEL || 'chrome'});
+      const context = await browser.newContext({viewport: {width: 1500, height: 980}});
+      page = await context.newPage();
+    }
+    const setViewport = async width => {
+      if (useElectron) {
+        await browser.evaluate(({BrowserWindow}, width) => BrowserWindow.getAllWindows()[0].setContentSize(width, 980), width);
+        await page.waitForFunction(width => innerWidth === width, width);
+      } else await page.setViewportSize({width, height: 980});
+    };
     page.setDefaultTimeout(15000);
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/*', async route => {
@@ -105,19 +120,27 @@ async function main() {
           return () => { window.receiveFixtureUpdate = null; };
         },
         onZoomShortcut: subscribe, onLaunchMode: subscribe, onTerminalData: subscribe,
-        onTerminalExit: subscribe, onBrowserState: subscribe, showBrowser: () => {},
+        onTerminalExit: subscribe, onBrowserState: subscribe, onBrowserZoomShortcut: subscribe,
+        onTerminalImagePaste: subscribe, showBrowser: () => {},
       };
     });
     await page.goto(fixture.origin + '/#settings');
     const panel = page.locator('#desktop-updates');
     await panel.getByRole('heading', {name: 'Atelier 0.3.0', exact: true}).waitFor();
-    const checkAutomatically = panel.locator('[data-update-preference="checkAutomatically"]');
-    const downloadAutomatically = panel.locator('[data-update-preference="downloadAutomatically"]');
+    const checkAutomatically = panel.getByRole('switch', {name: 'Vérification automatique', exact: true});
+    const downloadAutomatically = panel.getByRole('switch', {name: 'Téléchargement automatique', exact: true});
     assert.equal(await checkAutomatically.isChecked(), true);
     assert.equal(await downloadAutomatically.isChecked(), false);
     assert.equal(await panel.locator('[data-action="updates-download"]').count(), 0);
     assert.equal(await panel.locator('[data-action="updates-install"]').count(), 0);
-    await checkAutomatically.setChecked(false);
+    await setViewport(1500);
+    await panel.screenshot({path: path.join(directory, 'updates-initial-1500.png')});
+    await checkAutomatically.focus();
+    await page.keyboard.press('Space');
+    await page.waitForFunction(() => desktopUpdateStatus?.preferences.checkAutomatically === false);
+    assert.equal(await checkAutomatically.evaluate(input => input === document.activeElement), true, 'Focus survives the preference update');
+    await page.keyboard.press('Tab');
+    assert.equal(await downloadAutomatically.evaluate(input => input === document.activeElement), true, 'Both switches are keyboard accessible');
     await downloadAutomatically.setChecked(true);
     await page.waitForFunction(() => desktopUpdateStatus?.preferences.downloadAutomatically === true);
     await page.reload();
@@ -127,6 +150,11 @@ async function main() {
     await downloadAutomatically.setChecked(false);
     await page.waitForFunction(() => desktopUpdateStatus?.preferences.downloadAutomatically === false);
     assert.deepEqual(calls, {checks: 0, downloads: 0, installs: 0});
+    for (const width of widths) {
+      await setViewport(width);
+      await panel.screenshot({path: path.join(directory, `updates-idle-${width}.png`)});
+    }
+    await setViewport(1500);
 
     await panel.getByRole('button', {name: 'Rechercher une mise à jour', exact: true}).click();
     await panel.getByText('Connexion indisponible — recette fictive', {exact: true}).waitFor();
@@ -139,12 +167,13 @@ async function main() {
     await page.waitForFunction(() => desktopUpdateStatus?.phase === 'downloading');
     updater.emit('download-progress', {percent: 37});
     await panel.getByText('Téléchargement : 37 %', {exact: true}).waitFor();
+    assert.equal(await panel.getByRole('progressbar').getAttribute('value'), '37');
     assert.equal(await panel.locator('[data-action="updates-download"]').count(), 0);
     assert.equal(await panel.locator('[data-action="updates-install"]').count(), 0);
     assert.deepEqual(calls, {checks: 2, downloads: 1, installs: 0});
 
     for (const width of widths) {
-      await page.setViewportSize({width, height: 980});
+      await setViewport(width);
       const overflow = await page.evaluate(() => ({
         document: document.documentElement.scrollWidth > innerWidth + 1,
         panel: document.querySelector('#desktop-updates').scrollWidth > document.querySelector('#desktop-updates').clientWidth + 1,
@@ -169,11 +198,12 @@ async function main() {
     assert.deepEqual(errors, []);
     assert.deepEqual(externalRequests, []);
     const proof = {passed: true, fixture: true, realUpdaterController: true, realInstaller: false,
-      externalRequests, widths, preferences: true, progress: true, explicitActions: true,
+      externalRequests, widths, preferences: true, switches: true, keyboard: true, focusPreserved: true, progress: true, explicitActions: true,
       networkRetry: true, installerRetry: true, calls, errors, directory};
     fs.writeFileSync(path.join(EVIDENCE_DIRECTORY, 'result.json'), JSON.stringify(proof, null, 2));
     console.log('Updates browser acceptance passed: preferences, progress, explicit actions, error recovery and widths ' + widths.join('/'));
   } catch (error) {
+    console.error('Page errors:', errors);
     if (page && !page.isClosed()) await page.screenshot({path: path.join(directory, 'failure.png'), fullPage: true});
     throw error;
   } finally {

@@ -383,6 +383,11 @@ document.addEventListener("submit", async (event) => {
   if (submit) submit.disabled = true;
   try {
     switch (form.dataset.form) {
+      case 'brain-config':
+      case 'brain-import':
+      case 'brain-search':
+        await handleBrainSubmit(form, value);
+        break;
       case 'api-connection':
         await submitApiConnection(form,value);
         break;
@@ -407,6 +412,7 @@ document.addEventListener("submit", async (event) => {
         await handleDuplicaSubmit(form,fd,value);
         break;
       case "agent": {
+        const keepArchitecture = ['overview','design'].includes(view);
         const data = {
           ...value,
           projectId,
@@ -444,14 +450,15 @@ document.addEventListener("submit", async (event) => {
           selectedAgents = [s.id];
           agentLayout = value.executionMode === 'chat' ? 'chat' : 'panes';
           if (value.executionMode === 'chat') selectedChatId = s.id;
-          view = "agents";
+          if (!keepArchitecture) view = "agents";
         } else {
           await api("workflows", data);
           agentLayout = "graph";
-          view = "agents";
+          if (!keepArchitecture) view = "agents";
         }
         $("#modal").close();
         await refresh(true);
+        if (keepArchitecture) toast('Agent créé. Le dessin reste ouvert ; la session est accessible dans Agents.');
         break;
       }
       case 'terminal': {
@@ -486,11 +493,13 @@ document.addEventListener("submit", async (event) => {
           .map((t) => t.trim())
           .filter(Boolean);
         value.core = fd.has("core");
+        const memoryProjectId = value.memoryProjectId || projectId;
+        delete value.memoryProjectId;
         await api("save", {
           kind: "memory",
           value: {
             ...value,
-            projectId,
+            projectId: memoryProjectId,
             ...(form.dataset.id ? { id: form.dataset.id } : {}),
           },
         });
@@ -698,5 +707,6 @@ installShellActions();
 installDisplayActions();
 installApiConnectionActions();
 installChannelActions();
+installBrainActions();
 refresh(true);
 setInterval(() => refresh(), 1800);

@@ -18,6 +18,7 @@ async function main() {
     const errors=[];
     page.on('pageerror',error => errors.push(error.message));
     await page.getByRole('heading',{name:'ChatGPT',exact:true}).waitFor();
+    assert.ok(await page.locator('.browser-session-notice').innerText().then(text => text.includes('Codex est connecté.') && text.includes('Connecte-toi une fois')));
     console.log('Desktop local UI ready.');
     await application.evaluate(({BrowserWindow}) => {
       globalThis.dragProof=[];
@@ -37,14 +38,16 @@ async function main() {
     await page.evaluate(() => { sidebarCollapsed=false; browserResourcesCollapsed=false; chatFocused=false; applyShellLayout(); });
     await page.getByRole('button',{name:'Nouveau chat',exact:true}).first().click();
     await page.locator('.browser-tab').waitFor();
-    const proof=await application.evaluate(({BrowserWindow}) => {
+    const proof=await application.evaluate(({BrowserWindow,session}) => {
       const view=BrowserWindow.getAllWindows()[0].contentView.children.find(view => view.webContents);
       const preferences=view.webContents.getLastWebPreferences();
-      return {bounds:view.getBounds(),nodeIntegration:preferences.nodeIntegration,sandbox:preferences.sandbox,contextIsolation:preferences.contextIsolation,preload:preferences.preload};
+      return {bounds:view.getBounds(),nodeIntegration:preferences.nodeIntegration,sandbox:preferences.sandbox,contextIsolation:preferences.contextIsolation,persistentSession:view.webContents.session === session.fromPartition('persist:atelier-chatgpt'),preload:preferences.preload};
     });
     assert.equal(proof.nodeIntegration,false);
     assert.equal(proof.sandbox,true);
     assert.equal(proof.contextIsolation,true);
+    assert.equal(proof.persistentSession,true);
+    assert.equal(proof.persistentSession,true);
     assert.ok(!proof.preload);
     assert.ok(proof.bounds.width > 500 && proof.bounds.height > 400);
     console.log('Desktop embedded browser isolation passed.');

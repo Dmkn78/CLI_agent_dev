@@ -1,28 +1,27 @@
-const {app,BrowserWindow,WebContentsView,ipcMain,shell,nativeImage,dialog,Menu}=require('electron');
+const {app,BrowserWindow,WebContentsView,ipcMain,shell,nativeImage,dialog,Menu,clipboard}=require('electron');
 const {registerTerminals,closeTerminals}=require('./pty.cjs');
 const {registerComputerController}=require('./computer.cjs');
 const {registerDisplay,bindZoomShortcuts}=require('./display.cjs');
-const {DesktopService}=require('./service.cjs');
+const {DesktopService,SourceDesktopService}=require('./service.cjs');
 const {UpdateController}=require('./updates.cjs');
+const {modeFromArgs,configureIdentity,applyReadyIdentity,createActivationController}=require('./identity.cjs');
 const path=require('node:path');
+const fs=require('node:fs/promises');
+const {randomUUID}=require('node:crypto');
 let origin=new URL(process.env.ATELIER_URL || 'http://127.0.0.1:4317/');
 if (origin.protocol !== 'http:' || !['127.0.0.1','localhost'].includes(origin.hostname)) throw new Error('Serveur Atelier local requis.');
 origin.pathname='/'; origin.search=''; origin.hash='';
 let mainWindow, activeBrowser=null, nonce=null;
 let service=null, updates=null, quitting=false;
 const browsers=new Map();
-app.setName('Atelier');
 const desktopTest=process.env.ATELIER_DESKTOP_TEST === '1';
-if (desktopTest && process.env.ATELIER_TEST_DATA) app.setPath('userData',path.resolve(process.env.ATELIER_TEST_DATA));
-else if (!app.isPackaged) app.setPath('userData',path.resolve(__dirname,'../.atelier',desktopTest ? 'desktop-fixture' : 'desktop-profile'));
-else app.setPath('userData',path.join(app.getPath('appData'),'Atelier'));
+const requestedMode=modeFromArgs(process.argv);
+const identity=configureIdentity(app,{rootPath:path.resolve(__dirname,'..'),desktopTest,testData:process.env.ATELIER_TEST_DATA,mode:requestedMode});
+const activation=createActivationController({app,getWindow:() => mainWindow,desktopTest});
 const securePreferences={sandbox:true,contextIsolation:true,nodeIntegration:false};
-if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
-else app.on('second-instance',(_event,argv) => {
-  if (!mainWindow) return;
-  mainWindow.show(); mainWindow.focus();
-  mainWindow.webContents.send('desktop:mode',argv.find(arg => /^--atelier-(chat|code|project)$/.test(arg))?.slice(10) || 'chat');
-});
+if (!identity.primary) { app.quit(); process.exit(0); }
+app.on('second-instance',(_event,argv,_directory,data) => activation.request(data?.mode || modeFromArgs(argv)));
+app.on('activate',() => activation.request());
 async function request(route,data) {
   for (let attempt=0; attempt < 2; attempt++) {
     const response=await fetch(new URL(route,origin),{method:data === undefined ? 'GET' : 'POST',headers:{'X-Atelier-Token':nonce,'Content-Type':'application/json'},body:data === undefined ? undefined : JSON.stringify(data),signal:AbortSignal.timeout(15000)});
@@ -56,13 +55,20 @@ function secureNavigation(contents) {
   contents.on('did-create-window',window => secureNavigation(window.webContents));
 }
 app.whenReady().then(async () => {
+  const iconPath=app.isPackaged ? path.join(process.resourcesPath,'atelier-icon.png') : path.join(__dirname,'../packaging/icon.png');
+  applyReadyIdentity({app,Menu,nativeImage,iconPath,desktopTest});
   if (app.isPackaged) {
     service=new DesktopService({runtimePath:path.join(process.resourcesPath,'runtime'),dataPath:app.getPath('userData'),
       version:app.getVersion(),desktopExecutable:process.execPath,skipDiscovery:desktopTest,
       onFailure:error => { dialog.showErrorBox('Atelier — service interrompu',error.message); app.quit(); }});
     origin=await service.start();
+  } else if (process.env.ATELIER_SOURCE_SERVICE === '1' && !process.env.ATELIER_URL) {
+    service=new SourceDesktopService({rootPath:path.resolve(__dirname,'..'),skipDiscovery:desktopTest,
+      dataPath:desktopTest ? path.join(app.getPath('userData'),'service-data') : undefined,
+      onFailure:error => { dialog.showErrorBox('Atelier — service interrompu',error.message); app.quit(); }});
+    origin=await service.start();
   }
-  const {autoUpdater}=require('electron-updater');
+  const autoUpdater=desktopTest ? new (require('node:events').EventEmitter)() : require('electron-updater').autoUpdater;
   updates=new UpdateController({updater:autoUpdater,preferencesPath:path.join(app.getPath('userData'),'updates.json'),
     currentVersion:app.getVersion(),available:app.isPackaged && !desktopTest,
     onChange:status => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('updates:state',status); },
@@ -79,20 +85,23 @@ app.whenReady().then(async () => {
       autoUpdater.quitAndInstall(false,true);
       return true;
     }});
-  if (process.platform !== 'darwin') Menu.setApplicationMenu(null);
   mainWindow=new BrowserWindow({show:process.env.ATELIER_DESKTOP_TEST !== '1',width:1500,height:980,minWidth:700,minHeight:580,autoHideMenuBar:true,backgroundColor:'#1d1d1c',title:'Atelier',webPreferences:{...securePreferences,preload:path.join(__dirname,'preload.cjs')}});
   bindZoomShortcuts(mainWindow.webContents,() => mainWindow);
   mainWindow.webContents.on('will-navigate',(event,url) => { if (new URL(url).origin !== origin.origin) event.preventDefault(); });
   mainWindow.webContents.setWindowOpenHandler(({url}) => { if (new URL(url).protocol === 'https:') shell.openExternal(url); return {action:'deny'}; });
   await refreshNonce();
-  const requestedMode=process.argv.find(arg => /^--atelier-(chat|code|project)$/.test(arg))?.slice(10);
   const mode=requestedMode || (app.isPackaged ? 'settings' : 'chat');
   await mainWindow.loadURL(new URL(mode === 'settings' ? '#settings' : mode === 'code' ? '#terminal' : '#webchat',origin).href);
   updates.start();
   if (requestedMode) mainWindow.webContents.send('desktop:mode',mode);
+  activation.ready();
   const stopComputer=registerComputerController({getWindow:() => mainWindow,request,fixture:process.env.ATELIER_DESKTOP_TEST === '1'});
   mainWindow.on('closed',() => { stopComputer(); closeTerminals(); for (const view of browsers.values()) if (!view.webContents.isDestroyed()) view.webContents.close(); browsers.clear(); });
-}).catch(async error => { dialog.showErrorBox('Atelier — démarrage impossible',error.message); await service?.stop(); app.quit(); });
+}).catch(async error => {
+  if (desktopTest) console.error('Atelier — démarrage impossible:',error);
+  else dialog.showErrorBox('Atelier — démarrage impossible',error.message);
+  await service?.stop(); app.quit();
+});
 app.on('before-quit',event => {
   updates?.stop();
   if (!service || quitting) return;
@@ -111,9 +120,12 @@ ipcMain.handle('browser:create',async (event,id) => {
   if (browsers.size >= 12 || browsers.has(id)) throw new Error('Limite : 12 onglets.');
   const view=new WebContentsView({webPreferences:{...securePreferences,partition:'persist:atelier-chatgpt'}});
   view.webContents.setZoomFactor(mainWindow.webContents.getZoomFactor());
-  bindZoomShortcuts(view.webContents,() => mainWindow);
+  bindZoomShortcuts(view.webContents,() => mainWindow,direction => mainWindow?.webContents.send('browser:zoom-shortcut',{id,direction}));
   view.webContents.on('did-finish-load',() => {
-    if (mainWindow && !mainWindow.isDestroyed()) view.webContents.setZoomFactor(mainWindow.webContents.getZoomFactor());
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      view.webContents.setZoomFactor(mainWindow.webContents.getZoomFactor() * (view.atelierZoomFactor || 1));
+      if (activeBrowser && activeBrowser !== view && !activeBrowser.webContents.isDestroyed()) activeBrowser.webContents.setZoomFactor(mainWindow.webContents.getZoomFactor() * (activeBrowser.atelierZoomFactor || 1));
+    }
   });
   view.webContents.session.setPermissionRequestHandler((_contents,_permission,callback) => callback(false));
   view.webContents.session.setPermissionCheckHandler(() => false);
@@ -126,6 +138,7 @@ ipcMain.handle('browser:create',async (event,id) => {
   view.webContents.on('did-start-loading',() => publish());
   view.webContents.on('did-stop-loading',() => publish());
   view.webContents.on('did-navigate-in-page',() => publish());
+  view.webContents.on('page-title-updated',() => publish());
   view.webContents.on('did-fail-load',(_event,code,description,_url,isMainFrame) => { if (isMainFrame && code !== -3) publish(description); });
   // Do not await navigation: login/network failures must not freeze local controls.
   view.webContents.loadURL(process.env.ATELIER_DESKTOP_TEST === '1' ? 'about:blank' : 'https://chatgpt.com/').catch(() => {});
@@ -143,7 +156,10 @@ ipcMain.on('browser:show',(event,id) => {
   const view=id ? browsers.get(id) : null;
   if (view === activeBrowser) return;
   hideBrowser();
-  if (view) { mainWindow.contentView.addChildView(view); activeBrowser=view; }
+  if (view) {
+    mainWindow.contentView.addChildView(view); activeBrowser=view;
+    view.webContents.setZoomFactor(mainWindow.webContents.getZoomFactor() * (view.atelierZoomFactor || 1));
+  }
 });
 ipcMain.on('browser:bounds',(event,bounds) => {
   trusted(event);
@@ -171,6 +187,33 @@ ipcMain.handle('browser:navigate',(event,id,action) => {
   else if (action === 'forward' && contents.navigationHistory.canGoForward()) contents.navigationHistory.goForward();
   else if (action === 'reload') contents.reload();
   else if (action === 'home') contents.loadURL('https://chatgpt.com/');
+});
+ipcMain.handle('browser:zoom',(event,id,percent) => {
+  trusted(event); browserId(id);
+  const view=browsers.get(id);
+  if (!view || view.webContents.isDestroyed()) throw new Error('Onglet fermé.');
+  if (!Number.isFinite(percent) || percent < 25 || percent > 200) throw new Error('Zoom du chat invalide.');
+  view.atelierZoomFactor=percent/100;
+  view.webContents.setZoomFactor(mainWindow.webContents.getZoomFactor() * view.atelierZoomFactor);
+  return percent;
+});
+ipcMain.handle('terminal:images-pick',async event => {
+  trusted(event);
+  const result=await dialog.showOpenDialog(mainWindow,{title:'Joindre des images à Codex',properties:['openFile','multiSelections'],filters:[{name:'Images',extensions:['png','jpg','jpeg','webp']}]});
+  if (!result.canceled && result.filePaths.length > 12) throw new Error('Choisis au maximum 12 images.');
+  return result.canceled ? [] : result.filePaths;
+});
+ipcMain.handle('terminal:image-paste',async event => {
+  trusted(event);
+  const image=clipboard.readImage();
+  if (image.isEmpty()) throw new Error('Le presse-papiers ne contient pas d’image.');
+  const png=image.toPNG();
+  if (png.length > 8*1024*1024) throw new Error('Image trop volumineuse (8 Mo maximum).');
+  const directory=path.join(app.getPath('userData'),'terminal-images');
+  await fs.mkdir(directory,{recursive:true});
+  const target=path.join(directory,randomUUID()+'.png');
+  await fs.writeFile(target,png,{mode:0o600});
+  return target;
 });
 ipcMain.handle('project:pick',async event => {
   trusted(event);

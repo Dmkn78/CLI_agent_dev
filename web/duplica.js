@@ -5,14 +5,14 @@ const duplicaMissionLabels={supervising:'Supervision',testing:'Recette en cours'
   needs_evidence:'Preuves manquantes',waiting_user:'Décision nécessaire',interrupted:'Interrompue'};
 const duplicaPermissionLabels={workspace_read:'Lire le projet',workspace_write:'Modifier le projet',run_tests:'Exécuter les tests',run_build:'Compiler',
   run_local_application:'Démarrer l’application locale',continue_agent:'Relancer la mission existante',answer_known_question:'Répondre aux questions connues',
-  approve_plan:'Valider un plan',computer_control:'Observer et contrôler Atelier',keyboard_mouse:'Utiliser la souris et le clavier',browser_control:'Tester dans le navigateur local',
+  approve_plan:'Valider un plan dans les permissions de l’agent',approve_architecture:'Importer une proposition d’architecture',computer_control:'Observer et contrôler Atelier',keyboard_mouse:'Utiliser la souris et le clavier',browser_control:'Tester dans le navigateur local',
   install_project_dependencies:'Installer les dépendances du projet',git_status:'Lire Git status',git_diff:'Lire Git diff',git_commit:'Créer un commit',git_push:'Pousser sur Git',
   production_deploy:'Déployer en production',public_publish:'Publier',payment:'Payer',read_secrets:'Lire des secrets',send_private_data:'Transmettre des données privées',
   destructive_system_operation:'Opération système destructrice',unknown:'Action non reconnue'};
 const duplicaEventLabels={start:'Supervision activée',pause:'Supervision suspendue',stop:'Duplica arrêté',take_control:'Contrôle repris',
   configured:'Politique enregistrée',scope_changed:'Périmètre ajusté',context_saved:'Contexte mémorisé',decision_saved:'Décision mémorisée',
   permission_resolved:'Permission traitée',question_answered:'Réponse donnée',user_required:'Décision utilisateur nécessaire',
-  mission_configured:'Mission confiée',verification_started:'Recette démarrée',verification_finished:'Résultat de recette',
+  plan_resolved:'Proposition validée selon la délégation',mission_configured:'Mission confiée',verification_started:'Recette démarrée',verification_finished:'Résultat de recette',
   bug_observed:'Problème observé',agent_continued:'Agent relancé',task_completed:'Mission vérifiée',watchdog:'Agent à inspecter',
   recovery:'Reprise après redémarrage',verification_superseded:'Critères de recette redéfinis',user_answer:'Décision reçue',computer_action:'Action sur le PC',error:'Erreur de supervision'};
 
@@ -39,7 +39,7 @@ function renderDuplicaIndicator() {
 function duplicaRequestCard(request) {
   const approval=state.approvals.find(approval => approval.id === request.detail?.approvalId);
   return `<article class="duplica-request"><h3>${esc(request.title)}</h3><p>${esc(request.detail?.reason || request.detail?.verdict?.reason || '')}</p>
-    ${approval ? '<p class="muted small">La demande détaillée est affichée dans les accords ci-dessous.</p>' : request.detail?.category ?
+    ${request.detail?.planSessionId ? `<div>${request.detail.mode !== 'deny' ? btn('duplica-resolve',request.detail.planCategory === 'approve_architecture' ? 'Valider & importer' : 'Valider le plan','check','primary',`data-id="${esc(request.id)}" data-accepted="true"`) : ''}${btn('duplica-resolve','Refuser','close','secondary',`data-id="${esc(request.id)}" data-accepted="false"`)}${btn('open-agent','Lire la proposition','external','secondary',`data-id="${esc(request.sessionId)}"`)}</div>` : approval ? '<p class="muted small">La demande détaillée est affichée dans les accords ci-dessous.</p>' : request.detail?.category ?
       `<div>${request.detail.mode === 'deny' ? btn('duplica-permissions','Modifier la politique','shield','secondary') : btn('duplica-resolve','Autoriser cette recette','check','primary',`data-id="${esc(request.id)}" data-accepted="true"`)}${btn('duplica-resolve','Refuser','','secondary',`data-id="${esc(request.id)}" data-accepted="false"`)}</div>` :
       btn('open-agent','Inspecter la session','external','secondary',`data-id="${esc(request.sessionId)}"`)}</article>`;
 }
@@ -89,7 +89,7 @@ function duplicaPermissionsModal() {
   modal('Permissions Duplica','Chaque décision automatique conserve la règle qui l’autorise.',
     `<form data-form="duplica-permissions"><div class="modal-body">${select('Mode d’intervention','interactionMode',[['auto','Interface si le desktop est connecté, sinon backend'],['computer','Contrôle de l’interface obligatoire'],['backend','Sessions outillées uniquement']],settings.interactionMode)}
       <div class="duplica-permission-grid">${Object.entries(settings.permissions).map(([category,mode]) => select(duplicaPermissionLabels[category], 'permission_'+category,
-        category === 'destructive_system_operation' ? [['deny','Interdit']] : ['git_push','production_deploy','public_publish','payment','read_secrets','send_private_data','unknown','approve_plan'].includes(category) ? [['ask','Me demander'],['deny','Interdit']] : [['auto','Délégué'],['ask','Me demander'],['deny','Interdit']], mode)).join('')}</div>
+        category === 'destructive_system_operation' ? [['deny','Interdit']] : ['git_push','production_deploy','public_publish','payment','read_secrets','send_private_data','unknown'].includes(category) ? [['ask','Me demander'],['deny','Interdit']] : [['auto','Délégué'],['ask','Me demander'],['deny','Interdit']], mode)).join('')}</div><p class="muted small">La supervision applique ces choix. Valider un plan conserve le profil lecture seule ou écriture projet de l’agent ; les commandes et permissions restent contrôlées.</p>
       ${field('Silence avant alerte (secondes)','watchdogSeconds',settings.watchdogSeconds,'number','min="30" max="3600"')}
       <label class="check-option"><input type="checkbox" name="telegramEnabled" ${settings.telegramEnabled ? 'checked' : ''} ${duplicaData().telegram.configured ? '' : 'disabled'}><span>Activer le relais Telegram associé</span></label><p class="muted small">Créez et associez votre bot depuis l’onglet Telegram de Duplica.</p></div>${formFooter('Enregistrer les permissions')}</form>`,true);
 }

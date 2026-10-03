@@ -427,6 +427,62 @@ class ChannelTests(unittest.TestCase):
         self.wait()
         self.assertEqual(self.summary(channel_id)['status'], 'ready_for_review')
 
+    def test_participant_lifecycle_is_public_and_stop_rejects_late_status(self):
+        channel_id = self.channel()
+        participant = self.participant(channel_id)
+        entered, release = threading.Event(), threading.Event()
+
+        def reply(current, messages, purpose):
+            self.hub.participant_activity(current, 'responding', sessionId='observed-native-session',
+                                          reasoning='PRIVATE_REASONING')
+            entered.set()
+            release.wait(3)
+            self.hub.participant_activity(current, 'completed')
+            return {'text': 'Contribution tardive.'}
+
+        self.app.reply = reply
+        self.hub.start(channel_id)
+        self.assertTrue(entered.wait(2))
+        activity = self.hub.snapshot()['participants'][0]['activity']
+        self.assertEqual(activity['status'], 'responding')
+        self.assertEqual(activity['sessionId'], 'observed-native-session')
+        self.assertNotIn('PRIVATE_REASONING', json.dumps(self.hub.snapshot()))
+        try:
+            self.hub.stop(channel_id)
+            self.assertEqual(self.hub.snapshot()['participants'][0]['activity']['status'], 'stopped')
+        finally:
+            release.set()
+            self.wait()
+        self.assertEqual(self.hub.snapshot()['participants'][0]['activity']['status'], 'stopped')
+        self.assertFalse(self.hub.snapshot()['messages'])
+
+    def test_usage_counts_native_api_interrupted_and_unknown_calls_once(self):
+        channel_id = self.channel()
+        self.participant(channel_id)
+        self.app.store.put('session', {'id': 'native', 'channelId': channel_id})
+        for identifier, details in [
+            ('native-call', {'sessionId': 'native', 'status': 'completed', 'usage': {'totalTokens': 10}}),
+            ('api-call', {'channelId': channel_id, 'status': 'interrupted', 'usage': {'totalTokens': 3}}),
+            ('unknown-call', {'channelId': channel_id, 'status': 'failed', 'usage': None}),
+            ('other-call', {'channelId': 'other', 'status': 'completed', 'usage': {'totalTokens': 1000}}),
+        ]:
+            self.app.store.put('request', {'id': identifier, **details})
+        usage = self.summary(channel_id)['usage']
+        self.assertEqual(usage['total']['totalTokens'], 13)
+        self.assertEqual(usage['partialFields'], ['totalTokens'])
+
+    def test_failed_participant_has_individual_error_and_preserved_configuration(self):
+        channel_id = self.channel()
+        participant = self.hub.add_participant(channel_id, {'name': 'Tester', 'role': 'agent',
+            'configuration': {'runtime': 'codex', 'model': 'fixture', 'effort': 'high'}})
+        self.app.reply = lambda *args: (_ for _ in ()).throw(ValueError('Modèle indisponible.'))
+        self.hub.start(channel_id)
+        self.wait()
+        current = self.hub.snapshot()['participants'][0]
+        self.assertEqual(current['configuration'], participant['configuration'])
+        self.assertEqual(current['activity']['status'], 'failed')
+        self.assertIn('indisponible', current['activity']['error'])
+
     def test_prepare_task_is_idempotent_review_only_and_recovers_missing_link(self):
         channel_id = self.channel()
         participant = self.participant(channel_id)

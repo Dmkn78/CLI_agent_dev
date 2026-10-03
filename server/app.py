@@ -11,7 +11,9 @@ from pathlib import Path
 
 from .codex import CodexClient, CodexError
 from .memory_mcp import search_memories
+from .memory import normalize_memory, persist_memory
 from .store import Store, now, redact, uid
+from .official_tariffs import OfficialTariffs
 from .omp import OmpClient, discover_models
 from .omp_session import OmpSession, workspace_file
 from .terminal import prepare_omp, prepare_codex, prepare_claude, prepare_opencode, prepare_local, launch_terminal
@@ -27,6 +29,8 @@ from .channels import ChannelHub
 from .resources import AttachmentLibrary
 from .slash_commands import SlashCommands
 from .runtime import memory_command
+from .architecture_proposal import is_architecture, import_proposal
+from .brain import Brain
 
 IGNORED = {'.git', '.atelier', '.env', '.aws', '.ssh', '.codex', 'node_modules', '__pycache__', '.DS_Store'}
 MAX_WORKFLOW_WORKERS = 8
@@ -37,6 +41,7 @@ class Application:
         self.root = Path(root).resolve()
         self.store = Store(data or self.root / '.atelier')
         self.native_usage = NativeUsage(self)
+        self.official_tariffs = OfficialTariffs(self.store)
         self.clients = {}
         self.workflow_threads = set()
         self.done = {}
@@ -86,6 +91,7 @@ class Application:
         self.api_connections = ApiConnections(self)
         self.channel_runtime = ChannelRuntime(self)
         self.channels = ChannelHub(self)
+        self.brain = Brain(self)
 
     def channel_reply(self, participant, public_messages, purpose):
         return self.channel_runtime.reply(participant, public_messages, purpose)
@@ -192,9 +198,10 @@ class Application:
                           *self.local_providers,
                           {'id': 'claude', 'name': 'Claude Code', 'installed': bool(shutil.which('claude')), 'supported': False},
                           {'id': 'local', 'name': 'Modèles locaux', 'installed': bool(shutil.which('ollama')), 'supported': False}],
+            'officialPricing': self.official_tariffs.snapshot(),
             'events': self.store.latest_events(), 'root': str(self.root), 'duplica': self.duplica.snapshot(),
             'nativeSessions': self.store.all('nativeSession'), 'nativeSubagents': self.store.all('nativeSubagent'), 'apiConnections': self.api_connections.snapshot(),
-            'discussions': self.channels.snapshot()}
+            'discussions': self.channels.snapshot(), 'brain': self.brain.snapshot()}
         for session in state['sessions']:
             client = self.clients.get(session['id'])
             process = getattr(client, 'process', None)
@@ -273,6 +280,9 @@ class Application:
         return text[:4000]
 
     def new_session(self, data, start=True):
+        data = dict(data)
+        if data.get('purpose') == 'architecture':
+            data.update(executionMode='chat', sandbox='read-only', startWork=False, planMode=True)
         if data.get('duplicaEnabled') is not None and not isinstance(data['duplicaEnabled'], bool):
             raise ValueError('Activation Duplica invalide.')
         project = self.project(data.get('projectId', 'atelier'))
@@ -296,7 +306,8 @@ class Application:
                        consumer=data.get('consumer') or 'session', workflowRole=data.get('workflowRole'), executionMode=execution_mode,
                        contextFiles=data.get('contextFiles', []), workEnabled=bool(data.get('startWork')) and execution_mode == 'code' and not data.get('parentId'),
                        preferredTaskId=data.get('taskId'), initialMissionSent=False,
-                       planMode=execution_mode == 'code' and bool(data.get('planMode', not data.get('parentId'))),
+                       purpose=data.get('purpose', 'work'),
+                       planMode=data.get('purpose') == 'architecture' or execution_mode == 'code' and bool(data.get('planMode', not data.get('parentId'))),
                        sendInitialMission=bool(data.get('sendInitialMission')),
                        planningStage='diagnosis', totalTurnDurationMs=None)
         read_context_files(self, session, session['contextFiles'])
@@ -464,6 +475,13 @@ class Application:
             for approval in self.store.all('approval'):
                 if approval['sessionId'] == id:
                     self.store.delete('approval', approval['id'])
+            if not planning and not session.get('parentId') and not session.get('workEnabled') and session.get('taskId'):
+                task = self.store.get('task', session['taskId'])
+                if task['status'] == 'running' and not task.get('claimedBy') and task.get('assigneeId') == id:
+                    self.store.update('task', task['id'], status='review' if status == 'completed' else 'todo',
+                                      lastAgentId=id, validation='UNVERIFIED', updatedAt=now())
+                    self.store.event('task.review_requested' if status == 'completed' else 'task.released',
+                                     {'taskId': task['id'], 'ownerId': id, 'source': 'manual-session'}, id, session['projectId'])
         elif method == 'item/completed' and params.get('item', {}).get('type') in ('agentMessage', 'plan'):
             item = params['item']
             with self.store.lock:
@@ -507,6 +525,10 @@ class Application:
             s = self.store.get('session', id)
             if s['status'] != 'ready':
                 raise ValueError('Attends que l’agent soit prêt.')
+            if is_architecture(s):
+                # Repair existing drawing sessions that went through the former code-plan flow.
+                s = self.store.update('session', id, purpose='architecture', executionMode='chat', sandbox='read-only',
+                                      workEnabled=False, planMode=True, planningStage='diagnosis')
             attachments = self.attachments.selected(s['projectId'], attachment_ids or [])
             attached_text, images = self.attachments.prompt_content(attachments)
             if images and s.get('runtime', 'codex') != 'codex':
@@ -519,7 +541,8 @@ class Application:
             if isinstance(client, OmpSession):
                 client.planning = planning
             if planning:
-                submitted_text = ('DIAGNOSTIC ET PLAN UNIQUEMENT. Ne modifie aucun fichier. Reproduis le problème si possible en lecture seule, '
+                submitted_text = ('CONCEPTION D’ARCHITECTURE UNIQUEMENT. Ne modifie aucun fichier. Fournis la proposition JSON du dessin '
+                                  'et son explication. La validation importe une nouvelle page locale sans implémenter de code.\n\n' + submitted_text) if is_architecture(s) else ('DIAGNOSTIC ET PLAN UNIQUEMENT. Ne modifie aucun fichier. Reproduis le problème si possible en lecture seule, '
                                   'inspecte les preuves et distingue les hypothèses. Propose un test de régression (ne le déclare pas rouge sans exécution), '
                                   'un plan court et ses vérifications. Attends la validation humaine avant toute implémentation.\n\n' + submitted_text)
             messages = s['messages'] + [{'id': uid('msg'), 'role': 'user', 'text': redact(display_text if display_text is not None else text), 'ts': now(), 'source': source,
@@ -554,19 +577,31 @@ class Application:
                 raise
         return self.store.get('session', id)
 
-    def approve_plan(self, id, accepted):
+    def approve_plan(self, id, accepted, actor='user', request_id=None):
         with self.session_locks[id]:
             session = self.store.get('session', id)
+            if request_id is not None and session.get('currentRequestId') != request_id:
+                raise ValueError('La proposition a changé ; relis le plan actuel avant de valider.')
             if session['status'] != 'waiting_plan' or session.get('planningStage') != 'awaiting_approval':
                 raise ValueError('Aucun plan en attente de validation.')
-            self.store.event('plan.approved' if accepted else 'plan.declined', {}, id, session['projectId'])
             if not accepted:
+                self.store.event('plan.declined', {'actor': actor}, id, session['projectId'])
                 self.store.update('session', id, status='ready', planningStage='diagnosis', workEnabled=False)
                 self.task_queue.release(id, 'Plan refusé ; tâche remise à faire.')
                 self.task_queue.wake.set()
                 return {'ok': True}
+            if is_architecture(session):
+                document = import_proposal(self, session, actor)
+                self.store.update('session', id, status='ready', purpose='architecture', executionMode='chat',
+                                  sandbox='read-only', workEnabled=False, planningStage='diagnosis',
+                                  importedDesignId=document['id'])
+                self.store.event('plan.approved', {'actor': actor, 'designId': document['id'], 'purpose': 'architecture'}, id, session['projectId'])
+                self.task_queue.release(id, 'Proposition d’architecture importée ; aucune implémentation de code.')
+                self.task_queue.wake.set()
+                return {'ok': True, 'design': document}
+            self.store.event('plan.approved', {'actor': actor}, id, session['projectId'])
             self.store.update('session', id, status='ready', planningStage='implementation')
-            return self.prompt(id, 'Plan validé explicitement par l’utilisateur. Implémente le plan proposé pour la demande précédente dans le périmètre choisi. '
+            return self.prompt(id, ('Plan validé par Duplica selon la délégation explicite de l’utilisateur. ' if actor == 'duplica' else 'Plan validé explicitement par l’utilisateur. ') + 'Implémente le plan proposé pour la demande précédente dans le périmètre choisi. '
                                    'Pour un bug : produis et exécute le test de régression rouge, corrige, puis exécute à nouveau. Rapporte les résultats et les limites, sans inventer de preuve.')
 
     def update_request_usage(self, session, usage):
@@ -803,14 +838,7 @@ class Application:
             if obj.get('start') and obj.get('end') and obj['end'] < obj['start']:
                 raise ValueError('L’échéance doit suivre le début du sprint.')
         if kind == 'memory':
-            obj.setdefault('scope', 'project')
-            obj.setdefault('tags', [])
-            obj.setdefault('kind', 'fait')
-            obj.setdefault('core', False)
-            obj.setdefault('body', '')
-            obj.setdefault('source', '')
-            if obj['scope'] not in ('project', 'user'):
-                raise ValueError('Portée invalide.')
+            normalize_memory(obj, self.project(obj['projectId']))
             projects = self.store.all('project') if obj['scope'] == 'user' else [self.project(obj['projectId'])]
             for project in projects:
                 total = len(obj['title']) + len(obj['body']) + 5
@@ -819,6 +847,8 @@ class Application:
                         total += len(m['title']) + len(m['body']) + 5
                 if obj['core'] and total > 4000:
                     raise ValueError('Le noyau projet + utilisateur dépasserait 4 000 caractères. Garde ce souvenir en réserve.')
+        if kind == 'memory':
+            persist_memory(self.store, obj)
         self.store.put(kind, obj)
         if kind == 'task' and 'duplicaEnabled' in data:
             self.duplica.set_scope('task', id, data['duplicaEnabled'])
@@ -1179,6 +1209,7 @@ class Application:
         return {'ok': True}
 
     def shutdown(self):
+        self.brain.close()
         self.channels.close()
         self.duplica.close()
         self.task_queue.close()

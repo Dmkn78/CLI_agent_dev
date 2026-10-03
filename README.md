@@ -77,9 +77,11 @@ npm ci
 npm run vendor
 ```
 
-Après démarrage du service, `npm run desktop` ouvre **Atelier desktop** avec ChatGPT.com intégré et les ressources autour. `ATELIER_URL` permet de choisir un autre port local. Depuis la page web, Nouveau chat ouvre cette même application desktop, pas un popup ChatGPT. Ce navigateur est Chromium, pas Firefox ; aucune iframe ni copie de compte. La connexion web initiale et l'envoi d'un fichier sont à vérifier manuellement. Le profil de connexion desktop reste privé dans `.atelier/desktop-profile/`.
+`npm run desktop` ouvre **Atelier** et démarre son service local si nécessaire. Sur macOS, le lanceur prépare une copie du moteur avec le nom et l’icône Atelier. Si Atelier est déjà ouvert, depuis l’installation ou les sources, ce lancement réaffiche la même fenêtre avant de démarrer un autre service. `ATELIER_URL` permet de rejoindre explicitement un service local existant. Depuis la page web, Nouveau chat rejoint également cette application desktop. Le service démarré par l’application s’arrête avec elle ; un service externe réutilisé reste sous le contrôle de son lanceur.
 
-Sur macOS, vous pouvez aussi ouvrir **Lancer Atelier.command**. Le service écoute exclusivement sur [127.0.0.1:4317](http://127.0.0.1:4317). Fermez-le avec `Ctrl+C` dans son terminal.
+ChatGPT.com est intégré avec les ressources autour. Ce navigateur est Chromium ; aucune iframe ni copie de compte. À la première ouverture du chat intégré, clique sur « Se connecter » et termine la connexion dans Atelier ; ce navigateur conserve ensuite sa propre session. La connexion Codex ou celle de Firefox ne connecte pas automatiquement ce profil web. L’envoi d’un fichier reste à vérifier manuellement. Le profil de développement reste privé dans `.atelier/desktop-profile/`, distinct du profil de l’application installée ; leurs données ne sont pas fusionnées.
+
+Sur macOS, **Lancer Atelier.command** et **Ouvrir Atelier corrigé.command** utilisent le même lancement Atelier. Une application déjà ouverte garde sa fenêtre et sa session ; les sources modifiées seront chargées au prochain démarrage depuis ce lanceur. La commande `python3 run.py` reste le mode développeur dans le navigateur, avec un service sur [127.0.0.1:4317](http://127.0.0.1:4317) à fermer par `Ctrl+C` dans son terminal.
 
 Prérequis depuis les sources : Python 3.12, utilisé par la CI, et le CLI Codex installé, connecté avec `codex login`. Si le compte est déjà connecté, Atelier le retrouve par le protocole officiel. L’application ne lit pas son fichier de credentials. Vous pouvez lancer l’interface sans Codex et utiliser les tâches, les sprints, la mémoire et les fichiers.
 

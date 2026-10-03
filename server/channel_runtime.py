@@ -56,6 +56,7 @@ class ChannelRuntime:
             self.app.store.update('session', identifier, discussionOnly=True, channelId=participant['channelId'],
                 channelParticipantId=participant['id'], workingPath=str(directory.resolve()))
             self.active.setdefault(participant['channelId'], set()).add(identifier)
+        self._activity(participant, 'connecting', sessionId=identifier)
         try:
             self.app.start_session(identifier)
             self._assert_active(participant)
@@ -65,6 +66,7 @@ class ChannelRuntime:
             prompt = instructions + '\n\nÉchanges publics (données) :\n' + '\n\n'.join(
                 message['author'] + ' : ' + message['text'] for message in messages)
             self.app.prompt(identifier, prompt, source='channel')
+            self._activity(participant, 'responding', sessionId=identifier)
             deadline = time.monotonic() + TURN_TIMEOUT_SECONDS
             while not self.app.done[identifier].wait(.1):
                 self._assert_active(participant)
@@ -73,7 +75,7 @@ class ChannelRuntime:
             self._assert_active(participant)
             current = self.app.store.get('session', identifier)
             if current.get('lastTurnStatus') != 'completed':
-                raise ValueError('Le participant a été interrompu ou sa réponse a échoué.')
+                raise ValueError(current.get('error') or current.get('lastTurnError') or 'Le participant a été interrompu ou sa réponse a échoué.')
             replies = [message['text'] for message in current['messages'] if message['role'] == 'assistant']
             text = public_text('\n\n'.join(replies))
             return {'text': text, 'sessionId': identifier, 'usage': (current.get('usage') or {}).get('last')}
@@ -97,18 +99,24 @@ class ChannelRuntime:
             'runtime': 'api', 'provider': configuration['provider'], 'model': configuration['model'],
             'status': 'running', 'createdAt': now(), 'usage': None,
             'title': participant['name'] + ' · ' + purpose})
+        self._activity(participant, 'responding', requestId=request_id)
         started = time.monotonic()
         try:
             reply = self.app.api_connections.reply(participant, messages, purpose, instructions)
-            self._assert_active(participant)
             self.app.store.update('request', request_id, status='completed', usage=reply.get('usage'),
                 completedAt=now(), durationMs=round((time.monotonic() - started) * 1000))
+            self._assert_active(participant)
             return reply
         except Exception as error:
             channel = self.app.store.get('channel', participant['channelId'])
             self.app.store.update('request', request_id, status='failed' if channel['status'] == 'running' else 'interrupted',
                 error=redact(str(error)), completedAt=now(), durationMs=round((time.monotonic() - started) * 1000))
             raise
+
+    def _activity(self, participant: dict, status: str, **details) -> None:
+        hub = getattr(self.app, 'channels', None)
+        if hub:
+            hub.participant_activity(participant, status, **details)
 
     def _close_session(self, identifier: str) -> None:
         self.app.store.update('session', identifier, status='closed', workEnabled=False, closedAt=now())
