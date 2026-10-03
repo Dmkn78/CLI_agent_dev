@@ -1,12 +1,15 @@
-let sidebarCollapsed=localStorage.getItem('atelier-sidebar-hidden') === 'yes';
+let sidebarCollapsed=localStorage.getItem('atelier-sidebar-hidden') !== 'no';
 let browserResourcesCollapsed=localStorage.getItem('atelier-resources-hidden') === 'yes';
 let chatFocused=false, popoverTimer=null, popoverPinned=false;
+let navigationPreview=null, navigationPreviewTimer=null, popoverAnchor=null;
 
 function applyShellLayout() {
   document.body.classList.toggle('sidebar-collapsed',sidebarCollapsed);
+  document.body.classList.toggle('sidebar-preview',Boolean(navigationPreview) && sidebarCollapsed);
+  document.body.dataset.navigationPreview=navigationPreview || '';
   document.body.classList.toggle('resources-collapsed',browserResourcesCollapsed);
   document.body.classList.toggle('chat-focused',chatFocused && view === 'webchat');
-  $('.sidebar').inert=sidebarCollapsed || (chatFocused && view === 'webchat');
+  $('.sidebar').inert=(sidebarCollapsed && !navigationPreview) || (chatFocused && view === 'webchat');
   for (const button of document.querySelectorAll('[data-action="toggle-sidebar"]')) {
     button.title=sidebarCollapsed ? 'Afficher la navigation' : 'Masquer la navigation';
     button.setAttribute('aria-label',button.title);
@@ -17,15 +20,15 @@ function applyShellLayout() {
 }
 
 function closePopover() {
-  clearTimeout(popoverTimer); popoverPinned=false;
+  clearTimeout(popoverTimer); popoverPinned=false;popoverAnchor=null;
   $('#work-popover').hidden=true; syncBrowserPanel();
 }
 
 function showPopover(anchor,content,pinned=false) {
   clearTimeout(popoverTimer);
-  const panel=$('#work-popover'); panel.innerHTML=content; panel.hidden=false; popoverPinned=pinned;
+  const panel=$('#work-popover'); panel.innerHTML=content; panel.hidden=false; popoverPinned=pinned;popoverAnchor=anchor;
   const rect=anchor.getBoundingClientRect();
-  const width=Math.min(380,innerWidth-24);
+  const width=Math.min(content.includes('panel-menu') ? 280 : 380,innerWidth-24);
   panel.style.width=width+'px'; panel.style.left=Math.max(12,Math.min(innerWidth-width-12,rect.right-width))+'px';
   panel.style.top=Math.max(12,Math.min(innerHeight-panel.offsetHeight-12,rect.bottom+8))+'px';
   syncBrowserPanel();
@@ -33,7 +36,7 @@ function showPopover(anchor,content,pinned=false) {
 
 function notificationPopoverContent() {
   const items=[...(state.notifications || [])].reverse().slice(0,8);
-  return `<div class="popover-heading"><strong>Notifications</strong>${btn('close-popover','','close','icon-btn','aria-label="Fermer les notifications"')}</div><div class="popover-items">${items.map(item => `<button class="notification-item ${item.read ? '' : 'unread'}" data-action="open-notification" data-id="${esc(item.id)}">${icon(item.title.includes('Accord') ? 'shield' : 'agents')}<span><strong>${esc(item.title.replace('Tour interrupted','Tour interrompu').replace('Tour completed','Tour terminé'))}</strong><small>${stamp(item.createdAt)}</small></span>${icon('arrow')}</button>`).join('') || '<p class="popover-empty">Aucune notification.</p>'}</div>`;
+  return `<div class="popover-heading"><strong>Notifications</strong>${btn('close-popover','','close','icon-btn','aria-label="Fermer les notifications"')}</div><div class="popover-items">${items.map(notificationMarkup).join('') || '<p class="popover-empty">Aucune notification.</p>'}</div>`;
 }
 
 function costPopoverContent(id) {
@@ -46,7 +49,8 @@ function costPopoverContent(id) {
 }
 
 function installShellActions() {
-  actions['toggle-sidebar']=() => { sidebarCollapsed=!sidebarCollapsed; localStorage.setItem('atelier-sidebar-hidden',sidebarCollapsed ? 'yes' : 'no'); applyShellLayout(); };
+  actions['toggle-sidebar']=() => { sidebarCollapsed=!sidebarCollapsed;navigationPreview=null; localStorage.setItem('atelier-sidebar-hidden',sidebarCollapsed ? 'yes' : 'no'); applyShellLayout(); };
+  actions['navigation-preview']=element => {navigationPreview=navigationPreview === element.dataset.navPreview ? null : element.dataset.navPreview;applyShellLayout();};
   actions['toggle-resources']=() => { browserResourcesCollapsed=!browserResourcesCollapsed; localStorage.setItem('atelier-resources-hidden',browserResourcesCollapsed ? 'yes' : 'no'); applyShellLayout(); };
   actions['chat-focus']=() => { chatFocused=!chatFocused; applyShellLayout(); };
   actions['close-popover']=closePopover;
@@ -69,8 +73,12 @@ function installShellActions() {
     else { route('webchat'); if (!webChatTabs.some(tab => tab.projectId === projectId)) await actions['browser-new'](); }
   });
   const key=/Mac/.test(navigator.platform) ? '⌘ K' : 'Ctrl K';
-  $('#global-search kbd').textContent=key;
-  $('#sidebar-toggle').innerHTML=icon('grid');
+  $('#global-search').innerHTML=`${icon('search')}<span>Rechercher dans le projet</span><kbd>${key}</kbd>`;
+  $('#global-search').title='Rechercher dans le projet · '+key;
+  $('#sidebar-toggle').innerHTML=icon('split-horizontal');
+  $('.navigation-pin').innerHTML=icon('split-horizontal');
+  for (const [preview,symbol] of [['home','home'],['spaces','folder'],['tools','grid']]) document.querySelector(`.navigation-rail [data-nav-preview="${preview}"]`).innerHTML=icon(symbol);
+  $('.navigation-rail [data-view="settings"]').innerHTML=icon('settings');
   applyShellLayout();
 }
 document.addEventListener('pointerover',event => {
@@ -83,4 +91,40 @@ document.addEventListener('pointerout',event => {
   if (event.target.closest('#notifications-button,[data-action="session-cost"],#work-popover') && !event.relatedTarget?.closest('#notifications-button,[data-action="session-cost"],#work-popover')) popoverTimer=setTimeout(closePopover,180);
 });
 document.addEventListener('pointerdown',event => { if (!event.target.closest('#work-popover,#notifications-button,[data-action="session-cost"]')) closePopover(); });
-document.addEventListener('keydown',event => { if (event.key === 'Escape') { closePopover(); if (chatFocused) { chatFocused=false; applyShellLayout(); } } });
+document.addEventListener('keydown',event => {
+  if (event.key !== 'Escape') return;
+  const openDetails=document.querySelectorAll('.usage-chip[open],.action-menu[open]');
+  const anchor=$('#work-popover').hidden ? [...openDetails].find(details => details.contains(document.activeElement))?.querySelector('summary') : popoverAnchor;
+  for (const details of openDetails) details.open=false;
+  closePopover();navigationPreview=null;
+  if (anchor?.isConnected) anchor.focus({preventScroll:true});
+  if (chatFocused) chatFocused=false;
+  applyShellLayout();
+});
+
+document.addEventListener('pointerover',event => {
+  const anchor=event.target.closest('.navigation-rail [data-nav-preview]');
+  if (event.target.closest('.sidebar,.navigation-rail')) clearTimeout(navigationPreviewTimer);
+  if (anchor && sidebarCollapsed && !anchor.contains(event.relatedTarget)) {navigationPreview=anchor.dataset.navPreview;applyShellLayout();}
+});
+document.addEventListener('pointerout',event => {
+  if (sidebarCollapsed && event.target.closest('.sidebar,.navigation-rail') && !event.relatedTarget?.closest('.sidebar,.navigation-rail')) navigationPreviewTimer=setTimeout(() => {navigationPreview=null;applyShellLayout();},200);
+});
+document.addEventListener('pointerdown',event => {
+  if (!event.target.closest('.sidebar,.navigation-rail,[data-action="toggle-sidebar"]') && navigationPreview) {navigationPreview=null;applyShellLayout();}
+  for (const details of document.querySelectorAll('.usage-chip[open],.action-menu[open]')) if (!details.contains(event.target)) details.open=false;
+});
+document.addEventListener('focusin',event => {
+  const anchor=event.target.closest('.navigation-rail [data-nav-preview]');
+  if (anchor && sidebarCollapsed) {navigationPreview=anchor.dataset.navPreview;applyShellLayout();}
+});
+document.addEventListener('toggle',event => {
+  if (!event.target.matches('.usage-chip')) {if (event.target.matches('.action-menu')) syncBrowserPanel();return;}
+  const details=event.target.querySelector('.usage-details'), anchor=event.target.querySelector('summary').getBoundingClientRect();
+  if (event.target.open) {
+    const width=Math.min(330,innerWidth-24);details.style.width=width+'px';
+    details.style.left=Math.max(12,Math.min(innerWidth-width-12,anchor.right-width))+'px';
+    details.style.top=Math.max(12,Math.min(innerHeight-details.offsetHeight-12,anchor.bottom+7))+'px';
+  }
+  syncBrowserPanel();
+},true);

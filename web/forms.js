@@ -97,10 +97,11 @@ async function newAgent(mode = "classic", executionMode = 'code', template = nul
     true,
   );
   const form = $('#modal form');
+  form.querySelector('.advanced-settings').insertAdjacentHTML('beforebegin',select('Supervision Duplica','duplicaEnabled',[['inherit','Selon le projet'],['true','Travailler avec Duplica'],['false','Garder la main sur cet agent']],'inherit'));
   const formProjectId=projectId;
   form.querySelector('.modal-body').insertAdjacentHTML('afterbegin',select('Projet','agentProject',state.projects.map(p => [p.id,p.name]),projectId));
   form.querySelector('.advanced-settings').insertAdjacentHTML('beforebegin','<label class="check-option"><input type="checkbox" name="planMode" checked><span>Diagnostic et plan avant implémentation · validation requise</span></label>');
-  form.querySelector('.mode-picker').insertAdjacentHTML('beforebegin', `<div class="session-mode-picker">${select('Expérience','executionMode',[['code','Code · tâches du projet'],['chat','Conversation CLI · lecture seule']],executionMode)}</div>`);
+  form.querySelector('.modal-body').insertAdjacentHTML('afterbegin','<input type="hidden" name="executionMode" value="code">');
   form.querySelector('.advanced-settings').insertAdjacentHTML('beforebegin', '<label class="check-option"><input type="checkbox" name="startWork" checked><span>Prendre les tâches À faire au lancement</span></label>');
   updateAgentMode(form);
   if (template) {
@@ -196,9 +197,10 @@ function taskModal(id, status = "todo") {
         ["high", "Haute"],
       ],
       t?.priority || "medium",
-    )}</div>${select("Sprint", "sprintId", [["", "Sans sprint"], ...objects("sprints").map((s) => [s.id, s.title])], t?.sprintId || "")}</div>${formFooter()}</form>`,
+    )}</div>${select("Sprint", "sprintId", [["", "Sans sprint"], ...objects("sprints").map((s) => [s.id, s.title])], id ? t?.sprintId : taskSprintFilter)}</div>${formFooter()}</form>`,
   );
   const agents = sessions().filter(session => session.executionMode !== 'chat' && ['ready','running','waiting'].includes(session.status));
+  $('#modal .modal-body').insertAdjacentHTML('beforeend',select('Supervision Duplica de cette tâche','duplicaEnabled',[['inherit','Selon le projet et l’agent'],['true','Superviser cette tâche'],['false','Garder la main sur cette tâche']],t?.id ? String(duplicaScopeValue('task',t.id) ?? 'inherit') : 'inherit'));
   $('#modal .modal-body').insertAdjacentHTML('beforeend',`${select('Agent affecté','assigneeId',[['','File automatique du projet'],...agents.map(session => [session.id,session.name])],t?.assigneeId || '')}<label class="check-option"><input type="checkbox" name="activateAgent"><span>Activer la file TODO de cet agent après enregistrement</span></label>${t?.claimedBy ? `<p>Prise en charge : ${esc(state.sessions.find(session => session.id === t.claimedBy)?.name || state.workflows.find(workflow => workflow.id === t.claimedBy)?.title || t.claimedBy)}</p>` : ''}${t?.lastError ? `<p class="inline-error">${esc(t.lastError)}</p>` : ''}`);
 }
 function memoryModal(id) {

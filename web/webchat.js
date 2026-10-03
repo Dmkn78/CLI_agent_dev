@@ -5,11 +5,12 @@ const browserPanelObserver=new ResizeObserver(() => syncBrowserPanel());
 
 function webChatView() {
   const tabs=webChatTabs.filter(tab => tab.projectId === projectId);
-  const active=tabs.find(tab => tab.id === activeWebChatId);
-  const tools=btn('toggle-resources','','folder','icon-btn','title="Afficher / masquer les ressources" aria-label="Afficher / masquer les ressources"')+btn('chat-focus','','external','icon-btn','title="Agrandir / restaurer le chat" aria-label="Agrandir / restaurer le chat"')+btn('browser-new','Nouveau chat','plus','primary');
+  const active=tabs.find(tab => tab.id === activeWebChatId) || tabs.at(-1);
+  if (active) activeWebChatId=active.id;
+  const tools=btn('toggle-resources','','folder','icon-btn','title="Afficher / masquer les ressources" aria-label="Afficher / masquer les ressources"')+btn('chat-focus','','external','icon-btn','title="Agrandir / restaurer le chat" aria-label="Agrandir / restaurer le chat"')+sessionUsageChip(null,{}, {label:'Consommation de ChatGPT',notice:'Le site ChatGPT ne communique pas ses tokens à Atelier.'})+newPanelButton();
   const navigation=['back','forward','reload','home'].map((action,index) => btn('browser-navigate','',['arrow','arrow','refresh','grid'][index],'icon-btn',`data-navigation="${action}" title="${['Précédent','Suivant','Actualiser la page','Accueil ChatGPT'][index]}" aria-label="${['Précédent','Suivant','Actualiser la page','Accueil ChatGPT'][index]}" ${!active || (action === 'back' && !active.back) || (action === 'forward' && !active.forward) ? 'disabled' : ''}`)).join('');
-  const resources=(browserResources?.entries || []).map(file => `<button class="file-entry" data-action="browser-resource" data-path="${esc(file.path)}" draggable="${!file.directory}">${icon(file.directory ? 'folder' : 'code')}<span>${esc(file.name)}</span></button>`).join('');
-  return `${heading('NAVIGATEUR','ChatGPT','',tools)}<div class="browser-tabbar">${tabs.map(tab => `<div class="browser-tab ${tab.id === activeWebChatId ? 'selected' : ''}"><button data-action="browser-select" data-id="${esc(tab.id)}">${esc(tab.title)}</button><button class="icon-btn" data-action="browser-close" data-id="${esc(tab.id)}" title="Fermer ce chat" aria-label="Fermer ce chat">${icon('close')}</button></div>`).join('')}</div><div class="browser-navigation">${navigation}<input id="browser-address" aria-label="Adresse du chat" value="${esc(active?.url || 'https://chatgpt.com/')}" readonly><span id="browser-load-state">${active?.loading ? 'Chargement…' : ''}</span></div><div class="browser-workspace"><aside class="browser-resources"><div class="panel-heading"><h2>Ressources</h2>${btn('toggle-resources','','close','icon-btn','title="Masquer les ressources" aria-label="Masquer les ressources"')}</div><div class="resource-navigation">${btn('browser-root','','folder','icon-btn','title="Dossier du projet" aria-label="Dossier du projet"')}${btn('browser-up','','arrow','icon-btn',`title="Dossier parent" aria-label="Dossier parent" ${!browserResourcePath ? 'disabled' : ''}`)}<span class="resource-path">${esc(browserResourcePath || project().name)}</span></div><div class="browser-file-list">${resources}</div>${browserResourceContent ? `<section class="resource-preview"><strong>${esc(browserResourceContent.path)}</strong><textarea id="browser-resource-text" rows="8" aria-label="Contenu de la ressource" readonly>${esc(browserResourceContent.content)}</textarea>${btn('browser-copy-resource','Copier','code','quiet')}</section>` : ''}<section class="browser-instructions"><h3>Consignes</h3><textarea id="browser-instructions" rows="5" aria-label="Consignes à copier pour ChatGPT" placeholder="Contexte SQL, méthode, contraintes…">${esc(localStorage.getItem('atelier-chat-instructions-'+projectId) || '')}</textarea>${btn('browser-copy-instructions','Copier','code','quiet')}</section><div class="browser-privacy">Connexion web indépendante de Codex, conservée dans Atelier desktop. Dépôt volontaire des fichiers à OpenAI. Tokens du site non exposés.</div></aside><section id="browser-panel" class="browser-panel">${active ? '<div class="browser-loading">Chargement du navigateur…</div>' : `<div class="browser-external"><h2>${window.atelierDesktop ? 'Ouvrir ChatGPT' : 'ChatGPT dans Atelier desktop'}</h2>${btn('browser-new',window.atelierDesktop ? 'Nouveau chat' : 'Ouvrir Atelier desktop','plus','primary')}</div>`}</section></div>`;
+  const resources=(browserResources?.entries || []).map(file => `<button class="file-entry" data-action="browser-resource" data-path="${esc(file.path)}" draggable="true" title="${file.directory ? 'Ouvrir ou glisser les fichiers de ce dossier' : 'Ouvrir ou glisser ce fichier'}">${icon(file.directory ? 'folder' : 'code')}<span>${esc(file.name)}</span></button>`).join('');
+  return `<div class="workspace-toolbar chat-workspace-toolbar"><h1>ChatGPT</h1><span class="workspace-toolbar-spacer"></span>${tools}</div><div class="browser-tabbar">${tabs.map(tab => `<div class="browser-tab ${tab.id === activeWebChatId ? 'selected' : ''}"><button data-action="browser-select" data-id="${esc(tab.id)}">${esc(tab.title)}</button><button class="icon-btn" data-action="browser-close" data-id="${esc(tab.id)}" title="Fermer ce chat" aria-label="Fermer ce chat">${icon('close')}</button></div>`).join('')}</div><div class="browser-navigation">${navigation}<input id="browser-address" aria-label="Adresse du chat" value="${esc(active?.url || 'https://chatgpt.com/')}" readonly><span id="browser-load-state">${active?.loading ? 'Chargement…' : ''}</span></div><div class="browser-workspace"><aside class="browser-resources"><div class="panel-heading"><h2>Ressources</h2>${btn('toggle-resources','','close','icon-btn','title="Masquer les ressources" aria-label="Masquer les ressources"')}</div><div class="resource-navigation">${btn('browser-root','','folder','icon-btn','title="Dossier du projet" aria-label="Dossier du projet"')}${btn('browser-up','','arrow','icon-btn',`title="Dossier parent" aria-label="Dossier parent" ${!browserResourcePath ? 'disabled' : ''}`)}<span class="resource-path">${esc(browserResourcePath || project().name)}</span></div><div class="browser-file-list">${resources}</div>${browserResourceContent ? `<section class="resource-preview"><strong>${esc(browserResourceContent.path)}</strong><textarea id="browser-resource-text" rows="8" aria-label="Contenu de la ressource" readonly>${esc(browserResourceContent.content)}</textarea>${btn('browser-copy-resource','Copier','code','quiet')}</section>` : ''}<section class="browser-instructions"><h3>Consignes</h3><textarea id="browser-instructions" rows="5" aria-label="Consignes à copier pour ChatGPT" placeholder="Contexte SQL, méthode, contraintes…">${esc(localStorage.getItem('atelier-chat-instructions-'+projectId) || '')}</textarea>${btn('browser-copy-instructions','Copier','code','quiet')}</section><div class="browser-privacy">Connexion web indépendante de Codex, conservée dans Atelier desktop. Dépôt volontaire des fichiers à OpenAI. Tokens du site non exposés.</div></aside><section id="browser-panel" class="browser-panel">${active ? `<div class="browser-loading"><p>${active.loading ? 'Chargement du navigateur…' : 'ChatGPT'}</p>${btn('focus-browser-panel','Afficher le navigateur','external','quiet')}</div>` : `<div class="browser-external"><h2>${window.atelierDesktop ? 'Ouvrir ChatGPT' : 'ChatGPT dans Atelier desktop'}</h2>${btn('browser-new',window.atelierDesktop ? 'Nouveau chat' : 'Ouvrir Atelier desktop','plus','primary')}</div>`}</section></div>`;
 }
 
 async function loadBrowserResources(path='') {
@@ -25,7 +26,7 @@ async function loadBrowserResources(path='') {
 function syncBrowserPanel() {
   const desktop=window.atelierDesktop;
   const tab=webChatTabs.find(tab => tab.id === activeWebChatId && tab.projectId === projectId);
-  const visible=view === 'webchat' && Boolean(tab) && !$('#modal').open && $('#work-popover').hidden;
+  const visible=Boolean($('#browser-panel') && tab) && !$('#modal').open && $('#work-popover').hidden && !navigationPreview && !workspacePanelGesture && !document.querySelector('.usage-chip[open],.action-menu[open]') && !browserPanelOccluded();
   if (desktop) {
     desktop.showBrowser(visible ? tab.id : null);
     if (visible && $('#browser-panel')) {
@@ -39,13 +40,26 @@ function syncBrowserPanel() {
       desktop.browserBounds({x:rect.x,y,width:rect.width,height:Math.max(0,bottom-y)});
     }
   }
-  if (view === 'webchat' && (!browserResources || browserResources.projectId !== projectId)) {
+  if ($('#browser-panel') && (!browserResources || browserResources.projectId !== projectId)) {
     browserResources={projectId,entries:[]};
     loadBrowserResources('').catch(error => toast(error.message,true));
   }
 }
 
+function browserPanelOccluded() {
+  const panel=$('#browser-panel'), pane=panel?.closest('.floating-board>[data-floating-panel]');
+  if (!pane) return false;
+  if (pane.hidden) return true;
+  const front=nativeWorkspaceLayout().front;
+  if (!front || front === pane.dataset.floatingPanel) return false;
+  const covering=[...document.querySelectorAll('.floating-board>[data-floating-panel]')].find(window => window.dataset.floatingPanel === front && !window.hidden);
+  if (!covering) return false;
+  const browser=panel.getBoundingClientRect(), overlay=covering.getBoundingClientRect();
+  return overlay.left < browser.right && overlay.right > browser.left && overlay.top < browser.bottom && overlay.bottom > browser.top;
+}
+
 function installWebChatActions() {
+  actions['focus-browser-panel']=() => {focusFloatingPanel('tools');syncBrowserPanel();};
   actions['browser-new']=async () => {
     if (!window.atelierDesktop) { await api('desktop/open',{mode:'chat'}); toast('Atelier desktop ouvert.'); return; }
     const tab={id:crypto.randomUUID(),projectId,title:'ChatGPT',url:'https://chatgpt.com/'};
@@ -70,7 +84,7 @@ function installWebChatActions() {
     const tab=webChatTabs.find(tab => tab.id === update.id);
     if (!tab) return;
     Object.assign(tab,update);
-    if (view !== 'webchat' || tab.id !== activeWebChatId || !$('#browser-address')) return;
+    if (tab.id !== activeWebChatId || !$('#browser-address')) return;
     $('#browser-address').value=tab.url;
     $('#browser-load-state').textContent=tab.error || (tab.loading ? 'Chargement…' : '');
     for (const action of ['back','forward']) document.querySelector(`[data-navigation="${action}"]`).disabled=!tab[action];

@@ -1,3 +1,4 @@
+import hashlib
 import io
 import json
 import re
@@ -86,6 +87,14 @@ class ApplicationTests(unittest.TestCase):
     def test_projection_contains_memories(self):
         self.assertEqual(len(self.app.state()['memories']), 4)
         self.assertNotIn('memorys', self.app.state())
+    def test_artifact_hash_matches_utf8_file_bytes(self):
+        for index, data in enumerate(('Preuve vérifiée\nSuite\r\nFin', {'résultat': 'vérifié', 'étapes': ['clic', 'saisie']})):
+            with self.subTest(data=data):
+                artifact = self.app.store.artifact('session_fixture', 'proof_' + str(index) + '.txt', data)
+                content = Path(artifact['path']).read_bytes()
+                expected = (data if isinstance(data, str) else json.dumps(data, ensure_ascii=False, indent=2)).encode('utf-8')
+                self.assertEqual(content, expected)
+                self.assertEqual(artifact['sha256'], hashlib.sha256(content).hexdigest())
     def test_edit_preserves_existing_fields_and_id(self):
         item=self.app.upsert('task', {'title':'Initial','description':'Preserved'})
         updated=self.app.upsert('task', {'id':item['id'],'title':'Edited','status':'review'})

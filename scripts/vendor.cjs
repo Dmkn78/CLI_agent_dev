@@ -12,6 +12,7 @@ if (process.platform !== 'win32') {
 const source = path.join(root, 'node_modules', '@logicflow', 'core', 'dist');
 const target = path.join(root, 'web', 'vendor');
 fs.mkdirSync(target, {recursive: true});
+fs.copyFileSync(path.join(root,'node_modules/qrcode-generator/dist/qrcode.js'),path.join(target,'qrcode.js'));
 for (const [input, output] of [['index.css','logicflow.css']]) {
   fs.copyFileSync(path.join(source, input), path.join(target, output));
 }

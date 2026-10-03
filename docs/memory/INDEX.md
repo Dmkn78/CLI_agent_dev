@@ -2,6 +2,11 @@
 
 | Besoin | Source canonique |
 |---|---|
+| Retrouver et ouvrir Atelier sous Windows | [raccourcis, lanceur et recette réelle](../audit/2026-10-02-atelier-windows-launcher.md) |
+| Poursuite du travail des canaux par Duplica | [mission et passage de travail](../audit/2026-10-02-duplica-channels-handoff.md), [consolidation et tests validés](../audit/2026-10-02-duplica-channels-consolidation.md) |
+| Canaux d’agents, consultants LAYA/CLEF et API locales | [../audit/2026-10-02-agent-channels.md](../audit/2026-10-02-agent-channels.md), [demande et sources](../references/2026-10-02-agent-channels.md) |
+| Duplica discussion, Telegram, compteurs natifs, sprints et reconnexion | [../audit/2026-10-02-duplica-ux.md](../audit/2026-10-02-duplica-ux.md) |
+| Duplica : demande, intégration, preuves et limites | [../audit/2026-10-02-duplica.md](../audit/2026-10-02-duplica.md), [mission](../references/2026-10-02-duplica-mission.md), [plateforme](../references/2026-10-02-duplica-platform.md) |
 | Ce que Damien a demandé et pourquoi | [USER_REQUEST.md](USER_REQUEST.md) |
 | Ce qui existe réellement et les limites | [IMPLEMENTATION.md](IMPLEMENTATION.md) |
 | Architecture, protocole et structure du code | [../ARCHITECTURE.md](../ARCHITECTURE.md) |

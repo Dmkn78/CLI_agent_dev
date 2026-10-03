@@ -22,7 +22,8 @@ function mountDesign() {
   const previous=designEditor;
   designEditor=null;
   previous?.destroy();
-  designEditor = new Core.LogicFlow({container:$('#design-canvas'),height:580,grid:{size:20,visible:true,type:'dot',config:{color:'#35434b',thickness:1}},keyboard:{enabled:true},edgeType:'polyline',history:true});
+  const canvas=$('#design-canvas');
+  designEditor = new Core.LogicFlow({container:canvas,height:canvas.closest('.workspace-tool-pane') ? Math.max(200,canvas.clientHeight) : 580,grid:{size:20,visible:true,type:'dot',config:{color:'#35434b',thickness:1}},keyboard:{enabled:true},edgeType:'polyline',history:true});
   designEditor.setTheme({baseNode:{fill:'#20282c',stroke:'#62cde1',strokeWidth:1.5},rect:{radius:8,width:200,height:80},diamond:{fill:'#28312c',stroke:'#94d4a5'},nodeText:{color:'#f2f5f6',fontSize:13,overflowMode:'ellipsis',lineHeight:1.3},edgeText:{color:'#d9e3e6',background:{fill:'#101618'}},polyline:{stroke:'#99b0b9'},anchor:{fill:'#62cde1',stroke:'#101618'},outline:{stroke:'#e6ca76'}});
   designEditor.render(designDraft.graph);
   designEditor.on('node:click',({data}) => { designSelectedNode=data.id; updateDesignInspector(data); });

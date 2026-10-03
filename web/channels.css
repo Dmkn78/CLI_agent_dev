@@ -1,0 +1,66 @@
+.channels-layout { display:grid; grid-template-columns:210px minmax(0,1fr); gap:20px; align-items:start; }
+.channel-list { display:flex; flex-direction:column; gap:6px; padding:8px; border:1px solid var(--border); border-radius:16px; background:var(--panel); }
+.channel-list>p { padding:12px; line-height:1.7; }
+.channel-list-item { display:flex; text-align:left; gap:10px; padding:13px 10px; border-radius:10px; color:var(--muted); }
+.channel-list-item.selected { background:#ffffff08; color:var(--text); }
+.channel-list-item strong { display:block; font-size:13px; overflow-wrap:anywhere; }
+.channel-list-item small { display:block; font-size:10px; margin-top:6px; color:var(--muted); }
+.channel-hash { font-size:22px; opacity:.6; }
+.channel-empty { display:flex; align-items:center; flex-direction:column; gap:20px; padding:60px 30px; text-align:center; }
+.channel-empty>.icon { width:44px; height:44px; color:var(--accent); }
+.channel-empty p { max-width:520px; color:var(--muted); line-height:1.8; }
+.channel-empty small { color:var(--muted); }
+.channel-room { min-width:0; }
+.channel-header { display:flex; gap:16px; flex-wrap:wrap; align-items:start; padding:22px; border:1px solid var(--border); background:var(--panel); border-radius:16px; margin-bottom:16px; }
+.channel-header>div:first-child { flex:1; min-width:180px; }
+.channel-header .eyebrow { display:block; margin-bottom:12px; font-size:11px; color:var(--accent); }
+.channel-header h2 { font-size:17px; line-height:1.5; font-weight:500; white-space:pre-wrap; overflow-wrap:anywhere; }
+.channel-header p { margin-top:10px; }
+.channel-room-layout { display:grid; grid-template-columns:minmax(0,1fr) 260px; gap:18px; align-items:start; }
+.channel-thread { min-width:0; }
+.channel-transcript { padding:16px; border:1px solid var(--border); border-radius:16px; background:var(--panel); max-height:60vh; min-height:260px; overflow:auto; }
+.channel-public-note { display:flex; align-items:start; gap:10px; margin:0 0 22px; color:var(--muted); font-size:11px; line-height:1.7; }
+.channel-public-note .icon { flex-shrink:0; }
+.channel-first-message { padding:45px 12px; text-align:center; color:var(--muted); line-height:1.8; }
+.channel-first-message small { display:block; margin-top:8px; }
+.channel-message { margin:14px 0; border:1px solid var(--border); border-radius:14px; padding:14px; background:#ffffff03; }
+.channel-message.from-user { background:#d8a18409; border-color:#d8a18425; }
+.channel-message header { display:flex; flex-wrap:wrap; gap:6px 12px; align-items:center; }
+.channel-message header strong { font-size:12px; }
+.channel-message header span,.channel-message time { font-size:10px; color:var(--muted); }
+.channel-message time { margin-left:auto; }
+.channel-message p { font-size:13px; line-height:1.8; white-space:pre-wrap; overflow-wrap:anywhere; margin:10px 0 4px; }
+.channel-message footer { margin-top:10px; color:var(--muted); font-size:10px; overflow-wrap:anywhere; }
+.channel-waiting { font-size:12px; color:var(--accent); padding:14px; line-height:1.7; }
+.channel-compose { padding:18px; margin-top:16px; border:1px solid var(--border); border-radius:16px; background:var(--panel); }
+.channel-compose label { font-size:12px; color:var(--muted); display:block; margin-bottom:10px; }
+.channel-compose textarea { width:100%; resize:vertical; }
+.channel-compose>div { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin-top:12px; }
+.channel-compose>div>span { flex:1; min-width:120px; }
+.channel-plan { margin-top:18px; }
+.channel-plan pre { font:inherit; font-size:13px; white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.8; padding:10px 0 20px; max-height:480px; overflow:auto; }
+.channel-plan .row-actions { flex-wrap:wrap; }
+.channel-plan>.muted { margin-top:14px; }
+.channel-participants { padding:16px; border:1px solid var(--border); border-radius:16px; background:var(--panel); }
+.channel-participants .panel-heading { gap:5px; padding:0 0 12px; }
+.channel-participants h3 small { color:var(--muted); font-size:10px; }
+.channel-participants .button { font-size:11px; padding:6px 8px; }
+.channel-participant { display:flex; align-items:start; gap:8px; margin:18px 0; }
+.channel-participant-icon { width:30px; height:30px; display:grid; place-items:center; border-radius:9px; background:#8ca9c314; color:#8ca9c3; flex-shrink:0; }
+.channel-participant-icon.role-consultant { background:#bd9ce714; color:#bd9ce7; }
+.channel-participant-icon.role-duplica { background:#d8a18414; color:var(--accent); }
+.channel-participant>div:nth-child(2) { min-width:0; flex:1; }
+.channel-participant strong { display:block; font-size:12px; overflow-wrap:anywhere; }
+.channel-participant span { font-size:10px; color:var(--accent); display:block; margin-top:4px; }
+.channel-participant small { font-size:10px; color:var(--muted); display:block; margin-top:5px; overflow-wrap:anywhere; }
+.channel-participant>.button { font-size:0; padding:3px; }
+.channel-workflow-note { border-top:1px solid var(--border); padding-top:16px; margin-top:20px; color:var(--muted); font-size:11px; line-height:1.8; }
+.channel-workflow-note strong { color:var(--text); }
+.channel-workflow-note p { margin:10px 0; }
+.channel-workflow-note small { font-size:10px; }
+.api-connections { margin-top:24px; }
+.api-connections .panel-heading { flex-wrap:wrap; gap:12px; }
+.api-connections a { color:var(--accent); text-decoration:underline; }
+.api-connections .row-actions { flex-wrap:wrap; }
+@media(max-width:1200px) { .channels-layout { grid-template-columns:160px minmax(0,1fr); gap:14px; } .channel-room-layout { grid-template-columns:minmax(0,1fr); } .channel-participants { grid-row:1; } .channel-participant { display:inline-flex; width:240px; vertical-align:top; margin:12px 12px 0 0; } .channel-workflow-note { margin-top:14px; } }
+@media(max-width:700px) { .channels-layout { grid-template-columns:minmax(0,1fr); } .channel-list { flex-direction:row; overflow:auto; } .channel-list-item { min-width:170px; } .channel-header { padding:16px; } .channel-participant { width:100%; margin-right:0; } .channel-transcript { max-height:60vh; padding:12px; } .channel-compose>div>span { flex-basis:100%; } }

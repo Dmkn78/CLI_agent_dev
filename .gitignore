@@ -1,4 +1,5 @@
 .atelier/
+.duplica/
 __pycache__/
 *.pyc
 .DS_Store
@@ -7,3 +8,5 @@ artifacts/qa/
 node_modules/
 web/vendor/
 desktop/.cache/
+build/
+dist/

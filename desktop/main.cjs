@@ -1,13 +1,21 @@
-const {app,BrowserWindow,WebContentsView,ipcMain,shell,nativeImage,dialog}=require('electron');
+const {app,BrowserWindow,WebContentsView,ipcMain,shell,nativeImage,dialog,Menu}=require('electron');
 const {registerTerminals,closeTerminals}=require('./pty.cjs');
+const {registerComputerController}=require('./computer.cjs');
+const {registerDisplay,bindZoomShortcuts}=require('./display.cjs');
+const {DesktopService}=require('./service.cjs');
+const {UpdateController}=require('./updates.cjs');
 const path=require('node:path');
-const origin=new URL(process.env.ATELIER_URL || 'http://127.0.0.1:4317/');
+let origin=new URL(process.env.ATELIER_URL || 'http://127.0.0.1:4317/');
 if (origin.protocol !== 'http:' || !['127.0.0.1','localhost'].includes(origin.hostname)) throw new Error('Serveur Atelier local requis.');
 origin.pathname='/'; origin.search=''; origin.hash='';
 let mainWindow, activeBrowser=null, nonce=null;
+let service=null, updates=null, quitting=false;
 const browsers=new Map();
 app.setName('Atelier');
-app.setPath('userData',path.resolve(__dirname,'../.atelier',process.env.ATELIER_DESKTOP_TEST === '1' ? 'desktop-fixture' : 'desktop-profile'));
+const desktopTest=process.env.ATELIER_DESKTOP_TEST === '1';
+if (desktopTest && process.env.ATELIER_TEST_DATA) app.setPath('userData',path.resolve(process.env.ATELIER_TEST_DATA));
+else if (!app.isPackaged) app.setPath('userData',path.resolve(__dirname,'../.atelier',desktopTest ? 'desktop-fixture' : 'desktop-profile'));
+else app.setPath('userData',path.join(app.getPath('appData'),'Atelier'));
 const securePreferences={sandbox:true,contextIsolation:true,nodeIntegration:false};
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
 else app.on('second-instance',(_event,argv) => {
@@ -17,7 +25,7 @@ else app.on('second-instance',(_event,argv) => {
 });
 async function request(route,data) {
   for (let attempt=0; attempt < 2; attempt++) {
-    const response=await fetch(new URL(route,origin),{method:'POST',headers:{'X-Atelier-Token':nonce,'Content-Type':'application/json'},body:JSON.stringify(data)});
+    const response=await fetch(new URL(route,origin),{method:data === undefined ? 'GET' : 'POST',headers:{'X-Atelier-Token':nonce,'Content-Type':'application/json'},body:data === undefined ? undefined : JSON.stringify(data),signal:AbortSignal.timeout(15000)});
     const result=await response.json();
     if (response.ok) return result;
     if (attempt === 0 && response.status === 403 && result.error === 'Session locale requise.') { await refreshNonce(); continue; }
@@ -30,7 +38,7 @@ async function refreshNonce() {
   if (!nonce) throw new Error('Serveur Atelier indisponible. Lance scripts/start-atelier.ps1.');
 }
 function trusted(event) {
-  if (event.sender !== mainWindow.webContents || new URL(event.sender.getURL()).origin !== origin.origin) throw new Error('Émetteur IPC refusé.');
+  if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || new URL(event.sender.getURL()).origin !== origin.origin) throw new Error('Émetteur IPC refusé.');
 }
 function browserId(id) {
   if (typeof id !== 'string' || !/^[a-z0-9-]{1,80}$/i.test(id)) throw new Error('Identifiant invalide.');
@@ -48,20 +56,65 @@ function secureNavigation(contents) {
   contents.on('did-create-window',window => secureNavigation(window.webContents));
 }
 app.whenReady().then(async () => {
-  mainWindow=new BrowserWindow({show:process.env.ATELIER_DESKTOP_TEST !== '1',width:1500,height:980,minWidth:700,minHeight:580,backgroundColor:'#111619',title:'Atelier',webPreferences:{...securePreferences,preload:path.join(__dirname,'preload.cjs')}});
+  if (app.isPackaged) {
+    service=new DesktopService({runtimePath:path.join(process.resourcesPath,'runtime'),dataPath:app.getPath('userData'),
+      version:app.getVersion(),desktopExecutable:process.execPath,skipDiscovery:desktopTest,
+      onFailure:error => { dialog.showErrorBox('Atelier — service interrompu',error.message); app.quit(); }});
+    origin=await service.start();
+  }
+  const {autoUpdater}=require('electron-updater');
+  updates=new UpdateController({updater:autoUpdater,preferencesPath:path.join(app.getPath('userData'),'updates.json'),
+    currentVersion:app.getVersion(),available:app.isPackaged && !desktopTest,
+    onChange:status => { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('updates:state',status); },
+    install:async () => {
+      const current=await request('/api/state');
+      const activeSessions=(current.sessions || []).some(session => session.workEnabled || ['running','initializing','waiting','starting','waiting_approval','waiting_input'].includes(session.status));
+      const activeWork=['workflows','benchmarks','channels','requests'].some(key => (current[key] || []).some(job => ['running','queued','planning','implementing','verifying','auditing','waiting_plan'].includes(job.status)));
+      if (activeSessions || activeWork || require('./pty.cjs').terminalCount() > 0) throw new Error('Arrêtez les travaux actifs et fermez les terminaux avant de redémarrer Atelier.');
+      const choice=await dialog.showMessageBox(mainWindow,{type:'question',title:'Installer la mise à jour',
+        message:'Installer la mise à jour et redémarrer Atelier ?',detail:'Vos projets et données locales seront conservés.',
+        buttons:['Plus tard','Installer et redémarrer'],defaultId:0,cancelId:0});
+      if (choice.response !== 1) return false;
+      // before-quit stops the owned service only after the updater accepts installation.
+      autoUpdater.quitAndInstall(false,true);
+      return true;
+    }});
+  if (process.platform !== 'darwin') Menu.setApplicationMenu(null);
+  mainWindow=new BrowserWindow({show:process.env.ATELIER_DESKTOP_TEST !== '1',width:1500,height:980,minWidth:700,minHeight:580,autoHideMenuBar:true,backgroundColor:'#1d1d1c',title:'Atelier',webPreferences:{...securePreferences,preload:path.join(__dirname,'preload.cjs')}});
+  bindZoomShortcuts(mainWindow.webContents,() => mainWindow);
   mainWindow.webContents.on('will-navigate',(event,url) => { if (new URL(url).origin !== origin.origin) event.preventDefault(); });
   mainWindow.webContents.setWindowOpenHandler(({url}) => { if (new URL(url).protocol === 'https:') shell.openExternal(url); return {action:'deny'}; });
   await refreshNonce();
   const requestedMode=process.argv.find(arg => /^--atelier-(chat|code|project)$/.test(arg))?.slice(10);
-  const mode=requestedMode || 'chat';
-  await mainWindow.loadURL(new URL(mode === 'code' ? '#terminal' : '#webchat',origin).href);
+  const mode=requestedMode || (app.isPackaged ? 'settings' : 'chat');
+  await mainWindow.loadURL(new URL(mode === 'settings' ? '#settings' : mode === 'code' ? '#terminal' : '#webchat',origin).href);
+  updates.start();
   if (requestedMode) mainWindow.webContents.send('desktop:mode',mode);
-  mainWindow.on('closed',() => { closeTerminals(); for (const view of browsers.values()) if (!view.webContents.isDestroyed()) view.webContents.close(); browsers.clear(); });
+  const stopComputer=registerComputerController({getWindow:() => mainWindow,request,fixture:process.env.ATELIER_DESKTOP_TEST === '1'});
+  mainWindow.on('closed',() => { stopComputer(); closeTerminals(); for (const view of browsers.values()) if (!view.webContents.isDestroyed()) view.webContents.close(); browsers.clear(); });
+}).catch(async error => { dialog.showErrorBox('Atelier — démarrage impossible',error.message); await service?.stop(); app.quit(); });
+app.on('before-quit',event => {
+  updates?.stop();
+  if (!service || quitting) return;
+  event.preventDefault();
+  quitting=true;
+  closeTerminals();
+  service.stop().finally(() => app.quit());
 });
+ipcMain.handle('updates:state',event => { trusted(event); return updates.snapshot(); });
+ipcMain.handle('updates:preferences',(event,preferences) => { trusted(event); return updates.configure(preferences); });
+ipcMain.handle('updates:check',event => { trusted(event); return updates.check(); });
+ipcMain.handle('updates:download',event => { trusted(event); return updates.download(); });
+ipcMain.handle('updates:install',event => { trusted(event); return updates.install(); });
 ipcMain.handle('browser:create',async (event,id) => {
   trusted(event); browserId(id);
   if (browsers.size >= 12 || browsers.has(id)) throw new Error('Limite : 12 onglets.');
   const view=new WebContentsView({webPreferences:{...securePreferences,partition:'persist:atelier-chatgpt'}});
+  view.webContents.setZoomFactor(mainWindow.webContents.getZoomFactor());
+  bindZoomShortcuts(view.webContents,() => mainWindow);
+  view.webContents.on('did-finish-load',() => {
+    if (mainWindow && !mainWindow.isDestroyed()) view.webContents.setZoomFactor(mainWindow.webContents.getZoomFactor());
+  });
   view.webContents.session.setPermissionRequestHandler((_contents,_permission,callback) => callback(false));
   view.webContents.session.setPermissionCheckHandler(() => false);
   secureNavigation(view.webContents);
@@ -96,6 +149,8 @@ ipcMain.on('browser:bounds',(event,bounds) => {
   trusted(event);
   if (!activeBrowser || !['x','y','width','height'].every(key => Number.isFinite(bounds?.[key]))) return;
   const [width,height]=mainWindow.getContentSize();
+  const factor=mainWindow.webContents.getZoomFactor();
+  bounds=Object.fromEntries(Object.entries(bounds).map(([key,value]) => [key,value*factor]));
   const x=Math.max(0,Math.min(width,Math.round(bounds.x))), y=Math.max(0,Math.min(height,Math.round(bounds.y)));
   activeBrowser.setBounds({x,y,width:Math.max(0,Math.min(width-x,Math.round(bounds.width))),height:Math.max(0,Math.min(height-y,Math.round(bounds.height)))});
 });
@@ -103,11 +158,9 @@ ipcMain.handle('resource:drag',async (event,resource) => {
   trusted(event);
   const url=new URL('/api/desktop-file',origin);
   url.searchParams.set('project',String(resource.projectId)); url.searchParams.set('path',String(resource.path));
-  const response=await fetch(url,{headers:{'X-Atelier-Token':nonce}});
-  const result=await response.json();
-  if (!response.ok) throw new Error(result.error);
-  const image=nativeImage.createFromBuffer(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0coAAAAASUVORK5CYII=','base64'));
-  event.sender.startDrag({file:result.path,icon:image});
+  const result=await request(url);
+  const image=nativeImage.createFromBitmap(Buffer.from([132,161,216,255]),{width:1,height:1});
+  event.sender.startDrag({files:result.files,icon:image});
 });
 app.on('window-all-closed',() => app.quit());
 ipcMain.handle('browser:navigate',(event,id,action) => {
@@ -125,3 +178,4 @@ ipcMain.handle('project:pick',async event => {
   return {path:result.canceled ? null : result.filePaths[0]};
 });
 registerTerminals({ipcMain,trusted,getWindow:() => mainWindow,request,fixture:process.env.ATELIER_DESKTOP_TEST === '1'});
+registerDisplay({ipcMain,trusted,getWindow:() => mainWindow,browsers});

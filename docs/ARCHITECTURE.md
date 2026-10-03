@@ -1,5 +1,64 @@
 # Architecture locale
 
+## Duplica : représentation native de l'utilisateur
+
+`Application.duplica` supervise les sessions existantes et réutilise la file
+TODO, les projections et `on-request`. Le service démarre désactivé. Activer une
+portée n'élargit ni le sandbox de l'agent ni ses outils. La priorité des portées
+est global → projet → workflow → tâche → agent ; une valeur explicite plus
+locale remplace l'héritage. Pause/Stop/contrôle humain imposent un arrêt global
+des interventions, indépendamment des portées. Les benchmarks sont exclus.
+
+- `server/duplica.py` : cas d'usage, supervision sérialisée, requêtes humaines,
+  contexte, watchdog, continuation et reprise explicite.
+- `server/duplica_policy.py` : classification conservatrice des permissions,
+  confinement des chemins et réponses connues. Commande composée ou inconnue,
+  autorisation réseau/globale et décision contradictoire → utilisateur.
+- `server/duplica_backend.py` : port d'agent et adaptation aux sessions de la
+  plateforme ; Codex utilise ses événements natifs, sans credentials copiés.
+- `server/computer.py` : observation, actions sur observations consommables,
+  captures hashées, bridge local et invalidation par génération.
+- `desktop/computer.cjs` : capturePage, inventaire de contrôles visibles, clics
+  et saisies réels Electron. Aucun JavaScript arbitraire fourni par l'appelant.
+  Le navigateur de recette est local, isolé et bloque les destinations distantes.
+- `server/duplica_verification.py` : critères de fichiers, processus de tests
+  sans shell (60 s), build et parcours GUI avec attentes visibles.
+- `server/duplica_memory.py` : miroirs privés du contexte, des décisions,
+  métadonnées d'agents, état, observations et événements sous `.atelier/duplica/`.
+- `server/duplica_telegram.py` : relais explicitement activé, compte privé
+  autorisé, offset persistant, décisions ponctuelles et messages importants.
+- `web/duplica.js` : indicateur global, manager, contextes, permissions,
+  missions, décisions, timeline, preuves et reprise de contrôle.
+
+Les API `/api/duplica/*` suivent les mêmes contrôles Host/Origin/nonce que les
+autres API. Le shell desktop poll les actions puis revalide la génération avant
+une interaction. Une observation dure 20 s et ne sert qu'une fois. Un effet
+incertain n'est pas rejoué. Une fenêtre modale bloque les contrôles derrière elle.
+Chaque action confirmée conserve ses captures avant/après dans l'audit local.
+
+La recette d'une mission est explicitement configurée par l'utilisateur ; son
+texte ne devient pas une permission. La supervision conserve la tâche réservée
+pendant vérification/correction, puis la file la passe **En revue**. Le statut
+Duplica **Vérifiée** correspond aux contrôles définis et ne remplace pas la
+recette humaine. Les critères non exécutés restent visibles et empêchent la fin.
+Les relances réutilisent le même agent et la même mission, avec une limite
+enregistrée. Aucun scheduler concurrent supplémentaire n'est créé.
+Une erreur d'accès ou un outil indisponible demande des preuves, sans correction
+automatique du code. Les définitions de recette sont identifiées : une recette
+finissant après redéfinition ne valide pas les nouveaux critères, et les anciens
+bugs remplacés restent historiques, distincts de bugs corrigés et retestés.
+
+Le redémarrage met Duplica en pause, expire les demandes et interrompt les
+recettes ; la mémoire et les rapports restent sur disque. L'utilisateur reprend
+explicitement après inspection. Un silence déclenche un diagnostic demandé,
+jamais un redémarrage automatique aveugle.
+
+Le contrôleur livré couvre Atelier et les applications web locales. La portabilité
+du contrat permet un adaptateur Windows/Computer Use supplémentaire ; Excel,
+les fenêtres externes et les TUI externes ne sont pas présentés comme automatisés.
+Les PTY fournissent seulement PID, ouverture/fermeture et activité de sortie.
+
+
 ```mermaid
 flowchart LR
   UI[Interface navigateur] -->|HTTP local + nonce| HTTP[run.py]
@@ -123,3 +182,23 @@ Oracle exact : compare les chaînes après `strip()`. Juge modèle : session dis
 Après interruption du serveur : sessions arrêtées, demandes périmées retirées, campagnes/workflows `interrupted` avec résultats partiels. Reprise manuelle des sessions par `thread/resume`. Pas de reprise automatique de campagne, pas de replay des effets externes.
 
 Les requêtes en cours passent également à `interrupted`. Pour OMP, la reprise utilise son fichier de session natif ; les nouveaux prompts créent une nouvelle requête de consommation.
+
+## Duplica : conversation et compteurs CLI
+
+`DuplicaDiscussion` conserve une session en lecture seule par projet et les
+livraisons de ses messages. Atelier et Telegram utilisent cette même session ;
+le rôle Duplica reste exclu de la supervision des agents de travail. Une
+livraison interrompue n'est pas rejouée au redémarrage. Le choix Travailler pour
+moi crée une mission et une portée projet, avec permissions explicites.
+
+`TelegramRelay` associe un code temporaire à un expéditeur privé. `telegram_vault`
+chiffre le token avec DPAPI Windows ; `process_environment` empêche sa
+transmission aux enfants exécutant les agents, terminaux et recettes. Les
+réponses de discussion rejoignent l'outbox persistante du relais.
+
+`NativeUsage` lit uniquement métadonnées et événements de compteurs des
+journaux Codex dont la source est `cli`. Les PTY sont enregistrés par identifiant,
+projet, PID et date. Une association ambiguë exige un choix ; un thread ne peut
+être attribué à deux panneaux. Ces compteurs de session entière sont distincts
+des mesures par requête des sessions app-server. Les quotas restent partagés
+par compte. Les limites de découverte et la recette sont dans le rapport UX.
