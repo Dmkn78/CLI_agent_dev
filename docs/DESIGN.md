@@ -1,12 +1,17 @@
 # Contrat visuel
 
-Révision du 1 octobre 2026, fondée sur les cinq nouvelles captures archivées. La charte sauge de la première version est remplacée par un cockpit sombre, compact, inspiré de Nexus AI et AgentOS. Garder la marque Atelier ; les noms, dates et métriques des maquettes sont illustratifs.
+Révision du 2 octobre 2026 : Damien demande une interface plus simple, arrondie,
+inspirée du calme visuel de Claude. La palette devient charbon chaud, texte
+ivoire et accent terracotta. Garder la marque Atelier et les états observables ;
+les noms, dates et métriques des références restent illustratifs.
 
 ## Charte révisée
 
 - Fond charbon presque noir, sidebar et surfaces gris neutre ; bordures fines.
-- Cyan pour navigation, sélection et liens ; vert pour activité, ambre pour validation, violet et rose pour différencier les rôles.
-- Typographie système, titres de vue de 22 à 24 pixels, libellés de 11 à 13 pixels, espacement des lettres nul. Rayons de 4 à 8 pixels.
+- Terracotta pour navigation, sélection et liens ; les couleurs d'état restent distinctes.
+- Typographie système, titres de vue de 24 à 28 pixels, libellés de 11 à 13 pixels. Rayons de 12 à 20 pixels ; bordures discrètes et boutons compacts.
+- Duplica : choix du projet, discussion centrale persistante, un bouton principal Travailler pour moi. Actions secondaires dans le menu ⋯ ; missions et preuves dans Suivi. Le formulaire Telegram guide la création et l'association du bot privé.
+- Consommation proche de chaque session : tokens entrée/réponse/cache et total, abonnement communiqué, quota clairement attribué au compte partagé. Aucune addition du cache au total, aucun quota fictif par session.
 - Premier écran de travail : graphe projet/orchestrateur/agents/sorties, détails sélectionnés, activité et tâches réelles. Aucune composition marketing ni statistique fictive.
 - Graphe sur fond ponctué discret : liens directionnels, états nommés, sélection donnant accès au modèle, aux permissions et aux preuves. Les nœuds prévus sont distincts des sessions lancées.
 - Création : fournisseur/catalogue réel et configuration séparée du planificateur, des spécialistes, du vérificateur et de la synthèse.

@@ -1,0 +1,40 @@
+/* Native, keyboard-accessible choices with a consistent dark popup. */
+select { color-scheme:dark; border:1px solid var(--border); border-radius:8px; background-color:var(--panel); color:var(--text); padding:8px 12px; cursor:pointer; max-width:100%; }
+select:hover { border-color:#ffffff35; background-color:var(--panel-hover); }
+select:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+option { color:var(--text); background:var(--panel); }
+@supports (appearance:base-select) {
+  select,::picker(select) { appearance:base-select; }
+  select { align-items:center; gap:12px; }
+  select::picker-icon { color:var(--muted); transition:rotate .15s; }
+  select:open::picker-icon { rotate:180deg; }
+  ::picker(select) { margin-block:6px; border:1px solid #ffffff20; border-radius:10px; padding:5px; background:var(--panel); color:var(--text); box-shadow:0 12px 32px #0006; max-height:320px; }
+  option { padding:9px 12px; gap:10px; border-radius:6px; font-size:12px; line-height:1.4; }
+  option:hover,option:focus { background:var(--panel-hover); }
+  option:checked { background:#d8a18414; color:var(--accent); }
+  option::checkmark { order:1; margin-left:auto; }
+}
+.duplica-project-choice select { padding:8px 12px; border-radius:8px; background:var(--panel); min-width:140px; }
+.duplica-model-choice select { padding:6px 9px; border:1px solid var(--border); border-radius:7px; }
+.zoom-control { display:inline-flex; align-items:center; gap:2px; border:1px solid var(--border); border-radius:7px; padding:1px; flex-shrink:0; }
+.zoom-control .icon-btn { width:26px; height:26px; padding:0; font-size:17px; }
+.zoom-control output,.zoom-control .zoom-percent { min-width:46px; text-align:center; font-size:11px; font-variant-numeric:tabular-nums; color:var(--muted); padding:4px; }
+.zoom-control .quiet { padding:5px 9px; font-size:11px; }
+.graph-heading { flex-wrap:wrap; gap:12px; }
+.graph-heading .row-actions { flex-wrap:wrap; }
+.graph-scroll { height:clamp(260px,48vh,460px); }
+.graph-canvas { width:1000px; min-width:1000px; }
+.graph-inspector { max-height:clamp(260px,48vh,460px); overflow:auto; scrollbar-width:thin; }
+.app-shell,.workspace { min-height:var(--app-viewport-height,100vh); }
+@media(max-width:900px) {
+  .topbar-actions { gap:6px; }
+  .topbar-actions .search-trigger,.topbar-actions .topbar-divider { display:none; }
+  .graph-inspector { max-height:280px; }
+}
+@media(max-width:600px) {
+  .topbar { padding-inline:12px; gap:8px; }
+  .topbar .breadcrumb { min-width:0; flex:1; overflow:hidden; }
+  .topbar .breadcrumb>span,.topbar-actions .avatar-small,#audit-shortcut { display:none; }
+  .topbar .breadcrumb strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .graph-zoom-control { margin-left:0; }
+}

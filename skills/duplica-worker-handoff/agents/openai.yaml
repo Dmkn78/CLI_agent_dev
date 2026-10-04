@@ -1,0 +1,4 @@
+interface:
+  display_name: "Retour de travail Duplica"
+  short_description: "Relier un résultat aux fichiers et preuves de test"
+  default_prompt: "Utilise $duplica-worker-handoff pour traiter la mission Duplica dans le périmètre indiqué et conserver les preuves."

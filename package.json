@@ -1,18 +1,38 @@
 {
   "name": "atelier-local-workbench",
-  "version": "0.2.0",
+  "version": "0.3.0-beta.1",
+  "description": "Atelier — cockpit local pour agents IA",
+  "main": "desktop/main.cjs",
+  "author": "Dmkn78",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Dmkn78/CLI_agent_dev.git"
+  },
   "private": true,
   "scripts": {
     "vendor": "node scripts/vendor.cjs",
-    "desktop": "electron desktop/main.cjs",
-    "test:ui": "node tests/test_cockpit.cjs"
+    "desktop": "node scripts/launch-desktop.cjs",
+    "test:ui": "node tests/test_cockpit.cjs",
+    "test:release": "node --test tests/test_updates.cjs && python -B -m unittest discover -s tests -p test_release.py -v",
+    "build:electron": "node node_modules/electron/install.js",
+    "build:runtime": "npm run vendor && node scripts/prepare-release.cjs",
+    "pack": "npm run build:electron && electron-builder --config electron-builder.cjs --dir --publish never",
+    "dist": "npm run build:electron && electron-builder --config electron-builder.cjs --publish never"
   },
   "dependencies": {
-    "@logicflow/core": "2.2.5"
+    "@logicflow/core": "2.2.5",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0",
+    "electron-updater": "6.8.9",
+    "node-pty": "1.1.0",
+    "qrcode-generator": "2.0.4"
   },
   "devDependencies": {
+    "@openai/codex": "0.160.0",
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3",
     "esbuild": "0.28.2",
-    "electron": "44.5.1"
+    "playwright": "1.63.0"
   },
   "overrides": {
     "@logicflow/core": {

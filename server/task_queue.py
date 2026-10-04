@@ -105,6 +105,10 @@ class TaskQueue:
                             self.wake.wait(0.5)
                             self.wake.clear()
                     current = self.app.store.get('session', session_id)
+                    while not self.closed and self.app.duplica.hold_task(session_id):
+                        self.wake.wait(0.5)
+                        self.wake.clear()
+                    current = self.app.store.get('session', session_id)
                     if active_task:
                         successful = current['status'] == 'ready' and current.get('lastTurnStatus') == 'completed'
                         self.finish(active_task['id'], session_id, successful, None if successful else 'Tour interrompu ou échoué ; reprise explicite requise.')

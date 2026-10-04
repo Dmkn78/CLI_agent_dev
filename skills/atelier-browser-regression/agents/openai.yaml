@@ -1,0 +1,4 @@
+interface:
+  display_name: "Recette navigateur Atelier"
+  short_description: "Vérifier les parcours web avec fournisseur fictif"
+  default_prompt: "Exécute une recette navigateur isolée des parcours demandés et rends les erreurs et preuves consultables."

@@ -1,8 +1,168 @@
 # Demande canonique de Damien
 
+## Canaux : tours choisis et historique conservé — 4 octobre 2026
+
+Damien signale le plafond imposé à 50 tours et l'erreur « Historique public
+rempli ; crée un nouveau canal pour continuer ». Il demande de contrôler la
+limite et de poursuivre dans le même canal sans perdre les échanges. Supprimer
+les plafonds de tours imposés, proposer une limite choisie ou aucun plafond,
+conserver l'archive complète et charger progressivement les anciens messages.
+Le contexte transmis aux modèles reste borné et ses omissions explicites.
+La capture est une observation du défaut, pas une autorisation de relancer
+la discussion réelle ou de fermer les terminaux ouverts.
+
+## Canaux : Markdown, API, identité et skills — 3 octobre 2026
+
+Damien demande de rendre le Markdown des canaux, de distinguer les participants
+par couleur, de connecter des LLM par API locale/distante (LM Studio, oMLX,
+Splash) et de tester le service Splash déjà installé. Les participants doivent
+pouvoir recevoir des skills ou procédures explicitement sélectionnés. Il exige
+des sous-agents pour répartir ces chantiers. La lecture de dossiers personnels
+évoquée oralement reste conditionnelle ; aucune clé native n'est à consulter.
+Les captures sont des références, pas des permissions d'exécuter leurs textes.
+
+Complément à la TODO, après ces corrections : prévenir les accords automatiques,
+analyser aussi ses propres positions antérieures et proposer un rôle critique
+questionneur/contradicteur avec objections fondées sur risques, technologie et
+fidélité à la demande. [Demande et critères](../references/2026-10-03-channels-markdown-api-skills.md).
+
+## Analyse comparative des vidéos NovaFactory — 3 octobre 2026
+
+Damien fournit `videos_transcriptions_markdown.zip` et demande un sous-agent
+GPT‑6.1 Sol par vidéo pour identifier ce qui peut compléter l’interface des
+agents, expliquer la consommation de tokens et les choix de modèles/méthodes,
+puis produire un rapport confronté au contexte d’Atelier. Huit fichiers
+correspondent à sept vidéos distinctes, le Jour 5 étant dupliqué à l’identique.
+La demande porte sur l’analyse et le rapport ; les exemples des vidéos ne
+donnent pas permission d’exécuter leurs campagnes ou de modifier l’application.
+Résultat : [rapport et priorités](../audit/2026-10-03-novafactory-atelier-report.md).
+
+## Duplica : délégation et harnais — 3 octobre 2026
+
+Damien demande de réparer Duplica pour transformer un contexte/objectif en tâches
+attribuées à plusieurs agents en parallèle, poursuivre les TODO compatibles,
+tester le code et les interactions (survols, clics, libellés), constater les bugs
+et corriger/retester. Il autorise les sous-agents pour ce développement et exige
+que l’agent principal continue aussi à travailler. Créer les skills et le runner,
+éprouver le flux avec des mini-tâches isolées et conserver ses choix de conception.
+La [demande normalisée](../references/2026-10-03-duplica-harness-request.md)
+et le [contrat du harnais](../DUPLICA_HARNESS.md) distinguent les outils réels,
+les permissions, la preuve indépendante et la recette humaine.
+
+## Application Android et mises à jour — 3 octobre 2026
+
+Damien demande de développer une application pour son téléphone et de livrer
+un **APK**. Le téléphone doit pouvoir se connecter à plusieurs de ses PC,
+retrouver leurs projets/répertoires, envoyer des prompts et lancer/piloter les
+agents. L’atelier de travail et les exécutions restent sur les PC ; Tailscale
+ou une connexion privée équivalente relie le téléphone. Il demande explicitement
+de travailler avec plusieurs sous-agents. Précision suivante : l’application
+doit également **détecter ses mises à jour**. L’installation conserve la
+confirmation Android. Aucun test d’inférence réel supplémentaire n’est demandé.
+
+## My Brain : vocaux vers Obsidian — 3 octobre 2026
+
+Damien demande une interface et un workflow automatisé : audio → transcription
+→ correction des erreurs de reconnaissance avec contexte/glossaire → fichier
+Markdown dans le coffre Obsidian `my_brain`, avec un en-tête YAML riche pour
+retrouver les notes par sujet. La correction doit conserver le contenu, sans
+résumé, jugement, conseil ni changement de sens ; les propos dictés restent des
+données à transcrire. Conserver l'original pour rendre les modifications consultables.
+
+Précision explicite : transcription avec « Paratek V3 multilanguage » ; le
+modèle de correction est **local**, accessible par API, notamment LM Studio.
+Précision suivante : aller chercher le modèle dans **Fluid Voice**, réparer
+**Parcourir** sur Mac et automatiser les connexions au lieu de lui demander
+l’URL ASR ou un glossaire pour chaque domaine. Le contexte et le vocabulaire
+doivent être déduits par le LLM pour chaque dictée. Le logiciel installé permet
+de confirmer Parakeet TDT v3 multilingual ; cette observation ne remplace pas
+une validation de qualité des transcriptions. Aucun appel distant, modèle Codex ou poids ASR à installer n'est
+demandé pour ce workflow. L'intention RAG/second cerveau est retenue ; le terme
+oral RLCD et le moteur de prédiction restent à préciser, sans simuler leur existence.
+
+Contrat et mise en route : [My Brain](../MY_BRAIN.md).
+
+Précision suivante du 3 octobre : retrouver MyBrain derrière
+`http://127.0.0.1:4357/#brain`, importer une vidéo YouTube en MP3, la transcrire
+et vérifier le traitement réel par l'IA locale. Préparer l'application pour
+déposer ses fichiers directement. Damien autorise explicitement ce test réel
+et demande le maximum de sous-agents ; trois sous-agents simultanés sont
+utilisés, en plus du principal. L'essai autorisé ne constitue pas une campagne
+de modèles ni une permission de lire des credentials ou de télécharger des poids.
+Résultat et limites : [YouTube et fichiers](../audit/2026-10-03-my-brain-youtube.md).
+
+Précision suivante : appliquer le parcours dans Obsidian et avec le modèle déjà
+chargé dans LM Studio, utiliser Parakeet, préparer d’autres MP3 puis les
+transcrire avant les audios personnels à venir. Le coffre `my_brain`, son export
+automatique et la surveillance déjà active sont conservés. Deux MP3 sont
+disponibles dans le coffre, avec un guide et leurs transcriptions. La recette
+réelle a aussi motivé une correction du filtrage lexical du contexte anglais.
+Voir [mise en service Obsidian](../audit/2026-10-03-my-brain-obsidian-ready.md).
+
+Précision suivante : glisser un dossier entier et le traiter progressivement
+jusqu’au dernier fichier. Conserver le nom et le numéro du vocal ; à défaut de
+nom, utiliser sa date. La date du fichier et les dates explicitement annoncées
+dans des « résumés du… » sont essentielles et doivent rester distinctes de
+l’import. Structurer proprement le YAML avec titre/sujet, description, thèmes
+et liens retrouvables pour le second cerveau. Damien ne fixe pas le schéma ;
+les termes oraux « JEV » et « RLCD » ne suffisent pas à identifier un moteur ou
+son contrat d’intégration. Les métadonnées sont donc documentées sans inventer
+ce branchement. Voir [dossiers et dates](../audit/2026-10-03-my-brain-folders-dates.md).
+
+Correction suivante : Damien juge le YAML trop technique et illisible. Il veut
+un contrat normalisé pour pensées, dialogue, récit, conseils à soi et contenus
+mixtes, avec seulement les repères utiles au second cerveau. Les identifiants,
+hashes et journaux techniques ne doivent pas remplir l’en-tête. Il demande
+explicitement de consulter **Cloudflare/CLEF sur Hugging Face** : ce nom résout
+la référence précédente à Jev/SystemOne, sans autoriser installation ou appel
+distant. Il réaffirme la conservation du texte : prompt système LM Studio
+strict, modifications ASR minimales, aucune réécriture de sens, et versions
+avant/après comparables. Le texte doit pouvoir être saisi ou repris dans un
+brouillon. L’original reste la référence, les propositions IA sont distinctes.
+Voir [YAML simple et fidélité](../audit/2026-10-03-my-brain-fidelity.md).
+
+## Retours architecture, souvenirs et activité du 3 octobre 2026
+
+La [demande et huit captures](../references/2026-10-03-architecture-memory-feedback.md)
+précisent : conserver Architecture lors de la création d’un agent, afficher
+les terminaux natifs dans son graphe, rendre les actions accessibles en
+demi-écran, chercher/parcourir les ressources et les sources de souvenirs,
+nommer le projet, conserver les souvenirs JSON avec métadonnées riches et
+export YAML/Markdown, présenter les réponses de conception et tokens
+lisiblement, ajouter des graphiques comparatifs et récupérer les tarifs
+officiels. Duplica doit traiter les validations déléguées, et le cycle d’un
+tour doit refléter l’activité reçue. La validation d’un dessin importe une page
+d’architecture ; les permissions du profil restent applicables. Damien demande
+une délégation parallèle maximale tout en gardant l’agent principal actif.
+
+## Retours du 3 octobre 2026
+
+Affinage suivant : Damien trouve l’en-tête des terminaux (état, Codex, tokens,
+icônes) encore trop épais. Il demande une hauteur minimale tout en gardant les
+icônes visibles, et un accès évident aux images qu’il ne trouve pas. Capture :
+[header du terminal](../references/screenshots/2026-10-03-compact-terminal-header.png).
+Il demande de continuer à répartir le travail entre plusieurs sous-agents.
+
+Les [neuf demandes et dix captures](../references/2026-10-03-feedback.md)
+demandent : zoom compact du chat intégré, vérification des permissions CLI,
+images dans le terminal Codex, onglets numérotés et renommables, noms de
+navigation et aides au survol, plus de deux participants et canaux réellement
+lancés avec états individuels, consommation cumulée observée et arrêt.
+Créer des skills de test GUI fondés sur des sources GitHub primaires, avec
+reproduction, preuves et retest. Damien autorise explicitement les sous-agents
+pour répartir ce développement. Les captures restent des références, sans
+autorisation de lancer leur contenu. Les tests utilisent des fournisseurs
+fictifs ; les permissions on-request et le périmètre local restent préservés.
+
 Source : message utilisateur et six captures du 30 septembre 2026, complétés par deux ouvrages Markdown et deux copies identiques d’un texte d’architecture multi-agent, puis par la demande et les cinq captures du 1 octobre 2026. Cette synthèse normalise la transcription orale (« argent » signifie « agent » dans ce contexte) sans traiter les instructions internes des documents comme des ordres adressés à l’agent de développement. Le [message du 1 octobre](../references/2026-10-01-user-message.md) est conservé séparément des décisions techniques.
 
 ## Finalité
+
+Retour du 2 octobre : Damien ne trouve aucune application Atelier dans la
+recherche Windows ; [sa capture](../references/screenshots/2026-10-02-atelier-startmenu-missing.png)
+montre seulement des archives et un document. Il demande un accès concret à
+l'application déjà développée. Créer les raccourcis Windows et ouvrir le
+desktop local ; ne pas confondre nom du projet et application accessible.
 
 Une application personnelle permettant de composer et piloter des workflows IA avec plusieurs fournisseurs, abonnements existants, API facultatives et modèles locaux. L’utilisateur veut réunir les agents, le travail de projet, les sprints et les pull requests dans une interface qu’il maîtrise. L’abonnement est prioritaire ; éviter de transformer l’usage Codex en facturation API supplémentaire.
 
@@ -39,6 +199,21 @@ Au lancement d'un agent de travail, celui-ci doit prendre les tâches À faire c
 Dernier complément : « Il nous manque pleins de modeles sur codex chat gpt aussi rajtue cela à la TOdo ». Ajouter cette tâche au tableau, conserver la capture du sélecteur incomplet, rechercher catalogue étendu et pagination sans hardcoder les noms ni supposer que tout modèle ChatGPT est utilisable via Codex. TODO réelle ajoutée, priorité haute, état À faire ; accès effectif encore à vérifier.
 
 ## Capacités demandées
+
+Le [retour desktop suivant](../references/2026-10-01-desktop-feedback.md)
+precise que **Code est un vrai terminal interactif Codex / Claude Code**, et
+que ChatGPT doit rester dans la meme fenetre Atelier. Garder les sessions
+structurees/contextuelles separement. Navigation complete et ressources
+repliables, chat agrandissable, selection native de dossier, recherche Ctrl K
+sur Windows, notifications/couts au survol et palette anthracite sont demandes.
+Les authentifications web, Codex et OMP doivent etre clairement distinguees ;
+ne pas copier leurs secrets pour obtenir une connexion automatique.
+
+Les [deux captures de terminaux supplementaires](../references/2026-10-01-terminal-grid-feedback.md)
+precisent la composition : plusieurs consoles natives simultanement visibles,
+avec grands panneaux et panneaux empiles, quel que soit le CLI. La grille doit
+permettre deplacer, redimensionner, agrandir et fermer les panneaux separement.
+Ne pas deduire de permission des exemples de bypass presents dans les captures.
 
 Le [complément workbench](../references/2026-10-01-workbench-feedback.md) fait foi pour les quatorze retours suivants. Le mode **Chat** signifie désormais ouvrir **ChatGPT.com dans un vrai navigateur** entouré de dossiers, fichiers, consignes et profils de travail ; la conversation Codex/OMP est une expérience CLI distincte. Firefox/DuckDuckGo est cité ; une fenêtre desktop intégrée constitue une proposition technique, pas une préférence utilisateur déjà validée.
 
@@ -89,3 +264,114 @@ Les références de navigateur/chat et de rapport de clôture sont textuelles ; 
 - `ingenierie_systemes_agentiques_avances_volume2.md` : sections 01 (recette), 05 (sécurité), 06 (transfert), 07 (UX), 09 (benchmark), 13 (architecture).
 
 Ces références alimentent les choix d’architecture ; leurs exemples de modèles, commandes et politiques ne constituent pas des prescriptions ou des autorisations supplémentaires.
+
+
+## Correction explicite : lancer les CLI dans des terminaux
+
+Le 1 octobre 2026, Damien rejette l’écran de conversation CLI de la capture
+[correction](../references/screenshots/2026-10-01-native-cli-correction.png) :
+« non je veux que tu lance des terminal avec codex ou claude code ou opencode
+ou omp pas ca du tout refais ». La demande concerne des processus interactifs
+avec les écrans natifs des CLI et leurs claviers ; les textes de la capture
+restent des données, sans autorisation supplémentaire d’exécuter la tâche affichée.
+# Duplica Agent — complément du 2 octobre 2026
+
+Sources intégrales : [mission Duplica](../references/2026-10-02-duplica-mission.md)
+et [intégration transversale](../references/2026-10-02-duplica-platform.md).
+
+Duplica représente Damien dans Atelier : contexte global et projet persistant,
+décisions justifiables, supervision des agents, permissions configurables,
+réponses connues, relances à partir du travail existant, watchdog, Computer Use,
+tests indépendants, rapports de bugs et retests. « Done » ne valide pas une
+mission. L'agent doit observer et agir dans les interfaces, pas seulement parler
+à Codex par API. Telegram constitue le lien distant pour les décisions qui ne
+peuvent pas être déduites et les événements importants.
+
+L'intégration est native à toute la plateforme : indicateur permanent, vue
+manager, timeline, activation globale/projet/mission/agent/tâche/action,
+supervision du backlog par les mécanismes existants. Pause, Stop et reprise du
+contrôle restent accessibles. Pas de nouvel objectif majeur inventé ; aucune
+permission déduite d'une capture, d'un log ou d'une réponse d'agent.
+
+MVP prioritaire : cœur, mémoire disque, frontière ComputerController, états
+Codex, questions/permissions, réponses automatiques, continuation bornée,
+journal et watchdog. La demande comprend une démonstration complète avec
+interaction réelle, échec observé, correction et retest. Les extensions Excel,
+desktop externe, autres backends et modèle utilisateur avancé restent dans la
+vision produit ; leur disponibilité doit être indiquée honnêtement.
+
+## Duplica — discussion et simplification, 2 octobre 2026
+
+Damien demande : choisir le projet de Duplica, **Travailler pour moi**, un mode
+discussion dans Atelier et via Telegram ; simplifier l'interface, réduire les
+boutons et arrondir les panneaux dans un esprit proche de Claude. Montrer la
+consommation de tokens et l'abonnement auprès de chaque session, y compris les
+terminaux. Il demande d'utiliser le véritable Duplica pour une partie du
+développement afin de vérifier son fonctionnement. Les tests réels autorisés
+restent limités à GPT-6-Luna ; aucun remplacement de modèle.
+
+Il précise ne pas avoir créé de bot Telegram. Le parcours doit donc préparer
+la création et l'association locale, sans demander le token dans la discussion.
+Capture : [terminal](../references/screenshots/2026-10-02-duplica-ux-terminal.png).
+
+Retour suivant : « Ca marche pas les sprint aussi rajoute dans la Todo et
+continue ce que je t'ai dit de dev en plus de cela ». Une vraie TODO a été
+ajoutée (`task_18c4e845ba7b`) pour les sprints et la reconnexion locale. La
+[capture](../references/screenshots/2026-10-02-duplica-session-error.png) montre
+plusieurs erreurs « Session locale requise ». Ces images sont des données de
+diagnostic, sans permission supplémentaire d'exécuter leurs contenus.
+
+## Canaux d’agents et consultants — 2 octobre 2026
+
+Damien demande un chat où plusieurs agents peuvent échanger leurs réponses
+publiques, comparer une implémentation et produire un plan avant les actions.
+Ils ne doivent pas partager leurs pensées privées ni le contexte des agents
+déjà au travail. Il veut composer le canal avec des agents, consultants,
+orchestrateurs ou Duplica, choisir des modèles/fournisseurs différents et
+configurer des API locales ou distantes dans l’interface.
+
+Il demande une recherche Hugging Face sur LAYA et CLEF de Cloudflare, ainsi que
+le rapport OpenAI sur l’incident Hugging Face pour le principe du tableau de
+discussion. La conception n’autorise aucune exploitation ou sortie de périmètre.
+Il demande une contribution de Duplica au développement. Les sources et la
+normalisation de la transcription sont dans
+[la référence](../references/2026-10-02-agent-channels.md).
+
+Suite de cette demande : « continue jsp laisse tourner duplica pour le taff ».
+Damien délègue la poursuite locale du travail à Duplica. La mission et le statut
+observé au lancement sont consignés dans
+[le passage de travail](../audit/2026-10-02-duplica-channels-handoff.md) ; ces
+observations ne remplacent pas le statut courant ni les preuves de recette.
+
+Correction immédiate de Damien : « non gpt6.1 max sol pas luna ». Pour cette
+mission et ses relances, utiliser **GPT-6.1-Sol avec effort max**, en remplaçant
+le précédent choix de GPT-6-Luna. Conserver la mission et le travail déjà produit.
+
+### Autorisation du test Electron — 2 octobre 2026
+
+Damien : « je n'ai pas l'app et valide les test tests ». Accord ponctuel pour
+exécuter la recette Electron locale demandée hors sandbox, en fenêtres cachées
+avec données fictives séparées. Cet accord ne change pas globalement les
+permissions de Duplica. Le modèle demandé reste GPT-6.1-Sol, effort max.
+
+## Connexion du chat intégré — clarification du 1 octobre 2026
+
+Damien constate que ChatGPT intégré affiche « Se connecter » alors que Codex et son Firefox habituel sont déjà connectés. Après présentation des deux possibilités, il choisit explicitement : **« Chat intégré à Atelier, avec une connexion initiale »**. Conserver le profil persistant du navigateur Atelier et rendre visible la distinction entre connexion Codex et session web ; ne pas copier les cookies Firefox ni les credentials Codex. Le succès de la connexion web reste à valider humainement. Capture durable : [chat-login](../references/screenshots/2026-10-01-chat-login.png).
+
+
+## Une seule application Atelier — 3 octobre 2026
+
+Damien demande explicitement de modifier le code avec plusieurs sous-agents
+pour que les lancements Electron soient identifiés comme **Atelier** et
+ouvrent une seule application. Les lanceurs du projet et l’application
+installée doivent réafficher l’instance déjà ouverte, sans deuxième fenêtre,
+service ou icône Electron. Les profils de connexion et données existants
+restent distincts et conservés ; les recettes fictives restent isolées.
+
+## Consommation Codex automatique — 3 octobre 2026
+
+Damien demande que la consommation de son abonnement Codex se mette à jour
+automatiquement dans Atelier, sans cliquer sur Actualiser. Il évoque cinq ou
+dix minutes puis privilégie **toutes les dix minutes**. La lecture porte sur
+les quotas natifs du compte ; aucune inférence n'est demandée pour les obtenir.
+Il demande explicitement des subagents pour accélérer la mise en place.

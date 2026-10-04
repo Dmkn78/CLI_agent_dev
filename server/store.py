@@ -20,6 +20,7 @@ def uid(prefix):
 def redact(value):
     if isinstance(value, dict):
         return {k: '[REDACTED]' if re.search(r'(token$|password|secret|authorization|api.?key)', k, re.I)
+                and not (k == 'read_secrets' and isinstance(v, str) and v in ('auto', 'ask', 'deny'))
                 and k not in ('inputTokens', 'outputTokens', 'totalTokens') else redact(v) for k, v in value.items()}
     if isinstance(value, list):
         return [redact(v) for v in value]
@@ -103,7 +104,7 @@ class Store:
             raise ValueError('Nom d’artefact invalide.')
         directory = self.root / 'runs' / session_id
         directory.mkdir(parents=True, exist_ok=True)
-        content = data if isinstance(data, str) else json.dumps(data, ensure_ascii=False, indent=2)
+        content = (data if isinstance(data, str) else json.dumps(data, ensure_ascii=False, indent=2)).encode('utf-8')
         file = directory / name
-        file.write_text(content, encoding='utf-8')
-        return {'path': str(file), 'sha256': hashlib.sha256(content.encode()).hexdigest()}
+        file.write_bytes(content)
+        return {'path': str(file), 'sha256': hashlib.sha256(content).hexdigest()}

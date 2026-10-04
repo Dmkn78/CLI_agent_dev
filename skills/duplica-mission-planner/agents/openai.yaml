@@ -1,0 +1,4 @@
+interface:
+  display_name: "Planifier une mission Duplica"
+  short_description: "Décomposer une mission en tâches vérifiables"
+  default_prompt: "Utilise $duplica-mission-planner pour traiter la mission Duplica dans le périmètre indiqué et conserver les preuves."

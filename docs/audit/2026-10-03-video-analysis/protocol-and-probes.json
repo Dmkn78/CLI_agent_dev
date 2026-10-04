@@ -1,0 +1,261 @@
+{
+  "kind": "synthetic-read-only-audit",
+  "codexVersion": "0.157.1",
+  "tokenBreakdownSchema": {
+    "properties": {
+      "cacheWriteInputTokens": {
+        "default": 0,
+        "format": "int64",
+        "type": "integer"
+      },
+      "cachedInputTokens": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "inputTokens": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "outputTokens": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "reasoningOutputTokens": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "totalTokens": {
+        "format": "int64",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "cachedInputTokens",
+      "inputTokens",
+      "outputTokens",
+      "reasoningOutputTokens",
+      "totalTokens"
+    ],
+    "type": "object"
+  },
+  "accountUsageParams": {
+    "properties": {
+      "threadId": {
+        "description": "When present, read estimated usage for this thread instead of account-wide token activity.",
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "type": "object"
+  },
+  "accountUsageThreadSchema": {
+    "properties": {
+      "estimatedUsageCreditsMicros": {
+        "format": "int64",
+        "type": "integer"
+      },
+      "estimatedUsageUsdMicros": {
+        "format": "int64",
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "groups": {
+        "items": {
+          "$ref": "#/definitions/ThreadUsageBreakdownGroup"
+        },
+        "type": "array"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "estimatedUsageCreditsMicros",
+      "groups",
+      "threadId"
+    ],
+    "type": "object"
+  },
+  "accountUsageResponseDescription": {
+    "anyOf": [
+      {
+        "$ref": "#/definitions/ThreadUsage"
+      },
+      {
+        "type": "null"
+      }
+    ],
+    "default": null,
+    "description": "Estimated usage when a thread was requested and its billing route is available."
+  },
+  "applicationUpdateRequestUsage": {
+    "source": "server/app.py",
+    "sourceSha256": "3716293802d5de595ca18c66f205b6243bbc96f2458d4f5b0746659b67e85417",
+    "input": {
+      "total": {
+        "inputTokens": 1000000,
+        "outputTokens": 100000,
+        "cachedInputTokens": 250000,
+        "cacheWriteInputTokens": 400000,
+        "reasoningOutputTokens": 50000,
+        "totalTokens": 1100000
+      }
+    },
+    "output": {
+      "inputTokens": 1000000,
+      "outputTokens": 100000,
+      "cachedInputTokens": 250000,
+      "totalTokens": 1100000
+    },
+    "droppedFields": [
+      "cacheWriteInputTokens",
+      "reasoningOutputTokens"
+    ]
+  },
+  "limits": "No account RPC, credentials, real inference, application change or browser acceptance.",
+  "javascriptProbes": {
+    "nativeSubagentCoverage": {
+      "inputParents": 1,
+      "inputChildren": 1,
+      "recordIds": [
+        "native:fictional-parent"
+      ],
+      "shownTokens": 100,
+      "childMeasuredTokens": 500,
+      "interpretation": "Child row is absent; this fixture assumes parent tokens are exclusive."
+    },
+    "turnAggregateContextTier": {
+      "syntheticTariff": {
+        "provider": "openai",
+        "input": 2,
+        "cache": 0.1,
+        "cacheWrite": 2.5,
+        "output": 10,
+        "contextThreshold": 272000,
+        "longInput": 4,
+        "longCache": 0.2,
+        "longCacheWrite": 5,
+        "longOutput": 15
+      },
+      "perCallInput": {
+        "inputTokens": 150000,
+        "cachedInputTokens": 100000,
+        "cacheWriteTokens": 0,
+        "outputTokens": 1000
+      },
+      "aggregateInput": {
+        "inputTokens": 300000,
+        "cachedInputTokens": 200000,
+        "cacheWriteTokens": 0,
+        "outputTokens": 2000
+      },
+      "perCallSumUsd": 0.24,
+      "turnAggregateUsd": 0.47
+    },
+    "cacheWriteProjectionCost": {
+      "syntheticTariff": {
+        "provider": "openai",
+        "input": 2,
+        "cache": 0.1,
+        "cacheWrite": 2.5,
+        "output": 10,
+        "contextThreshold": 0,
+        "longInput": 4,
+        "longCache": 0.2,
+        "longCacheWrite": 5,
+        "longOutput": 15
+      },
+      "withObservedCacheWritesUsd": 2.725,
+      "afterFieldDroppedUsd": 2.525
+    },
+    "nativeChip": {
+      "completeMeasuredNativeSession": {
+        "id": "fictional-parent",
+        "projectId": "fiction",
+        "usage": {
+          "total": {
+            "inputTokens": 100,
+            "cachedInputTokens": 0,
+            "cacheWriteInputTokens": 0,
+            "outputTokens": 10,
+            "totalTokens": 110
+          }
+        }
+      },
+      "renderedCost": "<small>Coût non communiqué</small>",
+      "reason": "state.requests is empty; native cumulative counters are not used for chip pricing."
+    }
+  },
+  "existingJavascriptTests": [
+    "tests/test_cockpit.cjs",
+    "tests/test_session_usage.cjs"
+  ],
+  "installedAssetComparison": [
+    {
+      "file": "web/session_usage.js",
+      "installedPath": "/Applications/Atelier.app/Contents/Resources/runtime/atelier-service/_internal/web/session_usage.js",
+      "sourceSha256": "17d7751189cc3b09e6ebfd1d7c6b8ff4ca0350190721a3ee9cac24a42248242f",
+      "installedSha256": "996ae8ac5e1461957feb71493c92d9c560c71892f2c1d689d09d6233bd60efd3",
+      "same": false,
+      "sourceBytes": 7150,
+      "installedBytes": 4846
+    },
+    {
+      "file": "web/cockpit.js",
+      "installedPath": "/Applications/Atelier.app/Contents/Resources/runtime/atelier-service/_internal/web/cockpit.js",
+      "sourceSha256": "2d77113a65bddf6063eca964cd97a7ecb976cf6d28a8065352b1451956a85b02",
+      "installedSha256": "b0fc0d6841526d62c91868466e302707556f99965aeb7227e76c12a3654a491c",
+      "same": false,
+      "sourceBytes": 29743,
+      "installedBytes": 22718
+    },
+    {
+      "file": "web/workbench.js",
+      "installedPath": "/Applications/Atelier.app/Contents/Resources/runtime/atelier-service/_internal/web/workbench.js",
+      "sourceSha256": "6833fa73229218df045c941f5ff3f7c369fde5062ec4e28a5eda261592ea7abd",
+      "installedSha256": "3f45c9b09d6299287ded999cf9785ddf081b42b9bd0100c734647c4c4f67cf1d",
+      "same": false,
+      "sourceBytes": 18485,
+      "installedBytes": 13086
+    },
+    {
+      "file": "web/terminal.js",
+      "installedPath": "/Applications/Atelier.app/Contents/Resources/runtime/atelier-service/_internal/web/terminal.js",
+      "sourceSha256": "42585ebffcbbd3b67a7975bf15bf29d5338b2177925d92b586addad119e7430d",
+      "installedSha256": "791cbe58367f069fe95df61d4fe8b1c2c7ecd48f385f0a5f3afb837d968ffd33",
+      "same": false,
+      "sourceBytes": 35528,
+      "installedBytes": 29944
+    }
+  ],
+  "documentVerification": {
+    "reports": 8,
+    "annexes": 7,
+    "mainWords": 3594,
+    "sourceFiles": 8,
+    "uniqueVideos": 7,
+    "duplicateGroups": [
+      [
+        "video-04",
+        "video-05"
+      ]
+    ],
+    "missingLinksOrHashErrors": []
+  },
+  "auditedSourceHashes": {
+    "server/app.py": "3716293802d5de595ca18c66f205b6243bbc96f2458d4f5b0746659b67e85417",
+    "server/native_usage.py": "929266b35774131887fe2e06f2ede353bfe0b45bd8ffd4a9b5e1ac0e853dfda3",
+    "server/omp_session.py": "2715d80f54dbbae86c8915197c4d40cc10440ffa76ac1647d2ba3d1030b1fb4f",
+    "server/official_tariffs.py": "f7c4383fd05f4ae18af398667348ed2b77455e4be12ac3d45626fe8b429ad5b6",
+    "web/cockpit.js": "2d77113a65bddf6063eca964cd97a7ecb976cf6d28a8065352b1451956a85b02",
+    "web/session_usage.js": "17d7751189cc3b09e6ebfd1d7c6b8ff4ca0350190721a3ee9cac24a42248242f",
+    "web/workbench.js": "6833fa73229218df045c941f5ff3f7c369fde5062ec4e28a5eda261592ea7abd",
+    "web/terminal.js": "42585ebffcbbd3b67a7975bf15bf29d5338b2177925d92b586addad119e7430d",
+    "tests/test_cockpit.cjs": "dea6a332889934659b7a71e684128b4eae76c4f58aff1270681721755dfe826a",
+    "tests/test_session_usage.cjs": "e642d2a43d4e06c9310106b2fe216283068094c9254e0bb3f84eba184ddf6dc5"
+  }
+}

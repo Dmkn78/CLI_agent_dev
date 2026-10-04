@@ -5,6 +5,7 @@ import json
 import mimetypes
 import secrets
 import signal
+import sys
 import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -16,8 +17,11 @@ from server.store import redact
 from server.canvas import save_canvas
 from server.tariffs import save_tariff
 from server.processes import process_inventory
+from server.desktop import open_desktop, pick_directory
+from server.resources import desktop_resources
 
 ROOT = Path(__file__).resolve().parent
+VERSION = json.loads((ROOT / 'package.json').read_text(encoding='utf-8'))['version']
 
 
 def make_handler(app, token):
@@ -64,15 +68,49 @@ def make_handler(app, token):
                     state = app.state()
                     state['approvals'] = app.store.all('approval')
                     self.reply(redact(state))
+                elif route == '/api/desktop/service':
+                    self.reply({'workspace': str(app.root.resolve()),
+                                'dataPath': str(app.store.root.resolve())})
+                elif route == '/api/channels/history':
+                    self.reply(redact(app.channels.history(query['id'],
+                        before=int(query['before']) if 'before' in query else None,
+                        after=int(query['after']) if 'after' in query else None,
+                        limit=int(query.get('limit', 50)))))
+                elif route == '/api/channels/rounds':
+                    self.reply(redact(app.channels.round_history(query['id'],
+                        before=int(query['before']) if 'before' in query else None,
+                        limit=int(query.get('limit', 50)))))
                 elif route == '/api/processes':
                     self.reply(process_inventory())
+                elif route == '/api/brain/job':
+                    self.reply(app.brain.job(query['id']))
+                elif route == '/api/brain/batch':
+                    self.reply(app.brain.batches.get(query['id']))
+                elif route == '/api/brain/audio':
+                    raw, suffix = app.brain.audio(query['id'])
+                    mime = 'audio/mpeg' if suffix == '.mp3' else mimetypes.guess_type('voice' + suffix)[0]
+                    self.reply(raw, mime=mime or 'application/octet-stream')
+                elif route == '/api/brain/search':
+                    self.reply(app.brain.search(query.get('project', 'atelier'), query.get('q', '')))
+                elif route == '/api/brain/note':
+                    self.reply(app.brain.read_note(query.get('project', 'atelier'), query.get('path', '')))
+                elif route == '/api/terminal/usage/choices':
+                    self.reply(app.native_usage.choices(query['id']))
                 elif route == '/api/files':
                     self.reply(app.files(query.get('project', 'atelier'), query.get('path', '')))
+                elif route == '/api/files/search':
+                    from server.memory import search_project_files
+                    self.reply(search_project_files(app, query.get('project', 'atelier'), query.get('q', ''), query.get('path', '')))
+                elif route == '/api/memory/export':
+                    from server.memory import export_memory
+                    self.reply(export_memory(app, query['id'], query.get('format', 'json')))
                 elif route == '/api/desktop-file':
-                    path = app.file_path(query.get('project', 'atelier'), query.get('path', ''))
-                    if not path.is_file() or path.stat().st_size > 20 * 1024 * 1024:
-                        raise ValueError('Dépôt limité aux fichiers de projet de 20 Mo maximum.')
-                    self.reply({'path': str(path)})
+                    self.reply(desktop_resources(app, query.get('project', 'atelier'), query.get('path', '')))
+                elif route == '/api/commands':
+                    self.reply(app.commands.catalog(query.get('project', 'atelier')))
+                elif route == '/api/attachments/content':
+                    attachment = app.attachments.selected(query.get('project', 'atelier'), [query['id']])[0]
+                    self.reply(app.attachments.path(attachment).read_bytes(), mime=attachment['mime'])
                 elif route == '/api/git':
                     self.reply(app.git(query.get('project', 'atelier')))
                 elif route == '/api/worktrees':
@@ -81,18 +119,16 @@ def make_handler(app, token):
                     self.reply(app.pull_requests(query.get('project', 'atelier')))
                 elif route == '/api/events':
                     self.reply(app.store.events(int(query.get('after', 0)), session=query.get('session')))
+                elif route == '/api/duplica/screenshot':
+                    import re
+                    screenshot_id = query.get('id', '')
+                    if not re.fullmatch(r'screen_[a-f0-9]{12}', screenshot_id):
+                        raise ValueError('Identifiant de capture invalide.')
+                    path = app.duplica.directory / 'screenshots' / (screenshot_id + '.png')
+                    self.reply(path.read_bytes(), mime='image/png')
                 elif route == '/api/skills':
-                    root = app.file_path(query.get('project', 'atelier'))
-                    paths = []
-                    import os
-                    from server.app import IGNORED
-                    for directory, dirs, files in os.walk(root):
-                        dirs[:] = [d for d in dirs if d not in IGNORED and not d.startswith('.') and not (Path(directory) / d).is_symlink()]
-                        if 'SKILL.md' in files:
-                            paths.append((Path(directory) / 'SKILL.md').relative_to(root).as_posix())
-                        if len(paths) >= 80:
-                            break
-                    self.reply(paths)
+                    self.reply([command['path'] for command in app.commands.catalog(query.get('project', 'atelier'))
+                                if command['kind'] == 'skill'])
                 elif route == '/api/sessions/context':
                     self.reply(app.session_context(query['id']))
                 elif route == '/api/image':
@@ -101,9 +137,12 @@ def make_handler(app, token):
                         raise ValueError('Image non prise en charge.')
                     self.reply(path.read_bytes(), mime=mimetypes.guess_type(path.name)[0])
                 elif route in ('/', '/index.html'):
-                    content = (ROOT / 'web/index.html').read_text().replace('__ATELIER_TOKEN__', token)
+                    content = (ROOT / 'web/index.html').read_text(encoding='utf-8').replace('__ATELIER_TOKEN__', token).replace('__ATELIER_VERSION__', VERSION)
                     self.reply(content.encode(), mime='text/html; charset=utf-8')
-                elif route in ('/app.js', '/core.js', '/views.js', '/cockpit.js', '/chat.js', '/forms.js', '/workbench.js', '/design.js', '/webchat.js', '/style.css', '/icon.svg', '/vendor/logicflow.js', '/vendor/logicflow.css'):
+                elif route in ('/app.js', '/core.js', '/views.js', '/cockpit.js', '/chat.js', '/forms.js', '/workbench.js', '/design.js', '/webchat.js', '/shell.js', '/terminal.js', '/terminal_layout.js', '/agent_dashboard.js', '/agent_workspace.css', '/workspace_chrome.css', '/workspace_panels.js', '/floating_panels.js', '/display.js', '/display.css', '/telegram.js', '/telegram.css', '/vendor/qrcode.js', '/duplica.js', '/duplica_resources.js', '/message_markdown.js', '/duplica_chat.js', '/session_usage.js', '/channels.js', '/api_connections.js', '/channels.css', '/style.css', '/workbench.css', '/icon.svg', '/vendor/logicflow.js', '/vendor/logicflow.css', '/vendor/xterm.js', '/vendor/xterm.css'):
+                    path = ROOT / 'web' / route[1:]
+                    self.reply(path.read_bytes(), mime=mimetypes.guess_type(path.name)[0] or 'text/plain')
+                elif route in ('/updates.js', '/updates.css', '/floating_panels.js', '/workspace_panels.js', '/workspace_chrome.css', '/memory.css', '/brain.js', '/brain.css'):
                     path = ROOT / 'web' / route[1:]
                     self.reply(path.read_bytes(), mime=mimetypes.guess_type(path.name)[0] or 'text/plain')
                 elif route == '/favicon.ico':
@@ -121,12 +160,116 @@ def make_handler(app, token):
             if not self.allowed(api=True):
                 return
             try:
+                route = urlparse(self.path).path
                 length = int(self.headers.get('Content-Length', 0))
-                if length < 1 or length > 1024 * 1024:
+                limit = 30 * 1024 * 1024 if route == '/api/brain/import' else 12 * 1024 * 1024 if route == '/api/attachments/upload' else 1024 * 1024
+                if length < 1 or length > limit:
                     raise ValueError('Requête vide ou trop volumineuse.')
                 data = json.loads(self.rfile.read(length))
                 route = urlparse(self.path).path
-                if route == '/api/providers/refresh':
+                if route == '/api/brain/configure':
+                    result = app.brain.save(data)
+                elif route == '/api/brain/discover':
+                    result = app.brain.discover(data.get('projectId', 'atelier'))
+                elif route == '/api/brain/detect':
+                    result = app.brain.detect(data.get('projectId', 'atelier'))
+                elif route == '/api/brain/import':
+                    result = app.brain.submit(data)
+                elif route == '/api/brain/batch/create':
+                    result = app.brain.batches.create(data)
+                elif route == '/api/brain/batch/error':
+                    result = app.brain.batches.entry_error(data)
+                elif route == '/api/brain/youtube':
+                    result = app.brain.submit_youtube(data)
+                elif route == '/api/brain/export':
+                    result = app.brain.export(data['id'])
+                elif route == '/api/brain/reformat':
+                    result = app.brain.reformat(data['id'])
+                elif route == '/api/brain/cancel':
+                    result = app.brain.cancel(data['id'])
+                elif route == '/api/brain/retry':
+                    result = app.brain.retry(data['id'])
+                elif route == '/api/brain/watch':
+                    result = app.brain.watch(data.get('projectId', 'atelier'), data['enabled'], data.get('resume', False))
+                elif route == '/api/brain/ask':
+                    result = app.brain.ask(data.get('projectId', 'atelier'), data.get('query', ''))
+                elif route == '/api/attachments/upload':
+                    result = app.attachments.upload(data)
+                elif route == '/api/attachments/project':
+                    result = app.attachments.import_project(data)
+                elif route == '/api/commands':
+                    result = app.commands.save(data)
+                elif route == '/api/commands/remove':
+                    result = app.commands.remove(data['projectId'], data['id'])
+                elif route == '/api/channels':
+                    result = app.channels.create(data)
+                elif route == '/api/channels/participants':
+                    result = app.channels.add_participant(data['id'], {key: value for key, value in data.items() if key != 'id'})
+                elif route == '/api/channels/options':
+                    result = app.channels.configure(data['id'], {key: value for key, value in data.items() if key != 'id'})
+                elif route == '/api/channels/remove-participant':
+                    result = app.channels.remove_participant(data['id'], data['participantId'])
+                elif route == '/api/channels/messages':
+                    result = app.channels.post_message(data['id'], {key: value for key, value in data.items() if key != 'id'})
+                elif route == '/api/channels/start':
+                    result = app.channels.start(data['id'])
+                elif route == '/api/channels/stop':
+                    result = app.channels.stop(data['id'])
+                elif route == '/api/channels/prepare-task':
+                    result = app.channels.prepare_task(data['id'])
+                elif route == '/api/api-connections':
+                    result = app.api_connections.save(data)
+                elif route == '/api/api-connections/discover':
+                    result = app.api_connections.discover(data['id'])
+                elif route == '/api/api-connections/remove':
+                    result = app.api_connections.remove(data['id'])
+                elif route == '/api/duplica/control':
+                    result = app.duplica.control(data['action'], data.get('globalEnabled'))
+                elif route == '/api/duplica/configure':
+                    result = app.duplica.configure(data)
+                elif route == '/api/duplica/discussion':
+                    result = app.duplica.discussion.send(data)
+                elif route == '/api/duplica/telegram/connect':
+                    result = app.duplica.telegram.connect(data)
+                elif route == '/api/duplica/telegram/pair':
+                    result = app.duplica.telegram.pair(data)
+                elif route == '/api/duplica/telegram/renew':
+                    result = app.duplica.telegram.renew()
+                elif route == '/api/duplica/telegram/cancel':
+                    result = app.duplica.telegram.cancel_pairing()
+                elif route == '/api/duplica/telegram/configure':
+                    result = app.duplica.telegram.configure(data)
+                elif route == '/api/duplica/telegram/disconnect':
+                    result = app.duplica.telegram.disconnect()
+                elif route == '/api/duplica/work':
+                    result = app.duplica.work_on_project(data)
+                elif route == '/api/duplica/scope':
+                    result = app.duplica.set_scope(data['kind'], data['id'], data.get('enabled'))
+                elif route == '/api/duplica/context':
+                    result = app.duplica.save_context(data)
+                elif route == '/api/duplica/decision':
+                    result = app.duplica.save_decision(data)
+                elif route == '/api/duplica/mission':
+                    result = app.duplica.save_mission(data)
+                elif route == '/api/duplica/resume':
+                    result = app.duplica.resume_mission(data['sessionId'])
+                elif route == '/api/duplica/resolve':
+                    result = app.duplica.resolve_request(data['id'], data.get('answer', ''), data.get('accepted') is True, data.get('remember') is True)
+                elif route == '/api/duplica/verify':
+                    result = app.duplica.schedule_verification(data['id'])
+                elif route == '/api/duplica/computer/observe':
+                    result = app.duplica.computer.observe(data.get('target', 'platform'))
+                elif route == '/api/duplica/computer/act':
+                    result = app.duplica.computer_action(data)
+                elif route == '/api/duplica/computer/poll':
+                    result = app.duplica.bridge.poll()
+                elif route == '/api/duplica/computer/check':
+                    result = app.duplica.bridge.check(data['id'], data['generation'])
+                elif route == '/api/duplica/computer/complete':
+                    result = app.duplica.bridge.complete(data['id'], data.get('result'), data.get('error'), data.get('errorCode'))
+                elif route == '/api/duplica/terminal':
+                    result = app.duplica.native_terminal(data)
+                elif route == '/api/providers/refresh':
                     result = app.discover()
                 elif route == '/api/providers/login':
                     result = app.login()
@@ -134,6 +277,12 @@ def make_handler(app, token):
                     result = app.refresh_limits()
                 elif route == '/api/terminal/prepare':
                     result = app.terminal_plan(data)
+                elif route == '/api/terminal/usage/bind':
+                    result = app.native_usage.bind(data['id'], data['threadId'])
+                elif route == '/api/desktop/open':
+                    result = open_desktop(app.root, self.server.server_port, data.get('mode', 'chat'))
+                elif route == '/api/projects/pick':
+                    result = pick_directory()
                 elif route == '/api/terminal/open':
                     result = app.open_terminal(data)
                 elif route == '/api/sessions':
@@ -143,11 +292,15 @@ def make_handler(app, token):
                 elif route == '/api/sessions/interrupt':
                     result = app.interrupt(data['id'])
                 elif route == '/api/sessions/plan':
-                    result = app.approve_plan(data['id'], data.get('accepted') is True)
+                    result = app.approve_plan(data['id'], data.get('accepted') is True, actor='interface', request_id=data.get('requestId'))
                 elif route == '/api/notifications/read':
                     result = app.store.update('notification', data['id'], read=True)
                 elif route == '/api/sessions/resume':
                     result = app.resume(data['id'])
+                elif route == '/api/sessions/remove':
+                    result = app.remove_session(data['id'])
+                elif route == '/api/sessions/restore':
+                    result = app.restore_session(data['id'])
                 elif route == '/api/sessions/context':
                     result = app.configure_session(data['id'], data)
                 elif route == '/api/sessions/work':
@@ -155,11 +308,18 @@ def make_handler(app, token):
                 elif route == '/api/sessions/report':
                     result = app.report(data['id'], bool(data.get('close')))
                 elif route == '/api/approvals':
+                    approval = app.store.get('approval', data['id'])
                     result = app.approve(data['id'], data.get('decision'), data.get('answers'))
+                    if data.get('remember') is True and approval['method'] == 'item/tool/requestUserInput':
+                        session = app.store.get('session', approval['sessionId'])
+                        for question in approval['params'].get('questions', []):
+                            app.duplica.save_decision({'projectId': session['projectId'], 'questions': [question['question']], 'answer': data['answers'][question['id']]})
                 elif route == '/api/save':
                     result = app.upsert(data['kind'], data['value'])
                 elif route == '/api/designs':
                     result = save_canvas(app, data)
+                elif route == '/api/tariffs/refresh':
+                    result = app.official_tariffs.refresh(force=data.get('force') is True)
                 elif route == '/api/tariffs':
                     result = save_tariff(app, data)
                 elif route == '/api/memory/search':
@@ -194,19 +354,31 @@ def main():
     parser.add_argument('--port', type=int, default=4317)
     parser.add_argument('--no-open', action='store_true')
     parser.add_argument('--data', type=Path)
+    parser.add_argument('--workspace', type=Path, default=ROOT)
+    parser.add_argument('--desktop-managed', action='store_true')
+    parser.add_argument('--no-discovery', action='store_true', help='Diagnostic local sans contacter les fournisseurs')
     args = parser.parse_args()
-    app = Application(ROOT, args.data)
+    app = Application(args.workspace, args.data)
     server = ThreadingHTTPServer(('127.0.0.1', args.port), make_handler(app, secrets.token_urlsafe(32)))
     server.daemon_threads = True
-    print(f'Atelier est disponible sur http://127.0.0.1:{args.port}', flush=True)
+    port = server.server_port
+    print(f'Atelier est disponible sur http://127.0.0.1:{port}', flush=True)
     print('Données locales : ' + str(app.store.root), flush=True)
-    threading.Thread(target=app.discover, daemon=True).start()
+    if not args.no_discovery:
+        threading.Thread(target=app.discover, daemon=True).start()
     if not args.no_open:
-        webbrowser.open(f'http://127.0.0.1:{args.port}')
+        webbrowser.open(f'http://127.0.0.1:{port}')
     def stop(*_):
         threading.Thread(target=server.shutdown, daemon=True).start()
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
+    if args.desktop_managed:
+        def monitor_desktop():
+            # EOF also shuts down the service when its owning desktop crashes.
+            sys.stdin.readline()
+            stop()
+        threading.Thread(target=monitor_desktop, daemon=True).start()
+        print(json.dumps({'atelierReady': {'port': port}}), flush=True)
     try:
         server.serve_forever()
     finally:

@@ -1,0 +1,74 @@
+[
+  {
+    "id": "video-01",
+    "original_name": "Agents IA - vous automatisez TROP TÔT ! Voici ma méthode.md",
+    "path": "docs/references/2026-10-03-video-transcriptions/video-01.md",
+    "sha256": "9d349fbb928667cdb53033b322cd32c45d64d2cc9017a1ec7afe3777b4d1c212",
+    "bytes": 56995,
+    "lines": 535,
+    "preview": "# Agents IA : vous automatisez TROP TÔT ! Voici ma méthode\n\n**URL :** https://www.youtube.com/watch?v=hkUByJckFMI\n\n(0:01) Bonsoir à tous. Bienvenue dans cette nouvelle vidéo. Ce soir euh vidéo un petit peu spéciale.\n(0:08) J'ai envie de de parler un petit peu des agents et de l'automatisation\n(0:14) qu'on pourrait en tirer parce que c'est vrai qu'on entend tout et son contraire\n(0:19) un peu à gauche à droite mais c'est rare qu'on nous montre le processus complet\n(0:25) qui va nous permettre de passer de bah j'ouvre un chat ou j'ouvre un terminal et je\n(0:32) commence une discussion avec l'agent et puis le lendemain je dois lui réexpliquer à "
+  },
+  {
+    "id": "video-02",
+    "original_name": "Créer une application avec l’IA - de la maquette à l’application - NovaFactory — Jour 7.md",
+    "path": "docs/references/2026-10-03-video-transcriptions/video-02.md",
+    "sha256": "7e4fea0544326be2eb7a6bfa925a98ff62261f73c9f3c78aa1284b801f4940a0",
+    "bytes": 47902,
+    "lines": 473,
+    "preview": "# Créer une application avec l’IA : de la maquette à l’application | NovaFactory — Jour 7\n\n**URL :** https://www.youtube.com/watch?v=LlZXme-FklU\n\n(0:01) Bonsoir à tous. Bienvenue dans cette nouvelle vidéo. Je vous propose pour commencer, on va reprendre là où on s'en\n(0:09) était arrêté avec la conception de cette nouvelle application Nov. [grognement]\n(0:14) Et donc comme on peut le voir, on est ben le lendemain en fait de la\n(0:19) vidéo. Donc j'ai laissé travailler toute la nuit.\n(0:25) Notre petit cloud, je pense que c'est celui-ci.\n(0:30) Et on peut voir qu'il a plutôt bien travaillé. H il nous a fait\n(0:37) hop, on va passer en mode cha"
+  },
+  {
+    "id": "video-03",
+    "original_name": "Créer une application avec l’IA - de l’idée à la maquette - NovaFactory — Jour 6.md",
+    "path": "docs/references/2026-10-03-video-transcriptions/video-03.md",
+    "sha256": "1b76dca2fc3dd4ec4269bbe63dbb51f58eeaf5d10da1242e5b466f1c8c11aabb",
+    "bytes": 66711,
+    "lines": 687,
+    "preview": "# Créer une application avec l’IA : de l’idée à la maquette | NovaFactory — Jour 6\n\n**URL :** https://www.youtube.com/watch?v=LlSOCjo6Yew\n\n(0:01) Bonjour à tous, bienvenue dans cette nouvelle vidéo. Aujourd'hui, j'aimerais\n(0:06) qu'on parte sur on va faire un premier débrief de ce que j'ai fait un petit peu\n(0:11) en off hier soir, cette nuit. Ensuite, [grognement]\n(0:16) on va créer une application de zéro qui va nous servir pour quand on va faire une\n(0:24) autre série à côté qui me permettra de vous montrer un petit peu bah ce qu'on peut réaliser avec certains modèles\n(0:32) et puis le côté que j'ai déjà abordé dans les vidéos précédentes"
+  },
+  {
+    "id": "video-04",
+    "original_name": "Agents IA - Fable, Astra, DeepSeek et Grok sur le même exercice - NovaFactory — Jour 5.md",
+    "path": "docs/references/2026-10-03-video-transcriptions/video-04.md",
+    "sha256": "8a2ac4d70de97826a27caac6bb8f07aac83dea011ff2330bf7dec1806718fb51",
+    "bytes": 99110,
+    "lines": 1057,
+    "preview": "# Agents IA : Fable, Astra, DeepSeek et Grok sur le même exercice | NovaFactory — Jour 5\n\n**URL :** https://www.youtube.com/watch?v=tqXt3ij82YU\n\n(0:01) Bonsoir à tous, bienvenue dans cette nouvelle vidéo. Alors, on va reprendre un petit peu là\n(0:07) où on s'était arrêté hier. Euh donc hier, on a fait les un premier test avec\n(0:16) un prompt qu'on a réutilisé sur plusieurs sur plusieurs modèles et on a orchestré\n(0:24) en gros des petits modèles avec un gros qui avait fabriqué la spec. Mais hier, j'étais un peu bloqué. J'ai pas pu\n(0:30) montrer euh le coût euh que représentait en en token AP une session.\n(0:36) Et du coup aujourd'hui, j'ai "
+  },
+  {
+    "id": "video-05",
+    "original_name": "Agents IA - Fable, Astra, DeepSeek et Grok sur le même exercice - NovaFactory — Jour 5 (2).md",
+    "path": "docs/references/2026-10-03-video-transcriptions/video-05.md",
+    "sha256": "8a2ac4d70de97826a27caac6bb8f07aac83dea011ff2330bf7dec1806718fb51",
+    "bytes": 99110,
+    "lines": 1057,
+    "preview": "# Agents IA : Fable, Astra, DeepSeek et Grok sur le même exercice | NovaFactory — Jour 5\n\n**URL :** https://www.youtube.com/watch?v=tqXt3ij82YU\n\n(0:01) Bonsoir à tous, bienvenue dans cette nouvelle vidéo. Alors, on va reprendre un petit peu là\n(0:07) où on s'était arrêté hier. Euh donc hier, on a fait les un premier test avec\n(0:16) un prompt qu'on a réutilisé sur plusieurs sur plusieurs modèles et on a orchestré\n(0:24) en gros des petits modèles avec un gros qui avait fabriqué la spec. Mais hier, j'étais un peu bloqué. J'ai pas pu\n(0:30) montrer euh le coût euh que représentait en en token AP une session.\n(0:36) Et du coup aujourd'hui, j'ai "
+  },
+  {
+    "id": "video-06",
+    "original_name": "Jour 3 - Vibe coding sur NovaFactory avec GPT6 Astra, Claude et Grok.md",
+    "path": "docs/references/2026-10-03-video-transcriptions/video-06.md",
+    "sha256": "0973608bb892b597763a5527d27677910b0495572059ff3cef6fad332d96c0b9",
+    "bytes": 56296,
+    "lines": 618,
+    "preview": "# Jour 3 - Vibe coding sur NovaFactory avec GPT6 Astra, Claude et Grok\n\n**URL :** https://www.youtube.com/watch?v=S5gsjrHBPL4\n\n(0:00) Bonsoir à tous. On reprend là où on s'était arrêté hier. [soupir][souffle coupé]\n(0:06) Donc on peut voir qu'ils ont tous bien travailler et que le bah c'est terminé quoi. Je me\n(0:12) suis permis quand même de lancer la release parce qu'elle a pris quand même pas mal de temps et je m'en doutais un\n(0:19) petit peu vu le nombre de modifications qu'il y avait. Et donc on va mettre à jour\n(0:25) l'application et on va pouvoir faire la recette de tout ce qu'on a ajouté.\n(0:40) Donc normalement c'est pas très très "
+  },
+  {
+    "id": "video-07",
+    "original_name": "Jour 2 - Vibe coding sur NovaFactory avec GPT6 Astra, Claude et Grok.md",
+    "path": "docs/references/2026-10-03-video-transcriptions/video-07.md",
+    "sha256": "08030b00a220285000dd90e8eca22f42ea05db757dae13dc5362d9186b11f675",
+    "bytes": 91827,
+    "lines": 980,
+    "preview": "# Jour 2 - Vibe coding sur NovaFactory avec GPT6 Astra, Claude et Grok\n\n**URL :** https://www.youtube.com/watch?v=_12NIwMnULk\n\n(0:00) Bonjour à tous, bienvenue dans cette nouvelle vidéo. On va reprendre là où on s'était arrêté la dernière fois avec\n(0:07) Codex. Il a fini l'implémentation, ça lui a quand même pris 4h21.\n(0:13) Donc il a pas il a pas chaubé. Il a eu pas mal de de déboir avec la review de\n(0:20) ce que j'ai vu puis qu'il [grognement] s'est fait rejeter euh trois fois me semble-t-il. On va aller vérifier ça.\n(0:28) J'ai fait cette fature il y a il y a il y a pas longtemps là et ça me permet justement de de pouvoir venir euh\n(0:3"
+  },
+  {
+    "id": "video-08",
+    "original_name": "Jour 1 - Vibe coding sur NovaFactory avec GPT6 Astra.md",
+    "path": "docs/references/2026-10-03-video-transcriptions/video-08.md",
+    "sha256": "e7dcf2bc6061940735d59e333eca53f9b1563702c9a8a15c301f9ae2987674a6",
+    "bytes": 79928,
+    "lines": 801,
+    "preview": "# Jour 1 - Vibe coding sur NovaFactory avec GPT6 Astra\n\n**URL :** https://www.youtube.com/watch?v=bXWGvamrZAk\n\n(0:00) Bonjour à tous, je m'appelle Jérôme. Je suis développeur depuis déjà 10 ans et\n(0:06) aujourd'hui, j'ai décidé de vous présenter Nova Factory [grognement] qui est un logiciel que j'ai créé avec Lia à\n(0:13) partir de juillet et que j'utilise au jour le jour pour mes développements\n(0:18) personnels et professionnels. L'objectif de de cet outil, c'est de\n(0:23) répondre à diverses problématiques euh que j'avais euh quand je développais\n(0:28) avec Lia. Euh l'une d'elles, c'est que quand on commence à lancer une multitude de\n(0:"
+  }
+]

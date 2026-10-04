@@ -1,0 +1,4 @@
+interface:
+  display_name: "Accessibilité Atelier"
+  short_description: "Vérifier noms, focus, navigation et lisibilité"
+  default_prompt: "Vérifie les noms visibles, le clavier, les infobulles et le zoom dans Atelier puis rapporte les défauts reproduits."

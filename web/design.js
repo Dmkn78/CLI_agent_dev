@@ -1,4 +1,34 @@
 let designId = null, designDraft = null, designEditor = null, designSelectedNode = null;
+let designResizeObserver = null, designResourceRequest = 0;
+
+async function designResourceModal() {
+  modal('Ajouter une ressource',project().name+' · '+project().path,`<form data-form="design-resource"><div class="modal-body"><div class="resource-path-field">${field('Chemin dans le projet','path','','text','placeholder="Choisis une ressource ci-dessous ou saisis son chemin"')}${select('Type','kind',[['file','Fichier'],['folder','Dossier']],'file')}</div><section class="design-resource-browser" aria-label="Parcourir les ressources du projet"><div data-resource-navigation></div>${field('Rechercher dans ce dossier','resourceQuery','','search','autocomplete="off"')}<div data-resource-list role="list"></div><p data-resource-empty class="muted small" hidden>Aucune ressource correspondant à la recherche.</p><p data-resource-selection class="muted small" aria-live="polite">Aucune ressource sélectionnée.</p></section></div>${formFooter('Ajouter au dessin')}</form>`);
+  await loadDesignResources('');
+}
+
+async function loadDesignResources(path) {
+  const form=$('#modal [data-form="design-resource"]');
+  if (!form) return;
+  const request=++designResourceRequest, requestedProject=projectId;
+  const list=form.querySelector('[data-resource-list]');
+  list.textContent='Chargement…';
+  try {
+    const result=await api('files?project='+encodeURIComponent(requestedProject)+'&path='+encodeURIComponent(path));
+    if (request !== designResourceRequest || !form.isConnected || projectId !== requestedProject) return;
+    const parent=path.replaceAll('\\','/').split('/').slice(0,-1).join('/');
+    form.querySelector('[data-resource-navigation]').innerHTML=`${btn('design-resource-folder','Racine','folder','quiet','data-path=""')}${path ? btn('design-resource-folder','Dossier parent','chevron','quiet',`data-path="${esc(parent)}"`) : ''}<strong>${esc(path || project().name)}</strong>${btn('design-resource-select','Choisir ce dossier','check','secondary',`data-path="${esc(path)}" data-kind="folder"`)}`;
+    list.innerHTML=(result.entries || []).map(entry => `<div class="design-resource-row" role="listitem" data-resource-name="${esc(entry.name.toLocaleLowerCase('fr'))}">${entry.directory ? btn('design-resource-folder',esc(entry.name),'folder','quiet',`data-path="${esc(entry.path)}" aria-label="Parcourir ${esc(entry.name)}"`) : `<span>${icon('code')} ${esc(entry.name)}</span>`}${btn('design-resource-select','Choisir','check','quiet',`data-path="${esc(entry.path)}" data-kind="${entry.directory ? 'folder' : 'file'}" aria-label="Choisir ${esc(entry.name)}"`)}</div>`).join('');
+    form.elements.resourceQuery.value='';
+    filterDesignResources(form);
+  } catch (error) { if (form.isConnected && request === designResourceRequest) list.textContent=error.message; }
+}
+
+function filterDesignResources(form) {
+  const query=form.elements.resourceQuery.value.trim().toLocaleLowerCase('fr');
+  const rows=[...form.querySelectorAll('[data-resource-name]')];
+  rows.forEach(row => row.hidden=!row.dataset.resourceName.includes(query));
+  form.querySelector('[data-resource-empty]').hidden=rows.some(row => !row.hidden);
+}
 
 function captureDesign() {
   if (!designEditor || !document.getElementById('design-canvas')) return;
@@ -13,21 +43,27 @@ function designView() {
   }
   return `${heading('CONCEPTION','Architecture','',`${btn('new-design','','plus','icon-btn','title="Nouvelle page" aria-label="Nouvelle page"')}${btn('import-design','','code','icon-btn','title="Importer un JSON" aria-label="Importer un JSON"')}${btn('export-design','','download','icon-btn','title="Exporter le JSON" aria-label="Exporter le JSON"')}${btn('save-design','Enregistrer','check','primary')}`)}
     <div class="design-page-bar"><input id="design-title" aria-label="Titre de la page" value="${esc(designDraft.title)}"><select id="design-page" aria-label="Pages du projet"><option value="">Nouvelle page</option>${objects('designs').map(item => `<option value="${esc(item.id)}" ${item.id === designId ? 'selected' : ''}>${esc(item.title)}</option>`).join('')}</select></div>
-    <div class="design-workspace"><div><div class="design-tools">${[['add-design-block','Bloc','plus'],['add-design-decision','Décision','network'],['add-design-resource','Ressource','folder'],['import-agents','Agents du projet','agents'],['design-undo','Annuler','chevron'],['design-redo','Rétablir','arrow'],['design-fit','Centrer','grid'],['design-delete','Supprimer','close']].map(([action,label,ico]) => btn(action,'',ico,'icon-btn',`title="${label}" aria-label="${label}"`)).join('')}</div><div id="design-canvas"></div></div><aside class="design-inspector"><h2>Bloc sélectionné</h2><div id="design-inspector-body"><p class="muted">Aucune sélection.</p></div><div class="design-status" id="design-status">${designId ? 'Page enregistrée · révision '+designDraft.revision : 'Brouillon local'}</div>${btn('design-agent','Confier le dessin à un agent','agents','secondary full')}</aside></div>
+    <div class="design-tools" aria-label="Outils du dessin">${[['add-design-block','Bloc','plus'],['add-design-decision','Décision','network'],['add-design-resource','Ressource','folder'],['import-agents','Agents du projet','agents']].map(([action,label,ico]) => btn(action,label,ico,'secondary',`title="${label}"`)).join('')}${btn('design-agent','Confier le dessin à un agent','agents','secondary')}${[['design-undo','Annuler','chevron'],['design-redo','Rétablir','arrow'],['design-fit','Centrer','grid'],['design-delete','Supprimer','close']].map(([action,label,ico]) => btn(action,'',ico,'icon-btn',`title="${label}" aria-label="${label}"`)).join('')}</div><div class="design-workspace"><div><div id="design-canvas"></div></div><aside class="design-inspector"><h2>Bloc sélectionné</h2><div id="design-inspector-body"><p class="muted">Clique sur un bloc pour voir ses propriétés. Les agents et ressources sont accessibles dans la barre d’outils.</p></div><div class="design-status" id="design-status">${designId ? 'Page enregistrée · révision '+designDraft.revision : 'Brouillon local'}</div></aside></div>
     <section class="design-explanation"><h2>Explication</h2><textarea id="design-explanation" rows="6" aria-label="Explication de l’architecture">${esc(designDraft.explanation)}</textarea></section>`;
 }
 
 function mountDesign() {
   if (!window.Core?.LogicFlow) { $('#design-canvas').innerHTML='<p class="inline-error">Éditeur non installé. Exécute npm ci puis npm run vendor.</p>'; return; }
   const previous=designEditor;
+  designResizeObserver?.disconnect();
   designEditor=null;
   previous?.destroy();
-  designEditor = new Core.LogicFlow({container:$('#design-canvas'),height:580,grid:{size:20,visible:true,type:'dot',config:{color:'#35434b',thickness:1}},keyboard:{enabled:true},edgeType:'polyline',history:true});
+  const canvas=$('#design-canvas');
+  designEditor = new Core.LogicFlow({container:canvas,height:Math.max(200,canvas.clientHeight),grid:{size:20,visible:true,type:'dot',config:{color:'#35434b',thickness:1}},keyboard:{enabled:true},edgeType:'polyline',history:true});
   designEditor.setTheme({baseNode:{fill:'#20282c',stroke:'#62cde1',strokeWidth:1.5},rect:{radius:8,width:200,height:80},diamond:{fill:'#28312c',stroke:'#94d4a5'},nodeText:{color:'#f2f5f6',fontSize:13,overflowMode:'ellipsis',lineHeight:1.3},edgeText:{color:'#d9e3e6',background:{fill:'#101618'}},polyline:{stroke:'#99b0b9'},anchor:{fill:'#62cde1',stroke:'#101618'},outline:{stroke:'#e6ca76'}});
-  designEditor.render(designDraft.graph);
+  designEditor.render({...designDraft.graph,nodes:designDraft.graph.nodes.map(node => node.type === 'rect' ? {...node,properties:{...node.properties,width:200,height:80}} : node)});
   designEditor.on('node:click',({data}) => { designSelectedNode=data.id; updateDesignInspector(data); });
   designEditor.on('edge:click',({data}) => { designSelectedNode=data.id; $('#design-inspector-body').innerHTML=`<p>Lien · ${esc(data.text?.value || '')}</p>`; });
   const editor=designEditor;
+  designResizeObserver=new ResizeObserver(() => {
+    if (editor === designEditor && canvas.isConnected && canvas.clientWidth > 0) editor.resize(canvas.clientWidth,Math.max(200,canvas.clientHeight));
+  });
+  designResizeObserver.observe(canvas);
   designEditor.on('history:change',() => { if (editor !== designEditor || !$('#design-status')) return; captureDesign(); $('#design-status').textContent='Modifications non enregistrées'; });
 }
 
@@ -39,7 +75,7 @@ function updateDesignInspector(node) {
 function addDesignNode(type, text, properties={}) {
   const count=designEditor.getGraphRawData().nodes.length;
   if (count >= 80) throw new Error('Maximum 80 blocs.');
-  designEditor.addNode({id:crypto.randomUUID(),type,x:170+(count%3)*260,y:130+Math.floor(count/3)*140,text,properties});
+  designEditor.addNode({id:crypto.randomUUID(),type,x:170+(count%3)*260,y:130+Math.floor(count/3)*140,text,properties:type === 'rect' ? {...properties,width:200,height:80} : properties});
   captureDesign();
 }
 
@@ -61,7 +97,15 @@ function installDesignActions() {
   actions['new-design']=() => { designDraft=null; designId=null; designSelectedNode=null; render(); };
   actions['add-design-block']=() => addDesignNode('rect','Nouveau bloc');
   actions['add-design-decision']=() => addDesignNode('diamond','Décision');
-  actions['add-design-resource']=() => modal('Ajouter une ressource',project().path,`<form data-form="design-resource"><div class="modal-body">${field('Chemin dans le projet','path','','text','required')}${select('Type','kind',[['file','Fichier'],['folder','Dossier']],'file')}</div>${formFooter('Ajouter au dessin')}</form>`);
+  actions['add-design-resource']=designResourceModal;
+  actions['design-resource-folder']=element => loadDesignResources(element.dataset.path);
+  actions['design-resource-select']=element => {
+    const form=$('#modal [data-form="design-resource"]');
+    if (!form) return;
+    form.elements.path.value=element.dataset.path;
+    form.elements.kind.value=element.dataset.kind;
+    form.querySelector('[data-resource-selection]').textContent='Sélection : '+(element.dataset.path || project().name);
+  };
   actions['import-agents']=() => {
     const existing=new Set(designEditor.getGraphRawData().nodes.map(node => node.properties?.sessionId));
     for (const session of objects('sessions')) if (!existing.has(session.id)) addDesignNode('rect',session.name,{kind:'agent',sessionId:session.id});
@@ -75,15 +119,29 @@ function installDesignActions() {
   actions['import-design']=() => modal('Importer une proposition JSON','',`<form data-form="design-import"><div class="modal-body">${area('Page JSON · title, graph {nodes, edges}, explanation','document','',12,'required')}<p class="muted small">Proposition de dessin uniquement. Aucun code exécuté, aucune session lancée.</p></div>${formFooter('Valider & importer')}</form>`,true);
   actions['design-agent']=async () => {
     captureDesign();
-    await newAgent('classic','chat');
+    await newAgent('classic','code');
     const form=$('#modal form');
     form.insertAdjacentHTML('beforeend','<input type="hidden" name="sendInitialMission" value="yes">');
+    form.insertAdjacentHTML('beforeend','<input type="hidden" name="purpose" value="architecture">');
+    form.elements.startWork.checked=false;
+    form.elements.startWork.disabled=true;
+    form.elements.sandbox.value='read-only';
+    form.elements.sandbox.disabled=true;
+    form.elements.planMode.checked=true;
+    form.elements.planMode.disabled=true;
+    form.elements.role.value='researcher';
+    form.querySelector('.mode-picker').hidden=true;
+    form.elements.planMode.closest('label').querySelector('span').textContent='Proposition d’architecture · validation avant import';
+    form.elements.duplicaEnabled.value='inherit';
+    form.querySelector('.modal-footer [type="submit"]').textContent='Créer la proposition';
+    form.querySelector('.modal-body').insertAdjacentHTML('afterbegin','<p class="local-note">Cet agent propose un dessin en lecture seule. La validation importe son architecture dans cette page.</p>');
     form.elements.name.value='Conception · '+designDraft.title;
     form.elements.mission.value='Propose une architecture et son explication courte. Réponds uniquement en JSON : {"title":"...","explanation":"...","graph":{"nodes":[{"id":"n1","type":"rect","x":200,"y":160,"text":"Bloc"}],"edges":[{"id":"e1","type":"polyline","sourceNodeId":"n1","targetNodeId":"n2","text":"Flux"}]}}. Types autorisés rect, diamond, ellipse. 80 blocs et 200 liens maximum. Ne modifie aucun fichier. La proposition sera importée et validée par l’utilisateur. Architecture actuelle :\n'+JSON.stringify(designDraft.graph);
   };
 }
 
 document.addEventListener('input',event => {
+  if (event.target.name === 'resourceQuery' && event.target.closest('[data-form="design-resource"]')) filterDesignResources(event.target.closest('form'));
   if (event.target.id === 'design-node-label' && designSelectedNode) { designEditor.updateText(designSelectedNode,event.target.value); captureDesign(); }
   if (['design-title','design-explanation'].includes(event.target.id)) captureDesign();
 });
@@ -101,8 +159,12 @@ document.addEventListener('submit',async event => {
       const saved=await api('designs',{projectId,title:input.title,graph:input.graph,explanation:input.explanation});
       designId=saved.id; designDraft=structuredClone(saved); $('#modal').close(); await refresh(true);
     } else {
-      const resource=await api('files?project='+encodeURIComponent(projectId)+'&path='+encodeURIComponent(values.path));
-      if ((values.kind === 'folder') !== Boolean(resource.entries)) throw new Error('Le type ne correspond pas à la ressource.');
+      if (values.path === '' && values.kind !== 'folder') throw new Error('Sélectionne un fichier ou un dossier.');
+      const parent=values.path.replaceAll('\\','/').split('/').slice(0,-1).join('/');
+      const listing=await api('files?project='+encodeURIComponent(projectId)+'&path='+encodeURIComponent(parent));
+      const entry=values.path === '' ? {directory:true} : listing.entries?.find(item => item.path.replaceAll('\\','/') === values.path.replaceAll('\\','/'));
+      if (!entry) throw new Error('Ressource introuvable dans le projet.');
+      if ((values.kind === 'folder') !== entry.directory) throw new Error('Le type ne correspond pas à la ressource.');
       $('#modal').close(); addDesignNode('rect',values.path,{kind:values.kind,path:values.path});
     }
   } catch (error) { toast(error.message,true); }

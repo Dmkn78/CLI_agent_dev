@@ -2,7 +2,7 @@ function chatsView() {
   const chats = sessions().filter(session => session.executionMode === 'chat');
   const selected = chats.find(session => session.id === selectedChatId);
   if (selected) selectedChatId = selected.id;
-  return `<div class="chat-workspace"><aside class="chat-list"><div class="panel-heading"><h2>Conversations CLI</h2>${btn('new-cli-chat','','plus','icon-btn','title="Nouvelle conversation CLI" aria-label="Nouvelle conversation CLI"')}</div>${chats.map(session => `<button class="chat-list-item ${session.id === selected?.id ? 'selected' : ''}" data-action="open-chat" data-id="${esc(session.id)}"><strong>${esc(session.name)}</strong><small>${esc(session.model)}</small>${badge(session.status)}</button>`).join('')}</aside>${selected ? `<div class="chat-conversation">${sessionPane(selected)}</div><aside class="chat-context">${chatContextPanel(selected)}</aside>` : `<div class="chat-empty">${empty('agents','Aucune conversation CLI ouverte','', 'new-cli-chat','Nouvelle conversation CLI')}</div>`}</div>`;
+  return `<div class="chat-workspace"><aside class="chat-list"><div class="panel-heading"><h2>Discussions enregistrées</h2></div>${chats.map(session => `<button class="chat-list-item ${session.id === selected?.id ? 'selected' : ''}" data-action="open-chat" data-id="${esc(session.id)}"><strong>${esc(session.name)}</strong><small>${esc(session.model)}</small>${badge(session.status)}</button>`).join('')}</aside>${selected ? `<div class="chat-conversation">${sessionPane(selected)}</div><aside class="chat-context">${chatContextPanel(selected)}</aside>` : `<div class="chat-empty">${empty('agents','Aucune discussion enregistrée','')}</div>`}</div>`;
 }
 
 function chatContextPanel(session) {

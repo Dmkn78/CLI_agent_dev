@@ -44,3 +44,15 @@ assert.equal(context.estimateCost({inputTokens:1000000,cachedInputTokens:250000,
 assert.equal(context.estimateCost({inputTokens:100,cachedInputTokens:120,outputTokens:10},{input:2,cache:1,output:3}),null);
 assert.equal(context.estimateCost({inputTokens:100,outputTokens:10},{input:2,cache:1,output:3}),null);
 assert.equal(context.durationLabel(62000),'1 min 2 s');
+context.compact=value => value == null ? '—' : String(value);context.usageGrouping='provider';
+const charts=context.consumptionCharts([
+  {id:'r1',provider:'real-provider',createdAt:'2026-10-01T12:00:00Z',usage:{totalTokens:10}},
+  {id:'r2',provider:'other-provider',createdAt:'2026-10-02T12:00:00Z',usage:{totalTokens:20}},
+  {id:'r3',provider:'real-provider',createdAt:'2026-10-03T12:00:00Z',usage:{totalTokens:30}},
+  {id:'native:one',provider:'real-provider',createdAt:'2026-10-01T12:00:00Z',usage:{totalTokens:99999}},
+],new Map([['real-provider',{title:'real-provider',records:[{usage:{totalTokens:40}}]}]]));
+assert.match(charts,/consumption-plot/);assert.match(charts,/real-provider/);assert.match(charts,/other-provider/);
+assert.doesNotMatch(charts,/99999/,'Native cumulative tokens cannot be attributed to creation date');
+assert.doesNotMatch(charts,/points="60,165 400,/,'Missing provider day breaks curve rather than generating a zero');
+assert.equal(context.sumObserved([{usage:{totalTokens:NaN}},{usage:{totalTokens:-1}}],'totalTokens'),null);
+console.log('Observed supplier curves, missing-day gaps, aggregate exclusion and comparisons passed.');

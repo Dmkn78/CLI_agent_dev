@@ -1,0 +1,4 @@
+interface:
+  display_name: "Recette desktop Atelier"
+  short_description: "Tester Electron, terminaux et vues intégrées"
+  default_prompt: "Teste les fonctionnalités desktop demandées avec un état isolé et distingue preuves GUI, PTY et limites externes."

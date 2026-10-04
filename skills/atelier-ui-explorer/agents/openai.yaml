@@ -1,0 +1,4 @@
+interface:
+  display_name: "Exploration UI Atelier"
+  short_description: "Reproduire les bugs dans l’interface avec preuves"
+  default_prompt: "Explore les parcours demandés dans Atelier, reproduis les défauts et conserve des preuves consultables."

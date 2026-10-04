@@ -1,0 +1,4 @@
+interface:
+  display_name: "Superviser le travail Duplica"
+  short_description: "Déléguer, observer et relancer selon les preuves"
+  default_prompt: "Utilise $duplica-work-supervisor pour traiter la mission Duplica dans le périmètre indiqué et conserver les preuves."

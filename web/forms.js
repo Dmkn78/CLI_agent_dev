@@ -1,4 +1,5 @@
 function modal(title, subtitle, body, wide = false) {
+  $('#modal').classList.remove('command-palette');
   $("#modal-content").innerHTML =
     `<header class="modal-header"><div><span class="eyebrow">ATELIER</span><h2>${title}</h2><p>${subtitle}</p></div><button class="icon-btn" data-action="dismiss" aria-label="Fermer la fenêtre">${icon("close")}</button></header>${body}`;
   $("#modal").classList.toggle("wide", wide);
@@ -96,10 +97,11 @@ async function newAgent(mode = "classic", executionMode = 'code', template = nul
     true,
   );
   const form = $('#modal form');
+  form.querySelector('.advanced-settings').insertAdjacentHTML('beforebegin',select('Supervision Duplica','duplicaEnabled',[['inherit','Selon le projet'],['true','Travailler avec Duplica'],['false','Garder la main sur cet agent']],'inherit'));
   const formProjectId=projectId;
   form.querySelector('.modal-body').insertAdjacentHTML('afterbegin',select('Projet','agentProject',state.projects.map(p => [p.id,p.name]),projectId));
   form.querySelector('.advanced-settings').insertAdjacentHTML('beforebegin','<label class="check-option"><input type="checkbox" name="planMode" checked><span>Diagnostic et plan avant implémentation · validation requise</span></label>');
-  form.querySelector('.mode-picker').insertAdjacentHTML('beforebegin', `<div class="session-mode-picker">${select('Expérience','executionMode',[['code','Code · tâches du projet'],['chat','Conversation CLI · lecture seule']],executionMode)}</div>`);
+  form.querySelector('.modal-body').insertAdjacentHTML('afterbegin',`<input type="hidden" name="executionMode" value="${esc(executionMode)}">`);
   form.querySelector('.advanced-settings').insertAdjacentHTML('beforebegin', '<label class="check-option"><input type="checkbox" name="startWork" checked><span>Prendre les tâches À faire au lancement</span></label>');
   updateAgentMode(form);
   if (template) {
@@ -195,31 +197,63 @@ function taskModal(id, status = "todo") {
         ["high", "Haute"],
       ],
       t?.priority || "medium",
-    )}</div>${select("Sprint", "sprintId", [["", "Sans sprint"], ...objects("sprints").map((s) => [s.id, s.title])], t?.sprintId || "")}</div>${formFooter()}</form>`,
+    )}</div>${select("Sprint", "sprintId", [["", "Sans sprint"], ...objects("sprints").map((s) => [s.id, s.title])], id ? t?.sprintId : taskSprintFilter)}</div>${formFooter()}</form>`,
   );
   const agents = sessions().filter(session => session.executionMode !== 'chat' && ['ready','running','waiting'].includes(session.status));
+  $('#modal .modal-body').insertAdjacentHTML('beforeend',select('Supervision Duplica de cette tâche','duplicaEnabled',[['inherit','Selon le projet et l’agent'],['true','Superviser cette tâche'],['false','Garder la main sur cette tâche']],t?.id ? String(duplicaScopeValue('task',t.id) ?? 'inherit') : 'inherit'));
   $('#modal .modal-body').insertAdjacentHTML('beforeend',`${select('Agent affecté','assigneeId',[['','File automatique du projet'],...agents.map(session => [session.id,session.name])],t?.assigneeId || '')}<label class="check-option"><input type="checkbox" name="activateAgent"><span>Activer la file TODO de cet agent après enregistrement</span></label>${t?.claimedBy ? `<p>Prise en charge : ${esc(state.sessions.find(session => session.id === t.claimedBy)?.name || state.workflows.find(workflow => workflow.id === t.claimedBy)?.title || t.claimedBy)}</p>` : ''}${t?.lastError ? `<p class="inline-error">${esc(t.lastError)}</p>` : ''}`);
 }
 function memoryModal(id) {
   const m = id ? state.memories.find((m) => m.id === id) : {};
+  const currentProject = state.projects.find(p => p.id === (m?.projectId || projectId)) || project();
   modal(
     id ? "Modifier le souvenir" : "Nouveau souvenir",
-    "Conservez ce qui aidera vraiment une prochaine session.",
-    `<form data-form="memory" data-id="${esc(id || "")}"><div class="modal-body">${field("Titre", "title", m?.title, "text", "required")}${area("Contenu durable", "body", m?.body, 5, "required")}<div class="form-grid">${select(
-      "Nature",
-      "kind",
-      ["règle", "préférence", "piège", "fait", "décision"].map((s) => [s, s]),
-      m?.kind || "fait",
-    )}${select(
-      "Portée",
-      "scope",
-      [
-        ["project", "Ce projet"],
-        ["user", "Utilisateur"],
-      ],
-      m?.scope || memoryScope,
-    )}</div>${field("Mots-clés, séparés par des virgules", "tags", m?.tags?.join(", "))}${field("Source ou fichier de référence", "source", m?.source, "text", 'placeholder="docs/decision.md, un résultat d’outil, une URL…"')}<label class="check-option"><input type="checkbox" name="core" ${m?.core ? "checked" : ""}><span><strong>Inclure dans le noyau de démarrage</strong><small>Budget total limité à 4 000 caractères. Sinon, recherche à la demande.</small></span></label></div>${formFooter("Valider le souvenir")}</form>`,
+    `Mémoire structurée JSON · ${esc(currentProject.name)}`,
+    `<form data-form="memory" data-id="${esc(id || "")}"><div class="modal-body">${field("Titre", "title", m?.title, "text", "required")}${area("Contenu durable · quoi retenir ?", "body", m?.body, 5, "required")}<div class="form-grid">${select("Nature", "kind", ["règle", "préférence", "piège", "fait", "décision"].map(s => [s,s]), m?.kind || "fait")}${select("Portée", "scope", [["project", `Projet · ${currentProject.name}`], ["user", "Utilisateur · tous les projets"]], m?.scope || memoryScope)}</div>${select('Projet de référence', 'memoryProjectId', state.projects.map(p => [p.id, p.name + ' · ' + p.path]), currentProject.id)}<p class="muted small" id="memory-project-path">${esc(currentProject.path)}</p><div class="form-grid">${field('Sujet', 'subject', m?.subject || m?.title, 'text', 'maxlength="300"')}${field('Auteur · qui ?', 'author', m?.author || 'Utilisateur', 'text', 'maxlength="200"')}</div>${field('Date du fait ou de la décision · quand ?', 'occurredAt', m?.occurredAt, 'date')}${area('Pourquoi conserver ce souvenir ?', 'why', m?.why, 2, 'maxlength="4000"')}${area('Contexte réutilisable par un agent', 'context', m?.context, 3, 'maxlength="12000"')}${field("Mots-clés, séparés par des virgules", "tags", m?.tags?.join(", "))}${field("Source, fichier ou URL", "source", m?.source, "text", 'id="memory-source" autocomplete="off" placeholder="Rechercher un fichier du projet ou saisir une URL…"')}<button type="button" class="button secondary" id="memory-browse-source">${icon('folder')}Parcourir le projet</button><section id="memory-source-picker" class="memory-source-picker" hidden><div class="resource-navigation"><button type="button" class="button quiet" id="memory-source-root">Racine</button><button type="button" class="button quiet" id="memory-source-up">Parent</button><span id="memory-source-path"></span><button type="button" class="icon-btn" id="memory-source-close" aria-label="Fermer les fichiers">${icon('close')}</button></div><div id="memory-source-results" class="browser-file-list" aria-live="polite"></div></section><label class="check-option"><input type="checkbox" name="core" ${m?.core ? "checked" : ""}><span><strong>Inclure dans le noyau de démarrage</strong><small>Budget total limité à 4 000 caractères. Sinon, recherche à la demande.</small></span></label><p class="muted small">Chaque souvenir validé conserve son en-tête, sa provenance et son contexte dans un fichier JSON privé. Export JSON ou Markdown avec en-tête YAML disponible dans sa fiche.</p></div>${formFooter("Valider le souvenir")}</form>`,
   );
+  const form = $('#modal [data-form="memory"]');
+  const input = form.elements.source, picker = form.querySelector('#memory-source-picker');
+  const results = form.querySelector('#memory-source-results');
+  let directory = '', generation = 0, timer;
+  const chosenProject = () => form.elements.memoryProjectId.value;
+  async function loadSources(path = '', query = '') {
+    directory = path;
+    const request = ++generation, selected = chosenProject();
+    picker.hidden = false;
+    results.innerHTML = '<p class="muted small">Recherche dans le projet…</p>';
+    try {
+      const endpoint = query ? 'files/search' : 'files';
+      const data = await api(`${endpoint}?project=${encodeURIComponent(selected)}&path=${encodeURIComponent(path)}${query ? '&q='+encodeURIComponent(query) : ''}`);
+      if (!form.isConnected || request !== generation || selected !== chosenProject()) return;
+      form.querySelector('#memory-source-path').textContent = query ? 'Résultats dans tout le projet' : path || 'Dossier du projet';
+      form.querySelector('#memory-source-up').disabled = !path || Boolean(query);
+      results.innerHTML = (data.entries || []).map(file => `<button type="button" class="file-entry" data-memory-source-path="${esc(file.path)}" data-directory="${file.directory ? 'true' : 'false'}">${icon(file.directory ? 'folder' : 'code')}<span>${esc(file.path)}</span></button>`).join('') || '<p class="muted small">Aucun fichier trouvé.</p>';
+      if (data.truncated) results.insertAdjacentHTML('beforeend', '<p class="muted small">Recherche limitée. Précisez le nom ou parcourez un sous-dossier.</p>');
+    } catch (error) { if (request === generation && form.isConnected) results.textContent = error.message; }
+  }
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    generation++;
+    const query = input.value.trim();
+    if (!query || /^https?:\/\//i.test(query)) { picker.hidden = true; return; }
+    timer = setTimeout(() => loadSources('', query), 200);
+  });
+  form.querySelector('#memory-browse-source').addEventListener('click', () => { clearTimeout(timer); loadSources(); });
+  form.querySelector('#memory-source-root').addEventListener('click', () => loadSources());
+  form.querySelector('#memory-source-up').addEventListener('click', () => loadSources(directory.replaceAll('\\','/').split('/').slice(0,-1).join('/')));
+  form.querySelector('#memory-source-close').addEventListener('click', () => { clearTimeout(timer); generation++; picker.hidden = true; });
+  results.addEventListener('click', event => {
+    const button = event.target.closest('[data-memory-source-path]');
+    if (!button) return;
+    if (button.dataset.directory === 'true') loadSources(button.dataset.memorySourcePath);
+    else { clearTimeout(timer); generation++; input.value = button.dataset.memorySourcePath; picker.hidden = true; input.focus(); }
+  });
+  form.elements.memoryProjectId.addEventListener('change', () => {
+    clearTimeout(timer); generation++; picker.hidden = true; directory = '';
+    const selected = state.projects.find(p => p.id === chosenProject());
+    form.querySelector('#memory-project-path').textContent = selected?.path || '';
+    form.elements.scope.querySelector('[value="project"]').textContent = 'Projet · ' + selected.name;
+  });
 }
 function sprintModal(id) {
   const s = id ? state.sprints.find((s) => s.id === id) : {};

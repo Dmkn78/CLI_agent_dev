@@ -6,6 +6,9 @@ New-Item -ItemType Directory -Path $data -Force | Out-Null
 # Reuse public trust anchors already installed in Windows, never private keys.
 # This stays scoped to the child process; explicit CA configuration takes precedence.
 if (-not $env:CODEX_CA_CERTIFICATE -and -not $env:SSL_CERT_FILE) {
+    if (-not (Get-PSDrive -Name Cert -ErrorAction SilentlyContinue)) {
+        Import-Module (Join-Path $PSHOME 'Modules\Microsoft.PowerShell.Security\Microsoft.PowerShell.Security.psd1') -ErrorAction Stop
+    }
     $tls = Join-Path $data 'tls'
     New-Item -ItemType Directory -Path $tls -Force | Out-Null
     $bundle = Join-Path $tls 'windows-roots.pem'

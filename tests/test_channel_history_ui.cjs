@@ -1,0 +1,53 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const storage=new Map(),channel={id:'history',projectId:'fixture',roundMode:'auto',history:{messageCount:600,firstSequence:481,lastSequence:600,hasMore:true}};
+const messages=(first,last)=>Array.from({length:last-first+1},(_,index)=>({id:'message-'+(first+index),sequence:first+index,channelId:'history',text:'Public '+(first+index)}));
+const context=vm.createContext({URL,projectId:'fixture',view:'other',state:{discussions:{channels:[channel],messages:messages(481,600),rounds:[]}},localStorage:{getItem:key=>storage.get(key),setItem:(key,value)=>storage.set(key,value)},document:{querySelector:()=>null},CSS:{escape:value=>value},window:{scrollY:0},$:()=>({scrollTop:0}),esc:String});
+vm.runInContext(fs.readFileSync('web/channels.js','utf8'),context,{filename:'web/channels.js'});
+const position=()=>context.channelHistoryPosition(channel),cached=()=>vm.runInContext("channelHistoryCache.get('history')",context);
+async function loadPage(first,last,direction='older') {
+  context.api=async path=>{assert.match(path,/channels\/history\?id=history&(?:before|after)=\d+&limit=50/);return {channelId:'history',messages:messages(first,last),rounds:[],history:{messageCount:channel.history.messageCount}};};
+  await context.loadChannelHistory('history',direction);
+}
+async function main() {
+  assert.equal(position().messages.length,120);assert.equal(position().first,481);
+  await loadPage(431,480);assert.equal(position().messages.length,170);assert.equal(position().first,431);
+  assert.ok(position().messages.some(message=>message.sequence===600));
+  channel.history.messageCount=700;channel.history.lastSequence=700;context.state.discussions.messages=messages(581,700);
+  assert.equal(position().messages.length,170);assert.equal(position().first,431);assert.equal(position().hasNewer,true);
+  await loadPage(601,650,'newer');await loadPage(651,700,'newer');
+  assert.equal(position().messages.length,270);assert.equal(position().last,700);
+  channel.history.messageCount=750;channel.history.lastSequence=750;
+  await loadPage(701,750,'newer');assert.equal(position().messages.length,300);assert.equal(position().first,451);
+  await loadPage(401,450);assert.equal(position().messages.length,300);assert.equal(position().first,401);assert.equal(position().last,700);
+  const saved=JSON.parse(storage.get('atelier-channel-history:fixture:history'));
+  assert.equal(saved.firstSequence,401);assert.equal(saved.lastSequence,700);assert.ok(!JSON.stringify(saved).includes('Public'));
+  vm.runInContext('channelHistoryCache.clear()',context);
+  assert.equal(position().messages.length,0);assert.equal(cached().savedWindow.first,401);
+  let restoredRequests=0;
+  context.api=async path=>{restoredRequests++;const before=Number(new URL('http://fixture/'+path).searchParams.get('before'));return {channelId:'history',messages:messages(Math.max(1,before-100),before-1),rounds:[]};};
+  await context.restoreChannelHistoryWindow('history');
+  assert.equal(restoredRequests,3);assert.equal(position().messages.length,300);assert.equal(position().first,401);assert.equal(position().last,700);
+  context.api=async()=>{throw new Error('Réponse indisponible');};await context.loadChannelHistory('history');
+  assert.equal(position().messages.length,300);assert.equal(cached().error,'Réponse indisponible');
+  const long=messages(501,550).map(message=>({...message,text:'x'.repeat(16000)}));
+  cached().messages=new Map(long.map(message=>[message.id,message]));context.channelTrimHistory(cached());
+  assert.equal(cached().messages.size,30);assert.equal([...cached().messages.values()].reduce((sum,message)=>sum+message.text.length,0),480000);
+  cached().messages=new Map(messages(401,570).map(message=>[message.id,message]));cached().mode='history';
+  channel.history.messageCount=650;channel.history.lastSequence=650;context.state.discussions.messages=messages(531,650);
+  let release;context.api=()=>new Promise(resolve=>release=resolve);
+  const delayed=context.loadChannelHistory('history');
+  context.render=()=>{};context.queueMicrotask=callback=>callback();context.showChannelLatest('history');
+  release({channelId:'history',messages:messages(351,400),rounds:[]});await delayed;
+  assert.equal(cached().mode,'latest');assert.equal(position().first,531);assert.equal(position().last,650);assert.equal(position().messages.length,120);
+  cached().restoreFailed=true;cached().savedWindow={first:401,last:700};
+  context.showChannelLatest('history');await loadPage(481,530);
+  const returned=JSON.parse(storage.get('atelier-channel-history:fixture:history'));
+  assert.equal(cached().restoreFailed,false);assert.equal(returned.firstSequence,481);assert.equal(returned.lastSequence,650);
+  assert.equal(context.channelRoundLimitLabel({roundMode:'fixed',maxRounds:99}),'99 tours maximum + synthèse');
+  assert.ok(context.channelRoundLimitLabel({roundMode:'auto',autoRoundLimit:120}).includes('120 tours maximum'));
+  assert.ok(context.channelRoundLimitLabel({roundMode:'auto',autoRoundLimit:null}).includes('sans plafond'));
+  assert.ok(context.channelRoundLimitLabel({roundMode:'auto'}).includes('24 tours maximum'));
+  assert.ok(context.channelContextProjectionNote({truncated:true,excerptMessageIds:[],omittedUserMessageIds:['sample'],omittedUserMessageCount:17}).includes('17 demandes utilisateur absentes'));
+  console.log('Channel history UI tests passed: paged merge, frozen reading during refresh, 300-message/480k window, bounded reload, recoverable errors, unrestricted limits, old defaults.');
+}
+main().catch(error=>{console.error(error);process.exitCode=1;});
