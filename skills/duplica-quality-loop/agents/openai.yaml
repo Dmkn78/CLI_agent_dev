@@ -1,0 +1,4 @@
+interface:
+  display_name: "Vérifier et retester avec Duplica"
+  short_description: "Transformer les défauts observés en corrections"
+  default_prompt: "Utilise $duplica-quality-loop pour traiter la mission Duplica dans le périmètre indiqué et conserver les preuves."

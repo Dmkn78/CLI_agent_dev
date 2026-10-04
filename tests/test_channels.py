@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from server.channels import ChannelHub, MAX_MESSAGE_CHARACTERS
+from server.slash_commands import SlashCommands
 from server.store import Store, uid
 
 
@@ -28,6 +29,7 @@ class FakeChannelApplication:
         self.store = Store(directory)
         self.store.put('project', {'id': 'atelier', 'name': 'Atelier', 'path': str(directory)})
         self.api_connections = FakeApiConnections()
+        self.commands = SlashCommands(self)
         self.calls = []
         self.cancellations = []
         self.lock = threading.RLock()
@@ -35,6 +37,12 @@ class FakeChannelApplication:
 
     def project(self, project_id):
         return self.store.get('project', project_id)
+
+    def file_path(self, project_id, relative=''):
+        root = Path(self.project(project_id)['path']).resolve()
+        candidate = (root / relative).resolve()
+        candidate.relative_to(root)
+        return candidate
 
     def model_configuration(self, submitted):
         if submitted.get('model') != 'fixture':
@@ -337,7 +345,7 @@ class ChannelTests(unittest.TestCase):
         self.assertNotIn('never-forward-this', json.dumps(self.app.calls) + json.dumps(self.hub.snapshot()))
 
     def test_bounds_permissions_and_unknown_inputs(self):
-        for max_rounds in (0, 7, True, '2'):
+        for max_rounds in (0, -1, True, '2', None):
             with self.subTest(max_rounds=max_rounds), self.assertRaises(ValueError):
                 self.channel(max_rounds)
         channel_id = self.channel(6)
@@ -357,17 +365,9 @@ class ChannelTests(unittest.TestCase):
         self.assertEqual(len([call for call in self.app.calls if call['purpose'] == 'discussion']), 48)
         self.assertEqual(len([call for call in self.app.calls if call['purpose'] == 'plan']), 1)
         self.assertEqual(len(self.hub.snapshot()['messages']), 49)
-        with patch('server.channels.MAX_HISTORY_MESSAGES', 49):
-            with self.assertRaises(ValueError):
-                self.hub.start(channel_id)
-            with self.assertRaises(ValueError):
-                self.hub.post_message(channel_id, {'text': 'Au-delà de la limite.'})
-        with patch('server.channels.MAX_HISTORY_CHARACTERS', 1):
-            with self.assertRaises(ValueError):
-                self.hub.post_message(another, {'text': 'Trop long.'})
-        with patch('server.channels.MAX_RECORDED_ROUNDS', 7):
-            with self.assertRaises(ValueError):
-                self.hub.start(channel_id)
+        posted = self.hub.post_message(channel_id, {'text': 'L’historique ne bloque plus le canal.'})
+        self.assertEqual(posted['sequence'], 50)
+        self.assertEqual(self.summary(channel_id)['history']['messageCount'], 50)
 
     def test_private_or_empty_provider_text_fails_without_persisting_it(self):
         for text in ('<analysis>PRIVATE_THOUGHTS</analysis>', '<tool_call>PRIVATE_TOOL</tool_call>', '',
@@ -529,7 +529,10 @@ class ChannelTests(unittest.TestCase):
         with patch('server.channels.MAX_CONTEXT_CHARACTERS', len('Troisième message')):
             self.hub.start(channel_id)
             self.wait()
-        self.assertEqual([message['text'] for message in self.app.calls[0]['messages']], ['Troisième message'])
+        excerpts = self.app.calls[0]['messages']
+        self.assertEqual([message['id'] for message in excerpts], [message['id'] for message in snapshot['messages']])
+        self.assertLessEqual(sum(len(message['text']) for message in excerpts), len('Troisième message'))
+        self.assertTrue(all(message.get('contextExcerpt') for message in excerpts))
         self.assertEqual(self.hub.snapshot()['messages'][0]['text'], 'Premier message')
         self.assertEqual(self.hub.snapshot()['participants'][0]['configuration']['model'], 'fixture')
 

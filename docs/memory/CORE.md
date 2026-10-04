@@ -1,5 +1,16 @@
 # Mémoire courte — Atelier
 
+Précision du 4 octobre : Damien choisit la limite des tours des canaux, avec
+option sans plafond. L'archive complète ne doit plus bloquer la poursuite du
+même canal ; seul le contexte modèle et les pages affichées restent bornés.
+Les canaux existants et leurs contributions sont conservés à la migration.
+
+Demande du 3 octobre : APK Android pour piloter les projets/fichiers, prompts et
+agents de plusieurs PC via connexion privée Tailscale ; détecter les mises à
+jour de l’APK. Les agents et comptes restent sur le PC, permissions explicites
+inchangées. Guide : `docs/MOBILE.md` ; livraison/limites :
+`docs/audit/2026-10-03-mobile-android.md`.
+
 Choix actualisé par Damien le 2 octobre : Duplica doit poursuivre la mission
 des canaux avec **GPT-6.1-Sol, effort max**, y compris ses relances. Cette
 instruction remplace le choix précédent de GPT-6-Luna ; aucun remplacement

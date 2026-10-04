@@ -20,10 +20,16 @@ class SlashCommands:
         commands = [command for command in self.store.all('command') if command['projectId'] == project_id]
         names = {command['name'] for command in commands}
         excluded = {part.casefold() for part in IGNORED}
-        roots = [root]
+        # Prioritize intentional libraries before generated trees exhaust the scan.
+        roots = []
+        project_skills = root / 'skills'
+        if project_skills.is_dir() and not project_skills.is_symlink():
+            roots.append(project_skills)
         agent_skills = root / '.agents' / 'skills'
         if agent_skills.is_dir() and not agent_skills.is_symlink() and not agent_skills.parent.is_symlink():
             roots.append(agent_skills)
+        preferred_roots = set(roots)
+        roots.append(root)
         visited = 0
         for scan_root in roots:
             for directory, directories, files in os.walk(scan_root):
@@ -31,7 +37,9 @@ class SlashCommands:
                 if visited > 500 or len(commands) >= MAX_COMMANDS:
                     break
                 directories[:] = sorted(name for name in directories if name.casefold() not in excluded
-                                        and not name.startswith('.') and not (Path(directory) / name).is_symlink())
+                                        and not name.startswith('.') and not (Path(directory) / name).is_symlink()
+                                        and (scan_root != root or name.casefold() not in {'build', 'dist'})
+                                        and (scan_root != root or Path(directory) / name not in preferred_roots))
                 skill = Path(directory) / 'SKILL.md'
                 if 'SKILL.md' not in files or skill.is_symlink():
                     continue

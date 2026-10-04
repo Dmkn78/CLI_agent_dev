@@ -12,6 +12,7 @@ from .duplica_policy import DEFAULT_PERMISSIONS, approval_verdict, known_answer,
 from .duplica_verification import MissionVerifier, validate_recipe
 from .duplica_telegram import TelegramRelay
 from .duplica_discussion import DuplicaDiscussion
+from .duplica_runner import DuplicaRunner
 from .prompt_format import duplica_prompt, json_markdown
 from .store import now, redact, uid
 from .architecture_proposal import is_architecture
@@ -36,6 +37,7 @@ class Duplica:
         self.plan_attempts = set()
         self.telegram = TelegramRelay(self)
         self.discussion = DuplicaDiscussion(self)
+        self.runner = DuplicaRunner(self)
         existing = self.store.all('duplicaSettings')
         if not existing:
             self.store.put('duplicaSettings', {'id': 'global', 'status': 'off', 'globalEnabled': False,
@@ -110,7 +112,8 @@ class Duplica:
             self._sync()
             if action == 'start':
                 self._start_worker()
-            return result
+        self.runner.control(action)
+        return result
 
     def set_scope(self, kind: str, target_id: str, enabled) -> dict:
         if kind not in ('project', 'session', 'workflow', 'task') or enabled is not None and not isinstance(enabled, bool):
@@ -142,6 +145,11 @@ class Duplica:
 
     def work_on_project(self, changes: dict) -> dict:
         project = self.app.project(changes['projectId'])
+        if not changes.get('sessionId') and (changes.get('model') or changes.get('goal') or changes.get('resumeRunId')):
+            self.set_scope('project', project['id'], True)
+            if self.settings()['status'] != 'active':
+                self.control('start')
+            return self.runner.launch(changes)
         goal = str(changes.get('goal', '')).strip()
         session = None
         if goal:
@@ -277,6 +285,22 @@ class Duplica:
                         self.save_decision({'projectId': session['projectId'], 'questions': [questions[0]['question']], 'answer': answer})
                 else:
                     self.app.approve(approval['id'], 'accept' if accepted else 'decline')
+            elif detail.get('runId') and detail.get('category'):
+                category = detail['category']
+                if accepted and self.settings()['permissions'].get(category) == 'deny':
+                    raise ValueError('Cette permission est interdite dans la politique Duplica.')
+                run = self.store.get('duplicaRun', detail['runId'])
+                if run['status'] != 'waiting_permission' or self.settings()['status'] != 'active':
+                    raise ValueError('Cette recette n’attend plus de permission active.')
+                if (detail.get('configurationId') != run['configurationId'] or detail.get('workflowId') != run['workflowId']
+                        or not self.runner.enabled(run)):
+                    raise ValueError('La recette ou son périmètre a changé ; cette autorisation est périmée.')
+                self.store.update('duplicaRun', run['id'],
+                    grants=list(set(run.get('grants', []) + [category])) if accepted else run.get('grants', []),
+                    status='waiting_permission' if accepted else 'waiting_user',
+                    reason=None if accepted else 'Permission de recette refusée.')
+                if not accepted:
+                    self.runner.release_verification(run)
             elif detail.get('category'):
                 if accepted and self.settings()['permissions'].get(detail['category']) == 'deny':
                     raise ValueError('Cette permission est interdite. Modifie d’abord la politique si tu souhaites déléguer cette recette.')
@@ -294,6 +318,7 @@ class Duplica:
     def tick(self) -> None:
         if self.settings()['status'] != 'active':
             return
+        self.runner.tick()
         with self.lock:
             scheduled = list(self.manual_checks)
             self.manual_checks.clear()
@@ -762,6 +787,7 @@ class Duplica:
                 'observations': self.store.all('duplicaObservation'), 'verifications': self.store.all('duplicaVerification'),
                 'timeline': events, 'computer': self.computer.capabilities(), 'telegram': self.telegram.status(),
                 'discussion': self.discussion.snapshot(),
+                'runs': self.runner.snapshot(),
                 'counts': {'supervised': sum(agent['supervised'] for agent in agents),
                            'running': sum(agent['observedStatus'] == 'RUNNING' for agent in agents),
                            'waiting': sum(agent['observedStatus'] in ('WAITING_INPUT', 'WAITING_PERMISSION', 'WAITING_USER') for agent in agents),
@@ -792,6 +818,7 @@ class Duplica:
 
     def close(self) -> None:
         self.closed.set()
+        self.runner.close()
         self.discussion.close()
         self.telegram.close()
         self.computer.cancel()

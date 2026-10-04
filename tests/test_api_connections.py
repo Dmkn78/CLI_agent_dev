@@ -10,7 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
-from server.api_connections import ApiConnections, public_text, validate_endpoint
+from server.api_connections import ApiConnections, api_base_url, public_text, validate_endpoint
 from server.app import Application
 from run import make_handler
 from test_application import FakeCodex
@@ -33,7 +33,10 @@ class FixtureApi(BaseHTTPRequestHandler):
 
     def do_GET(self):
         self.server.requests.append((self.path, None, self.headers.get('Authorization')))
-        if self.path == '/redirect/v1/models':
+        override = getattr(self.server, 'get_response_overrides', {}).get(self.path)
+        if override is not None:
+            self.respond(*override)
+        elif self.path == '/redirect/v1/models':
             self.send_response(302)
             self.send_header('Location', self.server.base + '/v1/models')
             self.end_headers()
@@ -103,6 +106,9 @@ class ApiConnectionTests(unittest.TestCase):
         body = self.server.requests[-1][1]
         self.assertNotIn('tools', body)
         self.assertEqual([message['role'] for message in body['messages']], ['system', 'user'])
+        saved = self.app.store.get('apiConnection', connection['id'])
+        self.assertTrue(saved['lastReplyAt'])
+        self.assertEqual(saved['lastReplyModel'], 'fixture-local')
 
     def test_chat_refuses_tool_calls_and_malformed_public_output(self):
         connection = self.connection()
@@ -159,7 +165,9 @@ class ApiConnectionTests(unittest.TestCase):
 
     def test_endpoint_validation_and_missing_usage(self):
         for endpoint in ('https://user:secret@example.com', 'file:///tmp', 'http://example.com',
-                         'https://example.com?key=secret', 'http://127.0.0.1:99999'):
+                         'https://example.com?key=secret', 'http://127.0.0.1:99999',
+                         'http://127.attacker.example/v1', 'http://192.168.attacker.example/v1',
+                         'http://[invalid]/v1'):
             with self.subTest(endpoint=endpoint), self.assertRaises(ValueError):
                 validate_endpoint(endpoint)
         self.assertEqual(validate_endpoint('http://192.168.1.10:8000/v1/'), 'http://192.168.1.10:8000/v1')
@@ -168,6 +176,89 @@ class ApiConnectionTests(unittest.TestCase):
         self.server.response_override = {'choices': [{'message': {'content': 'Public'}}]}
         reply = self.app.api_connections.reply(self.participant(connection), [], 'discussion', 'Public only')
         self.assertIsNone(reply['usage'])
+
+    def test_base_url_accepts_origins_and_pasted_routes_without_double_v1(self):
+        for suffix in ('', '/', '/v1/', '/v1/models', '/v1/chat/completions'):
+            with self.subTest(suffix=suffix):
+                connection = self.connection(baseUrl=self.server.base + suffix)
+                self.assertEqual(connection['baseUrl'], self.server.base + '/v1')
+                self.app.api_connections.discover(connection['id'])
+                self.assertEqual(self.server.requests[-1][0], '/v1/models')
+        self.assertEqual(api_base_url(self.server.base + '/proxy/v1/models'), self.server.base + '/proxy/v1')
+        self.assertEqual(api_base_url(self.server.base + '/proxy/api/v1/models', 'lmstudio'), self.server.base + '/proxy/v1')
+        self.assertEqual(validate_endpoint('http://[::1]:8000/v1/'), 'http://[::1]:8000/v1')
+        self.assertEqual(validate_endpoint('http://100.100.1.2:8000/v1'), 'http://100.100.1.2:8000/v1')
+
+    def test_lmstudio_catalog_excludes_embedding_using_native_metadata_not_names(self):
+        self.server.get_response_overrides = {
+            '/v1/models': ({'data': [{'id': name} for name in
+                ('fixture-alias', 'fixture-embedding', 'chat-with-embedding-in-name', 'opaque-model')]}, 200),
+            '/api/v1/models': ({'models': [
+                {'type': 'llm', 'key': 'fixture-local', 'display_name': 'Local LLM',
+                 'loaded_instances': [{'id': 'fixture-alias'}]},
+                {'type': 'embedding', 'key': 'fixture-embedding', 'loaded_instances': []},
+                {'type': 'llm', 'key': 'chat-with-embedding-in-name', 'loaded_instances': []}]}, 200)}
+        connection = self.connection(serverKind='lmstudio')
+        discovered = self.app.api_connections.discover(connection['id'])
+        self.assertEqual([request[0] for request in self.server.requests], ['/v1/models', '/api/v1/models'])
+        self.assertTrue(all(request[1] is None for request in self.server.requests))
+        self.assertEqual([model['model'] for model in discovered['models']],
+                         ['fixture-alias', 'chat-with-embedding-in-name', 'opaque-model'])
+        self.assertEqual(discovered['models'][0]['displayName'], 'Local LLM')
+        self.assertTrue(discovered['models'][0]['loaded'])
+        self.assertEqual(discovered['models'][-1]['modelType'], 'unknown')
+        self.assertEqual(discovered['excludedModels'][0]['model'], 'fixture-embedding')
+        self.assertEqual(discovered['catalogMetadata'], 'lmstudio')
+        self.assertTrue(discovered['catalogReadAt'])
+        self.assertIsNone(discovered['lastReplyAt'])
+        with self.assertRaises(ValueError):
+            self.app.api_connections.configuration({'connectionId': connection['id'], 'model': 'fixture-embedding'})
+
+    def test_catalog_types_are_read_only_metadata_and_discovery_deduplicates(self):
+        self.server.get_response_overrides = {'/v1/models': ({'data': [
+            {'id': 'fixture-chat', 'type': 'vlm', 'state': 'loaded', 'max_model_len': 4096},
+            {'id': 'fixture-chat', 'type': 'vlm'},
+            {'id': 'fixture-vector', 'type': 'embeddings'},
+            {'id': 'fixture-ranker', 'model_type': 'reranker'}]}, 200)}
+        discovered = self.app.api_connections.discover(self.connection()['id'])
+        self.assertEqual(len(discovered['models']), 1)
+        self.assertEqual(discovered['models'][0]['contextWindow'], 4096)
+        self.assertEqual(discovered['models'][0]['modelType'], 'chat')
+        self.assertTrue(discovered['models'][0]['loaded'])
+        self.assertEqual(len(discovered['excludedModels']), 2)
+        self.assertEqual(discovered['catalogMetadata'], 'provider')
+        self.assertEqual(len(self.server.requests), 1)
+
+    def test_missing_lmstudio_native_catalog_preserves_unknown_models(self):
+        self.server.get_response_overrides = {'/api/v1/models': ({'error': 'private credential body'}, 404)}
+        discovered = self.app.api_connections.discover(self.connection(serverKind='lmstudio')['id'])
+        self.assertEqual(discovered['status'], 'catalog_ready')
+        self.assertEqual(discovered['models'][0]['modelType'], 'unknown')
+        self.assertEqual(discovered['catalogMetadata'], 'unknown')
+        self.assertNotIn('private credential', json.dumps(discovered))
+
+    def test_editing_timeout_preserves_observed_catalog_and_reply_receipt(self):
+        connection = self.connection()
+        discovered = self.app.api_connections.discover(connection['id'])
+        self.app.api_connections.reply(self.participant(discovered), [], 'discussion', 'Public only')
+        edited = self.app.api_connections.save({'id': connection['id'], 'name': 'Edited API', 'timeout': 30})
+        self.assertEqual(edited['catalogSource'], 'discovered')
+        self.assertEqual(edited['catalogReadAt'], discovered['catalogReadAt'])
+        self.assertTrue(edited['lastReplyAt'])
+        changed = self.app.api_connections.save({'id': connection['id'], 'baseUrl': self.server.base + '/other/v1'})
+        self.assertEqual(changed['catalogSource'], 'declared')
+        self.assertIsNone(changed['catalogReadAt'])
+        self.assertIsNone(changed['lastReplyAt'])
+
+    def test_invalid_catalog_does_not_create_success_receipt(self):
+        self.server.get_response_overrides = {'/v1/models': ({'data': [{'id': 'bad\nmodel'}]}, 200)}
+        connection = self.connection()
+        with self.assertRaises(ValueError):
+            self.app.api_connections.discover(connection['id'])
+        saved = self.app.store.get('apiConnection', connection['id'])
+        self.assertEqual(saved['status'], 'error')
+        self.assertIsNone(saved['catalogReadAt'])
+        self.assertEqual(saved['models'], connection['models'])
 
     def test_channel_uses_fresh_native_context_and_closes_each_turn(self):
         clients = []

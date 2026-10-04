@@ -13,6 +13,8 @@ sys.path.insert(0, str(ROOT))
 from server.app import Application
 from server.store import uid
 from run import make_handler
+import run
+import server.brain as brain_module
 from test_brain import BrainApiFixture
 
 
@@ -37,12 +39,25 @@ def main():
     app = Application(ROOT, data / 'state')
     app.provider.update(installed=True, connected=True, models=[], plan='Fournisseur fictif')
     app.discover = lambda: app.provider
+    # Explicit fake chooser; exercises the browser route, never opens a user dialog.
+    run.pick_directory = lambda: {'path': str(vault)}
+    history = data / 'fluid-history.json'
+    history.write_text('[]', encoding='utf-8')
+    brain_module.fluid_history = lambda: json.loads(history.read_text(encoding='utf-8'))
+    # Synthetic audio bytes test the HTTP contract; PCM conversion is tested
+    # independently without requiring ffmpeg in this browser fixture.
+    brain_module.transcribe_fluid_audio = lambda path, callback, **kwargs: callback(str(path))['text']
+    brain_module.local_installation = lambda: {'fluidVoice': {'installed': True, 'version': 'fixture',
+        'speechModel': 'fixture-asr-local', 'modelPath': '/fixture/parakeet', 'modelPresent': True,
+        'historyEnabled': True, 'apiEnabled': True, 'apiUrl': api.base+'/v1/transcribe'},
+        'vaults': [{'name': 'my_brain', 'path': str(vault)}]}
     server = ThreadingHTTPServer(('127.0.0.1', args.port), make_handler(app, 'brain-browser-fixture'))
     server.daemon_threads = True
     evidence = ROOT / '.atelier' / 'brain-browser-evidence'
     evidence.mkdir(exist_ok=True)
     info = {'fixture': True, 'url':'http://127.0.0.1:'+str(server.server_port)+'/',
-            'apiUrl':api.base, 'vaultPath':str(vault), 'inputPath':str(inbox), 'dataPath':str(data)}
+            'apiUrl':api.base, 'vaultPath':str(vault), 'inputPath':str(inbox), 'dataPath':str(data),
+            'fluidHistoryPath':str(history)}
     (evidence / 'fixture.json').write_text(json.dumps(info, indent=2), encoding='utf-8')
     def stop(*_):
         threading.Thread(target=server.shutdown, daemon=True).start()

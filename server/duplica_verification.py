@@ -35,20 +35,21 @@ def validate_recipe(recipe: dict, workspace: str) -> dict:
             raise ValueError('Les recettes n’acceptent pas de shell intermédiaire.')
         normalized[stage] = command
     normalized['buildNotApplicable'] = recipe.get('buildNotApplicable') is True
+    normalized['guiNotApplicable'] = recipe.get('guiNotApplicable') is True
     steps = recipe.get('gui', [])
     if not isinstance(steps, list) or len(steps) > 40:
         raise ValueError('Maximum 40 étapes de recette interface.')
     normalized['gui'] = []
     for step in steps:
-        if not isinstance(step, dict) or step.get('kind') not in ('open_url', 'click', 'double_click', 'type_text', 'press_key', 'scroll', 'expect'):
+        if not isinstance(step, dict) or step.get('kind') not in ('open_url', 'click', 'double_click', 'hover', 'type_text', 'press_key', 'scroll', 'expect'):
             raise ValueError('Étape de recette interface inconnue.')
         cleaned = {key: step[key] for key in ('kind', 'label', 'text', 'key', 'deltaY', 'url') if key in step}
         if step['kind'] == 'open_url':
             address = urlparse(str(step.get('url', '')))
             if address.scheme != 'http' or address.hostname not in ('localhost', '127.0.0.1', '::1') or address.username or address.password:
                 raise ValueError('La recette navigateur doit cibler une application HTTP locale.')
-        if step['kind'] in ('click', 'double_click') and not str(step.get('label', '')).strip():
-            raise ValueError('Une étape de clic désigne le libellé exact du contrôle.')
+        if step['kind'] in ('click', 'double_click', 'hover') and not str(step.get('label', '')).strip():
+            raise ValueError('Une étape souris désigne le libellé exact du contrôle.')
         if step['kind'] == 'expect' and not str(step.get('text', '')).strip():
             raise ValueError('Le résultat interface attendu est obligatoire.')
         if len(json.dumps(cleaned)) > 9000:
@@ -168,6 +169,8 @@ class MissionVerifier:
             raise ValueError('L’application de recette s’est arrêtée : ' + redact(path.read_bytes()[:8000].decode(errors='replace')))
 
     def _gui(self, recipe: dict) -> dict:
+        if recipe.get('guiNotApplicable') and not recipe['gui']:
+            return {'stage': 'gui', 'status': 'pass', 'detail': 'Sans interface, selon la configuration utilisateur.'}
         if not recipe['gui'] or not any(step['kind'] == 'expect' for step in recipe['gui']):
             return {'stage': 'gui', 'status': 'not_run', 'detail': 'Définir un parcours avec un résultat visible attendu.'}
         observation = self.computer.observe('platform')
@@ -188,7 +191,7 @@ class MissionVerifier:
                     return {'stage': 'gui', 'status': 'fail', 'steps': performed, 'expected': step['text'],
                             'observed': observation.get('text', ''), 'screenshot': observation.get('screenshot')}
                 continue
-            if step['kind'] in ('click', 'double_click'):
+            if step['kind'] in ('click', 'double_click', 'hover'):
                 observation, clicked = self._click(observation, step)
                 if not clicked:
                     return {'stage': 'gui', 'status': 'fail', 'steps': performed, 'expected': step['label'],

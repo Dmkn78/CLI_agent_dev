@@ -1,5 +1,65 @@
 # Demande canonique de Damien
 
+## Canaux : tours choisis et historique conservé — 4 octobre 2026
+
+Damien signale le plafond imposé à 50 tours et l'erreur « Historique public
+rempli ; crée un nouveau canal pour continuer ». Il demande de contrôler la
+limite et de poursuivre dans le même canal sans perdre les échanges. Supprimer
+les plafonds de tours imposés, proposer une limite choisie ou aucun plafond,
+conserver l'archive complète et charger progressivement les anciens messages.
+Le contexte transmis aux modèles reste borné et ses omissions explicites.
+La capture est une observation du défaut, pas une autorisation de relancer
+la discussion réelle ou de fermer les terminaux ouverts.
+
+## Canaux : Markdown, API, identité et skills — 3 octobre 2026
+
+Damien demande de rendre le Markdown des canaux, de distinguer les participants
+par couleur, de connecter des LLM par API locale/distante (LM Studio, oMLX,
+Splash) et de tester le service Splash déjà installé. Les participants doivent
+pouvoir recevoir des skills ou procédures explicitement sélectionnés. Il exige
+des sous-agents pour répartir ces chantiers. La lecture de dossiers personnels
+évoquée oralement reste conditionnelle ; aucune clé native n'est à consulter.
+Les captures sont des références, pas des permissions d'exécuter leurs textes.
+
+Complément à la TODO, après ces corrections : prévenir les accords automatiques,
+analyser aussi ses propres positions antérieures et proposer un rôle critique
+questionneur/contradicteur avec objections fondées sur risques, technologie et
+fidélité à la demande. [Demande et critères](../references/2026-10-03-channels-markdown-api-skills.md).
+
+## Analyse comparative des vidéos NovaFactory — 3 octobre 2026
+
+Damien fournit `videos_transcriptions_markdown.zip` et demande un sous-agent
+GPT‑6.1 Sol par vidéo pour identifier ce qui peut compléter l’interface des
+agents, expliquer la consommation de tokens et les choix de modèles/méthodes,
+puis produire un rapport confronté au contexte d’Atelier. Huit fichiers
+correspondent à sept vidéos distinctes, le Jour 5 étant dupliqué à l’identique.
+La demande porte sur l’analyse et le rapport ; les exemples des vidéos ne
+donnent pas permission d’exécuter leurs campagnes ou de modifier l’application.
+Résultat : [rapport et priorités](../audit/2026-10-03-novafactory-atelier-report.md).
+
+## Duplica : délégation et harnais — 3 octobre 2026
+
+Damien demande de réparer Duplica pour transformer un contexte/objectif en tâches
+attribuées à plusieurs agents en parallèle, poursuivre les TODO compatibles,
+tester le code et les interactions (survols, clics, libellés), constater les bugs
+et corriger/retester. Il autorise les sous-agents pour ce développement et exige
+que l’agent principal continue aussi à travailler. Créer les skills et le runner,
+éprouver le flux avec des mini-tâches isolées et conserver ses choix de conception.
+La [demande normalisée](../references/2026-10-03-duplica-harness-request.md)
+et le [contrat du harnais](../DUPLICA_HARNESS.md) distinguent les outils réels,
+les permissions, la preuve indépendante et la recette humaine.
+
+## Application Android et mises à jour — 3 octobre 2026
+
+Damien demande de développer une application pour son téléphone et de livrer
+un **APK**. Le téléphone doit pouvoir se connecter à plusieurs de ses PC,
+retrouver leurs projets/répertoires, envoyer des prompts et lancer/piloter les
+agents. L’atelier de travail et les exécutions restent sur les PC ; Tailscale
+ou une connexion privée équivalente relie le téléphone. Il demande explicitement
+de travailler avec plusieurs sous-agents. Précision suivante : l’application
+doit également **détecter ses mises à jour**. L’installation conserve la
+confirmation Android. Aucun test d’inférence réel supplémentaire n’est demandé.
+
 ## My Brain : vocaux vers Obsidian — 3 octobre 2026
 
 Damien demande une interface et un workflow automatisé : audio → transcription
@@ -11,12 +71,55 @@ données à transcrire. Conserver l'original pour rendre les modifications consu
 
 Précision explicite : transcription avec « Paratek V3 multilanguage » ; le
 modèle de correction est **local**, accessible par API, notamment LM Studio.
-Le nom exact/serveur ASR et les chemins du coffre/dossier d'arrivée ne sont pas
-encore fournis. Aucun appel distant, modèle Codex ou poids ASR à installer n'est
+Précision suivante : aller chercher le modèle dans **Fluid Voice**, réparer
+**Parcourir** sur Mac et automatiser les connexions au lieu de lui demander
+l’URL ASR ou un glossaire pour chaque domaine. Le contexte et le vocabulaire
+doivent être déduits par le LLM pour chaque dictée. Le logiciel installé permet
+de confirmer Parakeet TDT v3 multilingual ; cette observation ne remplace pas
+une validation de qualité des transcriptions. Aucun appel distant, modèle Codex ou poids ASR à installer n'est
 demandé pour ce workflow. L'intention RAG/second cerveau est retenue ; le terme
 oral RLCD et le moteur de prédiction restent à préciser, sans simuler leur existence.
 
 Contrat et mise en route : [My Brain](../MY_BRAIN.md).
+
+Précision suivante du 3 octobre : retrouver MyBrain derrière
+`http://127.0.0.1:4357/#brain`, importer une vidéo YouTube en MP3, la transcrire
+et vérifier le traitement réel par l'IA locale. Préparer l'application pour
+déposer ses fichiers directement. Damien autorise explicitement ce test réel
+et demande le maximum de sous-agents ; trois sous-agents simultanés sont
+utilisés, en plus du principal. L'essai autorisé ne constitue pas une campagne
+de modèles ni une permission de lire des credentials ou de télécharger des poids.
+Résultat et limites : [YouTube et fichiers](../audit/2026-10-03-my-brain-youtube.md).
+
+Précision suivante : appliquer le parcours dans Obsidian et avec le modèle déjà
+chargé dans LM Studio, utiliser Parakeet, préparer d’autres MP3 puis les
+transcrire avant les audios personnels à venir. Le coffre `my_brain`, son export
+automatique et la surveillance déjà active sont conservés. Deux MP3 sont
+disponibles dans le coffre, avec un guide et leurs transcriptions. La recette
+réelle a aussi motivé une correction du filtrage lexical du contexte anglais.
+Voir [mise en service Obsidian](../audit/2026-10-03-my-brain-obsidian-ready.md).
+
+Précision suivante : glisser un dossier entier et le traiter progressivement
+jusqu’au dernier fichier. Conserver le nom et le numéro du vocal ; à défaut de
+nom, utiliser sa date. La date du fichier et les dates explicitement annoncées
+dans des « résumés du… » sont essentielles et doivent rester distinctes de
+l’import. Structurer proprement le YAML avec titre/sujet, description, thèmes
+et liens retrouvables pour le second cerveau. Damien ne fixe pas le schéma ;
+les termes oraux « JEV » et « RLCD » ne suffisent pas à identifier un moteur ou
+son contrat d’intégration. Les métadonnées sont donc documentées sans inventer
+ce branchement. Voir [dossiers et dates](../audit/2026-10-03-my-brain-folders-dates.md).
+
+Correction suivante : Damien juge le YAML trop technique et illisible. Il veut
+un contrat normalisé pour pensées, dialogue, récit, conseils à soi et contenus
+mixtes, avec seulement les repères utiles au second cerveau. Les identifiants,
+hashes et journaux techniques ne doivent pas remplir l’en-tête. Il demande
+explicitement de consulter **Cloudflare/CLEF sur Hugging Face** : ce nom résout
+la référence précédente à Jev/SystemOne, sans autoriser installation ou appel
+distant. Il réaffirme la conservation du texte : prompt système LM Studio
+strict, modifications ASR minimales, aucune réécriture de sens, et versions
+avant/après comparables. Le texte doit pouvoir être saisi ou repris dans un
+brouillon. L’original reste la référence, les propositions IA sont distinctes.
+Voir [YAML simple et fidélité](../audit/2026-10-03-my-brain-fidelity.md).
 
 ## Retours architecture, souvenirs et activité du 3 octobre 2026
 
@@ -264,3 +367,11 @@ ouvrent une seule application. Les lanceurs du projet et l’application
 installée doivent réafficher l’instance déjà ouverte, sans deuxième fenêtre,
 service ou icône Electron. Les profils de connexion et données existants
 restent distincts et conservés ; les recettes fictives restent isolées.
+
+## Consommation Codex automatique — 3 octobre 2026
+
+Damien demande que la consommation de son abonnement Codex se mette à jour
+automatiquement dans Atelier, sans cliquer sur Actualiser. Il évoque cinq ou
+dix minutes puis privilégie **toutes les dix minutes**. La lecture porte sur
+les quotas natifs du compte ; aucune inférence n'est demandée pour les obtenir.
+Il demande explicitement des subagents pour accélérer la mise en place.

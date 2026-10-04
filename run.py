@@ -71,10 +71,25 @@ def make_handler(app, token):
                 elif route == '/api/desktop/service':
                     self.reply({'workspace': str(app.root.resolve()),
                                 'dataPath': str(app.store.root.resolve())})
+                elif route == '/api/channels/history':
+                    self.reply(redact(app.channels.history(query['id'],
+                        before=int(query['before']) if 'before' in query else None,
+                        after=int(query['after']) if 'after' in query else None,
+                        limit=int(query.get('limit', 50)))))
+                elif route == '/api/channels/rounds':
+                    self.reply(redact(app.channels.round_history(query['id'],
+                        before=int(query['before']) if 'before' in query else None,
+                        limit=int(query.get('limit', 50)))))
                 elif route == '/api/processes':
                     self.reply(process_inventory())
                 elif route == '/api/brain/job':
                     self.reply(app.brain.job(query['id']))
+                elif route == '/api/brain/batch':
+                    self.reply(app.brain.batches.get(query['id']))
+                elif route == '/api/brain/audio':
+                    raw, suffix = app.brain.audio(query['id'])
+                    mime = 'audio/mpeg' if suffix == '.mp3' else mimetypes.guess_type('voice' + suffix)[0]
+                    self.reply(raw, mime=mime or 'application/octet-stream')
                 elif route == '/api/brain/search':
                     self.reply(app.brain.search(query.get('project', 'atelier'), query.get('q', '')))
                 elif route == '/api/brain/note':
@@ -112,17 +127,8 @@ def make_handler(app, token):
                     path = app.duplica.directory / 'screenshots' / (screenshot_id + '.png')
                     self.reply(path.read_bytes(), mime='image/png')
                 elif route == '/api/skills':
-                    root = app.file_path(query.get('project', 'atelier'))
-                    paths = []
-                    import os
-                    from server.app import IGNORED
-                    for directory, dirs, files in os.walk(root):
-                        dirs[:] = [d for d in dirs if d not in IGNORED and not d.startswith('.') and not (Path(directory) / d).is_symlink()]
-                        if 'SKILL.md' in files:
-                            paths.append((Path(directory) / 'SKILL.md').relative_to(root).as_posix())
-                        if len(paths) >= 80:
-                            break
-                    self.reply(paths)
+                    self.reply([command['path'] for command in app.commands.catalog(query.get('project', 'atelier'))
+                                if command['kind'] == 'skill'])
                 elif route == '/api/sessions/context':
                     self.reply(app.session_context(query['id']))
                 elif route == '/api/image':
@@ -165,16 +171,26 @@ def make_handler(app, token):
                     result = app.brain.save(data)
                 elif route == '/api/brain/discover':
                     result = app.brain.discover(data.get('projectId', 'atelier'))
+                elif route == '/api/brain/detect':
+                    result = app.brain.detect(data.get('projectId', 'atelier'))
                 elif route == '/api/brain/import':
                     result = app.brain.submit(data)
+                elif route == '/api/brain/batch/create':
+                    result = app.brain.batches.create(data)
+                elif route == '/api/brain/batch/error':
+                    result = app.brain.batches.entry_error(data)
+                elif route == '/api/brain/youtube':
+                    result = app.brain.submit_youtube(data)
                 elif route == '/api/brain/export':
                     result = app.brain.export(data['id'])
+                elif route == '/api/brain/reformat':
+                    result = app.brain.reformat(data['id'])
                 elif route == '/api/brain/cancel':
                     result = app.brain.cancel(data['id'])
                 elif route == '/api/brain/retry':
                     result = app.brain.retry(data['id'])
                 elif route == '/api/brain/watch':
-                    result = app.brain.watch(data.get('projectId', 'atelier'), data['enabled'])
+                    result = app.brain.watch(data.get('projectId', 'atelier'), data['enabled'], data.get('resume', False))
                 elif route == '/api/brain/ask':
                     result = app.brain.ask(data.get('projectId', 'atelier'), data.get('query', ''))
                 elif route == '/api/attachments/upload':

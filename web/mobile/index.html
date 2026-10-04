@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#201d1b">
+  <meta name="atelier-mobile-token" content="__ATELIER_MOBILE_TOKEN__">
+  <meta name="atelier-mobile-pc" content="__ATELIER_MOBILE_PC__">
+  <title>Atelier · Mobile</title>
+  <link rel="stylesheet" href="/mobile/style.css">
+  <script defer src="/mobile/app.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">a</span><div><strong>Atelier</strong><small id="pc-name">Ordinateur connecté</small></div></div>
+    <button class="icon-button" id="refresh" aria-label="Actualiser">↻</button>
+  </header>
+  <div class="project-bar"><label for="project-select">Projet</label><select id="project-select" aria-label="Projet actif"><option value="">Connexion…</option></select><span id="connection" role="status">Connexion…</span></div>
+  <aside id="offline" class="offline" hidden>Ordinateur inaccessible. Les données affichées sont les dernières reçues. Vérifiez Tailscale et le service Atelier, puis actualisez.</aside>
+  <main id="content" tabindex="-1"><section class="empty"><h1>Votre atelier, partout.</h1><p>Connexion à votre ordinateur…</p></section></main>
+  <nav class="bottom-nav" aria-label="Navigation principale">
+    <button data-nav="projects" aria-label="Projets"><span aria-hidden="true">▦</span>Projets</button>
+    <button data-nav="agents" aria-label="Agents"><span aria-hidden="true">◎</span>Agents</button>
+    <button data-nav="files" aria-label="Fichiers"><span aria-hidden="true">▱</span>Fichiers</button>
+    <button data-nav="tasks" aria-label="Tâches"><span aria-hidden="true">☷</span>Tâches</button>
+    <button data-nav="more" aria-label="Plus"><span aria-hidden="true">···</span>Plus</button>
+  </nav>
+  <dialog id="dialog" aria-labelledby="dialog-title"><header><h2 id="dialog-title"></h2><button class="icon-button" data-action="dismiss" aria-label="Fermer">×</button></header><div id="dialog-body"></div></dialog>
+  <div id="notice" role="status" aria-live="polite"></div>
+</body>
+</html>

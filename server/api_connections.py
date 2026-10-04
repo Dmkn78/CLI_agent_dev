@@ -1,5 +1,6 @@
 """Explicit HTTP connections for public chat and typed decision consultants."""
 import json
+import ipaddress
 import math
 import os
 import re
@@ -13,6 +14,7 @@ from .store import now, uid
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_PUBLIC_TEXT = 16000
 PROTOCOLS = ('openai', 'systemone')
+SERVER_KINDS = ('custom', 'lmstudio', 'omlx', 'splash')
 DECISION_QUESTIONS = {
     'next_step': {'type': 'choice', 'instructions': 'Which step should the planning team take next?',
                   'criteria': {'clarify': 'Ask the user for missing requirements.',
@@ -57,8 +59,8 @@ def validate_endpoint(endpoint: object) -> str:
     if not isinstance(endpoint, str) or not endpoint.strip() or len(endpoint) > 2048:
         raise ValueError('Indique une URL de base HTTP ou HTTPS.')
     endpoint = endpoint.strip().rstrip('/')
-    parsed = urlsplit(endpoint)
     try:
+        parsed = urlsplit(endpoint)
         port = parsed.port
     except ValueError:
         raise ValueError('Port de connexion invalide.')
@@ -68,12 +70,31 @@ def validate_endpoint(endpoint: object) -> str:
         raise ValueError('URL invalide : sans identifiant, paramètre ni fragment.')
     # Preserve user-entered LAN/local endpoints. Remote credentials require TLS.
     host = parsed.hostname.casefold()
-    is_local = host in ('localhost', '::1') or host.startswith(('127.', '10.', '192.168.'))
-    if re.fullmatch(r'172\.(1[6-9]|2\d|3[01])\..+', host):
-        is_local = True
+    is_local = host == 'localhost'
+    try:
+        address = ipaddress.ip_address(host)
+        is_local = any(address in ipaddress.ip_network(network) for network in
+                       ('127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16',
+                        '100.64.0.0/10', '::1/128', 'fc00::/7', 'fe80::/10'))
+    except ValueError:
+        pass
     if parsed.scheme == 'http' and not is_local:
         raise ValueError('Utilise HTTPS pour une API distante, HTTP pour localhost ou le réseau local.')
     return endpoint
+
+
+def api_base_url(endpoint: object, server_kind: str = 'custom') -> str:
+    """Accept a server origin, a /v1 base or a pasted compatible route."""
+    endpoint = validate_endpoint(endpoint)
+    for suffix in ('/chat/completions', '/systemone', '/models'):
+        if endpoint.endswith(suffix):
+            endpoint = endpoint[:-len(suffix)]
+            break
+    # LM Studio's native /api/v1 uses a different chat schema. Keep our
+    # inference on its OpenAI-compatible endpoint, including reverse proxies.
+    if server_kind == 'lmstudio' and endpoint.endswith('/api/v1'):
+        endpoint = endpoint[:-len('/api/v1')] + '/v1'
+    return endpoint if endpoint.endswith('/v1') else endpoint + '/v1'
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -98,7 +119,10 @@ class ApiConnections:
             name = changes.get('name', existing.get('name', ''))
             if not isinstance(name, str) or not name.strip() or len(name) > 100:
                 raise ValueError('Indique un nom de connexion de 1 à 100 caractères.')
-            endpoint = validate_endpoint(changes.get('baseUrl', existing.get('baseUrl')))
+            server_kind = changes.get('serverKind', existing.get('serverKind', 'custom'))
+            if server_kind not in SERVER_KINDS:
+                raise ValueError('Type de serveur non pris en charge.')
+            endpoint = api_base_url(changes.get('baseUrl', existing.get('baseUrl')), server_kind)
             protocol = changes.get('protocol', existing.get('protocol', 'openai'))
             if protocol not in PROTOCOLS:
                 raise ValueError('Protocole non pris en charge.')
@@ -109,7 +133,8 @@ class ApiConnections:
             if isinstance(declared, str):
                 declared = [entry.strip() for entry in re.split(r'[,\n]', declared) if entry.strip()]
             if not isinstance(declared, list) or len(declared) > 200 or any(
-                    not isinstance(model, str) or not model.strip() or len(model) > 200 for model in declared):
+                    not isinstance(model, str) or not model.strip() or len(model) > 200
+                    or re.search(r'[\x00-\x1f\x7f]', model) for model in declared):
                 raise ValueError('Liste de modèles invalide (200 maximum).')
             if protocol == 'systemone' and not declared:
                 raise ValueError('Indique l’identifiant du modèle servi par l’API de décisions.')
@@ -123,10 +148,21 @@ class ApiConnections:
             if not 5 <= timeout <= 180:
                 raise ValueError('Délai compris entre 5 et 180 secondes.')
             connection = {'id': identifier, 'name': name.strip(), 'baseUrl': endpoint,
-                          'protocol': protocol, 'credentialEnvironment': environment, 'timeout': timeout,
+                          'protocol': protocol, 'serverKind': server_kind,
+                          'credentialEnvironment': environment, 'timeout': timeout,
                           'models': [self._model(model.strip()) for model in dict.fromkeys(declared)],
+                          'excludedModels': [], 'catalogMetadata': 'unknown', 'catalogReadAt': None,
+                          'lastReplyAt': None, 'lastReplyModel': None,
                           'catalogSource': 'declared', 'status': 'configured', 'error': None,
                           'createdAt': existing.get('createdAt', now()), 'updatedAt': now()}
+            same_catalog = existing and all(connection[key] == existing.get(key, 'custom' if key == 'serverKind' else None)
+                for key in ('baseUrl', 'protocol', 'serverKind', 'credentialEnvironment')) and (
+                [model['model'] for model in connection['models']] == [model['model'] for model in existing.get('models', [])])
+            if same_catalog:
+                for key in ('models', 'excludedModels', 'catalogSource', 'catalogMetadata', 'catalogReadAt',
+                            'lastReplyAt', 'lastReplyModel', 'status', 'error'):
+                    if key in existing:
+                        connection[key] = existing[key]
             self.store.put('apiConnection', connection)
             self.store.event('api.connection_saved', {'connectionId': identifier, 'protocol': protocol})
             return connection
@@ -149,13 +185,42 @@ class ApiConnections:
                 entries = response.get('data')
                 if not isinstance(entries, list) or len(entries) > 200:
                     raise ValueError('Le serveur ne retourne pas un catalogue OpenAI valide.')
-                models = []
+                native = {}
+                metadata = 'provider'
+                if connection.get('serverKind') == 'lmstudio':
+                    try:
+                        catalog = self._request(connection, 'models', native=True)
+                        native_entries = catalog.get('models')
+                        if not isinstance(native_entries, list) or len(native_entries) > 200:
+                            raise ValueError('Catalogue natif non reconnu.')
+                        for entry in native_entries:
+                            key = entry.get('key') if isinstance(entry, dict) else None
+                            if isinstance(key, str) and entry.get('type') in ('llm', 'embedding'):
+                                native[key] = entry
+                                for instance in entry.get('loaded_instances', []) if isinstance(entry.get('loaded_instances'), list) else []:
+                                    instance_id = instance.get('id') if isinstance(instance, dict) else None
+                                    if isinstance(instance_id, str):
+                                        native[instance_id] = entry
+                    except ValueError:
+                        # Older LM Studio and compatible servers may lack the
+                        # native catalog. Never infer a type from a model name.
+                        pass
+                    metadata = 'lmstudio' if native else 'unknown'
+                models, excluded, seen = [], [], set()
                 for entry in entries:
                     model = entry.get('id') if isinstance(entry, dict) else None
-                    if not isinstance(model, str) or not model or len(model) > 200:
+                    if (not isinstance(model, str) or not model.strip() or len(model) > 200
+                            or model != model.strip() or re.search(r'[\x00-\x1f\x7f]', model)):
                         raise ValueError('Identifiant de modèle invalide dans le catalogue.')
-                    models.append(self._model(model))
-                return self.store.update('apiConnection', identifier, models=models, catalogSource='discovered',
+                    if model in seen:
+                        continue
+                    seen.add(model)
+                    detail = self._model(model, native.get(model, entry))
+                    (excluded if detail['modelType'] in ('embedding', 'reranker') else models).append(detail)
+                if not native:
+                    metadata = 'provider' if any(model['modelType'] != 'unknown' for model in models + excluded) else 'unknown'
+                return self.store.update('apiConnection', identifier, models=models, excludedModels=excluded,
+                                         catalogSource='discovered', catalogMetadata=metadata, catalogReadAt=now(),
                                          status='catalog_ready', error=None, updatedAt=now())
             except ValueError as error:
                 self.store.update('apiConnection', identifier, status='error', error=str(error), updatedAt=now())
@@ -198,9 +263,10 @@ class ApiConnections:
             if not isinstance(message, dict) or message.get('tool_calls'):
                 raise ValueError('Le canal attend une réponse publique sans appel d’outil.')
             text = public_text(message.get('content'))
+        self.store.update('apiConnection', connection['id'], lastReplyAt=now(), lastReplyModel=configuration['model'])
         return {'text': text, 'usage': normalize_usage(response.get('usage'))}
 
-    def _request(self, connection: dict, suffix: str, body: dict | None = None) -> dict:
+    def _request(self, connection: dict, suffix: str, body: dict | None = None, *, native: bool = False) -> dict:
         headers = {'Content-Type': 'application/json', 'Accept': 'application/json'}
         environment = connection['credentialEnvironment']
         if environment:
@@ -208,9 +274,9 @@ class ApiConnections:
             if not credential or re.search(r'[\r\n]', credential):
                 raise ValueError('La variable de clé configurée est absente ou invalide dans le service Atelier.')
             headers['Authorization'] = 'Bearer ' + credential
-        base = connection['baseUrl']
-        if not base.endswith('/v1'):
-            base += '/v1'
+        base = api_base_url(connection['baseUrl'], connection.get('serverKind', 'custom'))
+        if native:
+            base = base[:-len('/v1')] + '/api/v1'
         request = urllib.request.Request(base + '/' + suffix, headers=headers,
                     data=json.dumps(body, ensure_ascii=False).encode('utf-8') if body is not None else None,
                     method='POST' if body is not None else 'GET')
@@ -226,7 +292,12 @@ class ApiConnections:
             return decoded
         except urllib.error.HTTPError as error:
             error.close()
-            raise ValueError('L’API a refusé la requête (HTTP ' + str(error.code) + ').') from None
+            hint = {401: 'Vérifie la variable de clé et l’authentification du serveur.',
+                    403: 'La clé ou ce modèle ne dispose pas de l’accès demandé.',
+                    404: 'Vérifie l’URL compatible /v1 et le modèle sélectionné.',
+                    429: 'Le serveur limite les appels ; réessaie plus tard.',
+                    503: 'Le serveur ou le modèle n’est pas encore disponible.'}.get(error.code, '')
+            raise ValueError(('L’API a refusé la requête (HTTP ' + str(error.code) + '). ' + hint).strip()) from None
         except (urllib.error.URLError, TimeoutError, OSError):
             raise ValueError('API inaccessible ou délai dépassé. Vérifie l’URL et le serveur.') from None
         except (json.JSONDecodeError, UnicodeError):
@@ -240,9 +311,28 @@ class ApiConnections:
                 raise ValueError('Arrête le canal avant de modifier cette connexion.')
 
     @staticmethod
-    def _model(identifier: str) -> dict:
-        return {'model': identifier, 'displayName': identifier, 'defaultReasoningEffort': 'off',
-                'supportedReasoningEfforts': [{'reasoningEffort': 'off'}]}
+    def _model(identifier: str, metadata: dict | None = None) -> dict:
+        metadata = metadata or {}
+        kind = metadata.get('type', metadata.get('model_type'))
+        kind = kind.casefold() if isinstance(kind, str) else ''
+        kind = {'llm': 'chat', 'vlm': 'chat', 'chat': 'chat', 'embedding': 'embedding',
+                'embeddings': 'embedding', 'reranker': 'reranker', 'rerank': 'reranker'}.get(kind, 'unknown')
+        display = metadata.get('display_name', metadata.get('displayName', identifier))
+        if not isinstance(display, str) or not display.strip() or len(display) > 200 or re.search(r'[\x00-\x1f\x7f]', display):
+            display = identifier
+        result = {'model': identifier, 'displayName': display, 'modelType': kind,
+                  'defaultReasoningEffort': 'off', 'supportedReasoningEfforts': [{'reasoningEffort': 'off'}]}
+        loaded = metadata.get('loaded_instances')
+        if isinstance(loaded, list):
+            result['loaded'] = bool(loaded)
+        elif metadata.get('state') in ('loaded', 'not-loaded'):
+            result['loaded'] = metadata['state'] == 'loaded'
+        for key in ('max_context_length', 'max_model_len'):
+            context = metadata.get(key)
+            if isinstance(context, int) and not isinstance(context, bool) and context > 0:
+                result['contextWindow'] = context
+                break
+        return result
 
     @staticmethod
     def _decision_text(answers: object) -> str:

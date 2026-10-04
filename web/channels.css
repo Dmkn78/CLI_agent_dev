@@ -21,6 +21,12 @@
 .channel-transcript { padding:16px; border:1px solid var(--border); border-radius:16px; background:var(--panel); max-height:60vh; min-height:260px; overflow:auto; }
 .channel-public-note { display:flex; align-items:start; gap:10px; margin:0 0 22px; color:var(--muted); font-size:11px; line-height:1.7; }
 .channel-public-note .icon { flex-shrink:0; }
+.channel-context-note { padding:10px 12px; margin:0 0 16px; border:1px solid var(--border); border-radius:8px; font-size:11px; line-height:1.7; color:var(--muted); }
+.channel-context-note strong { display:block; margin-top:6px; color:var(--accent); font-weight:500; }
+.channel-history-controls { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:8px 14px; padding:12px 0; margin-bottom:12px; border-bottom:1px solid var(--border); font-size:11px; color:var(--muted); }
+.channel-history-controls .button { font-size:11px; }
+.channel-history-controls>div { display:flex; justify-content:center; gap:6px; flex-wrap:wrap; }
+.channel-history-controls>small,.channel-history-controls>p { flex-basis:100%; text-align:center; line-height:1.7; }
 .channel-first-message { padding:45px 12px; text-align:center; color:var(--muted); line-height:1.8; }
 .channel-first-message small { display:block; margin-top:8px; }
 .channel-message { margin:14px 0; border:1px solid var(--border); border-radius:14px; padding:14px; background:#ffffff03; }
@@ -29,8 +35,9 @@
 .channel-message header strong { font-size:12px; }
 .channel-message header span,.channel-message time { font-size:10px; color:var(--muted); }
 .channel-message time { margin-left:auto; }
-.channel-message p { font-size:13px; line-height:1.8; white-space:pre-wrap; overflow-wrap:anywhere; margin:10px 0 4px; }
+.channel-message p { font-size:13px; line-height:1.8; overflow-wrap:anywhere; margin:10px 0 4px; }
 .channel-message footer { margin-top:10px; color:var(--muted); font-size:10px; overflow-wrap:anywhere; }
+.channel-recovered-reply { display:block; margin-top:8px; font-size:10px; color:var(--accent); }
 .channel-waiting { font-size:12px; color:var(--accent); padding:14px; line-height:1.7; }
 .channel-compose { padding:18px; margin-top:16px; border:1px solid var(--border); border-radius:16px; background:var(--panel); }
 .channel-compose label { font-size:12px; color:var(--muted); display:block; margin-bottom:10px; }
@@ -38,7 +45,7 @@
 .channel-compose>div { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin-top:12px; }
 .channel-compose>div>span { flex:1; min-width:120px; }
 .channel-plan { margin-top:18px; }
-.channel-plan pre { font:inherit; font-size:13px; white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.8; padding:10px 0 20px; max-height:480px; overflow:auto; }
+.channel-plan-content { font-size:13px; line-height:1.8; padding:10px 0 20px; max-height:480px; overflow:auto; }
 .channel-plan .row-actions { flex-wrap:wrap; }
 .channel-plan>.muted { margin-top:14px; }
 .channel-participants { padding:16px; border:1px solid var(--border); border-radius:16px; background:var(--panel); }
@@ -66,5 +73,31 @@
 .api-connections .panel-heading { flex-wrap:wrap; gap:12px; }
 .api-connections a { color:var(--accent); text-decoration:underline; }
 .api-connections .row-actions { flex-wrap:wrap; }
+/* Identity is independent of role; names and role labels remain visible. */
+.channel-color-0 { --channel-color:#8cc8ea; }
+.channel-color-1 { --channel-color:#c3a4ef; }
+.channel-color-2 { --channel-color:#e8c675; }
+.channel-color-3 { --channel-color:#85cfbd; }
+.channel-color-4 { --channel-color:#e7a1bf; }
+.channel-color-5 { --channel-color:#a5b6ef; }
+.channel-color-6 { --channel-color:#edb27d; }
+.channel-color-7 { --channel-color:#b3cf86; }
+.channel-color-user { --channel-color:#d8a184; }
+.channel-color-system { --channel-color:#bac3d0; }
+.channel-message[class*="channel-color-"] { border-left:3px solid var(--channel-color); padding-left:12px; }
+.channel-message[class*="channel-color-"] header strong,.channel-participant>div>strong { color:var(--channel-color,var(--text)); }
+.channel-participant .channel-participant-icon { color:var(--channel-color); border:1px solid currentColor; }
+.channel-participant>div>span { color:var(--channel-color); }
+.channel-activity .channel-activity-reply { white-space:normal; }
+.message-markdown blockquote { margin:12px 0; padding:1px 0 1px 14px; border-left:2px solid var(--border); color:var(--soft); }
+.message-markdown a { color:var(--accent); text-decoration:underline; text-underline-offset:3px; }
+.message-markdown hr { border:0; border-top:1px solid var(--border); margin:18px 0; }
+.message-markdown li>p { margin:0; }
+.message-markdown-table { max-width:100%; overflow:auto; margin:12px 0; }
+.message-markdown-table table { width:100%; border-collapse:collapse; font-size:12px; }
+.message-markdown-table th,.message-markdown-table td { text-align:left; padding:8px 10px; border:1px solid var(--border); min-width:80px; }
+.message-markdown-table th { font-weight:600; background:#ffffff04; }
+.channel-message .message-markdown,.channel-plan .message-markdown,.channel-activity .message-markdown { min-width:0; font-size:13px; line-height:1.8; }
+.channel-message .message-markdown pre,.channel-plan .message-markdown pre,.channel-activity .message-markdown pre { white-space:pre; overflow:auto; max-width:100%; font-size:12px; }
 @media(max-width:1200px) { .channels-layout { grid-template-columns:160px minmax(0,1fr); gap:14px; } .channel-room-layout { grid-template-columns:minmax(0,1fr); } .channel-participants { grid-row:1; } .channel-participant { display:inline-flex; width:240px; vertical-align:top; margin:12px 12px 0 0; } .channel-workflow-note { margin-top:14px; } }
 @media(max-width:700px) { .channels-layout { grid-template-columns:minmax(0,1fr); } .channel-list { flex-direction:row; overflow:auto; } .channel-list-item { min-width:170px; } .channel-header { padding:16px; } .channel-participant { width:100%; margin-right:0; } .channel-transcript { max-height:60vh; padding:12px; } .channel-compose>div>span { flex-basis:100%; } }

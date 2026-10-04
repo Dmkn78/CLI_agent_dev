@@ -81,7 +81,7 @@ function registerComputerController({getWindow,request,fixture}) {
       if (!sameControl(control,expected)) throw staleObservation('Le contrôle à faire défiler a changé ; aucune action émise.');
       // Only a control returned by the fixed observation program can be revealed.
       await contents.executeJavaScript(`Array.from(document.querySelectorAll('button,input,textarea,select,a,[role="button"]'))[${control.index}].scrollIntoView({block:'center'})`);
-    } else if (['click','double_click'].includes(action.kind)) {
+    } else if (['click','double_click','hover'].includes(action.kind)) {
       const expected=observation.controls.find(control => control.index === action.index);
       const control=current.controls.find(control => control.index === action.index);
       if (!sameControl(control,expected) || !control.enabled || !control.visible ||
@@ -89,10 +89,14 @@ function registerComputerController({getWindow,request,fixture}) {
       const factor=contents.getZoomFactor();
       const x=Math.round((control.rect.x+control.rect.width/2)*factor), y=Math.round((control.rect.y+control.rect.height/2)*factor);
       const count=action.kind === 'double_click' ? 2 : 1;
+      if (action.kind === 'hover') {
+        contents.sendInputEvent({type:'mouseMove',x,y});
+      } else {
       for (let index=1; index<=count; index++) {
         contents.sendInputEvent({type:'mouseMove',x,y});
         contents.sendInputEvent({type:'mouseDown',x,y,button:'left',clickCount:index});
         contents.sendInputEvent({type:'mouseUp',x,y,button:'left',clickCount:index});
+      }
       }
     } else if (action.kind === 'type_text') {
       const control=current.controls.find(control => control.index === current.focusedIndex);

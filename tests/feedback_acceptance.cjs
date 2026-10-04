@@ -83,7 +83,7 @@ async function main(){
     await page.getByLabel('Nom du canal').fill('Discussion puis travail');
     await page.getByLabel('Sujet et résultat attendu').fill('Produire une correction, ses tests et un audit.');
     await page.getByLabel('Fin de la discussion').selectOption('auto');
-    await page.getByLabel('Limite de sécurité par lancement').fill('4');
+    await page.getByLabel('Tours maximum par lancement').fill('4');
     await page.locator('[name="executionEnabled"]').check();
     await page.getByLabel('Modèle · Vérification et audit').selectOption('fixture-review');
     await page.getByRole('button',{name:'Créer le canal',exact:false}).click();

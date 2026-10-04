@@ -35,12 +35,14 @@ class BrainApiFixture(BaseHTTPRequestHandler):
             self.send_response(302)
             self.send_header('Location', self.server.base + '/v1/models')
             self.end_headers()
+        elif self.path == '/api/v1/models':
+            self.respond({'models': [{'key': 'fixture-brain-local', 'type': 'llm', 'loaded_instances': [{'id': 'fixture-brain-local'}]}]})
         else:
             self.respond({'data': [{'id': 'fixture-brain-local'}]})
 
     def do_POST(self):
         raw = self.rfile.read(int(self.headers['Content-Length']))
-        if self.path.endswith('/audio/transcriptions'):
+        if self.path.endswith('/audio/transcriptions') or self.path == '/v1/transcribe':
             self.server.calls.append((self.path, raw))
             self.respond({'text': self.server.transcript})
             return
@@ -55,6 +57,8 @@ class BrainApiFixture(BaseHTTPRequestHandler):
         if 'transcription' in input_data:
             original = input_data['transcription']
             result = {'title': 'Mémoire du projet Obsidian', 'language': 'fr',
+                      'description': 'Une dictée sur la mémoire du projet et ses notes Obsidian.',
+                      'content_types': ['reflection'],
                       'text': original.replace('obsidienne', 'Obsidian'),
                       'topics': ['mémoire', 'Obsidian'], 'tags': ['second-cerveau'], 'entities': ['my_brain'],
                       'uncertainties': ['Terme RLCD à préciser.'] if 'RLCD' in original else [],
@@ -122,7 +126,7 @@ class BrainTests(unittest.TestCase):
         self.assertIsNone(self.brain.worker.ident)
         self.assertIsNone(self.brain.watcher.ident)
         self.brain.discover('atelier')
-        self.assertEqual(self.api.calls, [('/v1/models', None)])
+        self.assertEqual(self.api.calls, [('/v1/models', None), ('/api/v1/models', None)])
         with self.assertRaises(ValueError):
             self.brain.save({'model': 'made-up-model'})
 
@@ -150,9 +154,12 @@ class BrainTests(unittest.TestCase):
         self.assertEqual(job['result']['text'], original.replace('obsidienne', 'Obsidian'))
         self.assertEqual(job['usage'], {'inputTokens': 14, 'outputTokens': 30, 'totalTokens': 44})
         self.assertEqual(job['sourceSha256'], hashlib.sha256(original.encode()).hexdigest())
-        self.assertIn('topics: ["mémoire", "Obsidian"]', job['markdown'])
-        self.assertIn('status: "to-review"', job['markdown'])
-        self.assertIn('uncertainties: ["Terme RLCD à préciser."]', job['markdown'])
+        self.assertIn("topics:\n  - 'mémoire'\n  - 'Obsidian'", job['markdown'])
+        self.assertIn('## Transcription originale\n\n```text\n' + original, job['markdown'])
+        self.assertIn('## Proposition IA — à relire', job['markdown'])
+        self.assertTrue(job['transcriptionReview']['changed'])
+        self.assertNotIn('source_sha256:', job['markdown'])
+        self.assertIn('- Terme RLCD à préciser.', job['markdown'])
         request = self.api.calls[-1][1]
         self.assertEqual(request['model'], 'fixture-brain-local')
         self.assertEqual(request['messages'][0]['content'], INSTRUCTIONS)
@@ -197,8 +204,8 @@ class BrainTests(unittest.TestCase):
         self.assertEqual(done['status'], 'exported')
         self.assertEqual(done['original'], self.api.transcript)
         paths = [entry[0] for entry in self.api.calls]
-        self.assertEqual(paths, ['/v1/models', '/v1/audio/transcriptions', '/v1/chat/completions'])
-        payload = self.api.calls[1][1]
+        self.assertEqual(paths, ['/v1/models', '/api/v1/models', '/v1/audio/transcriptions', '/v1/chat/completions'])
+        payload = next(body for path, body in self.api.calls if path.endswith('/audio/transcriptions'))
         self.assertIn(b'name="file"; filename="voice.wav"', payload)
         self.assertIn(b'fixture-asr-local', payload)
         self.assertIn(raw, payload)
@@ -315,7 +322,7 @@ class BrainTests(unittest.TestCase):
             with self.assertRaises(HTTPError) as error:
                 urlopen(Request(origin + '/api/brain/import', data=payload, headers={'Content-Type':'application/json'}))
             self.assertEqual(error.exception.code, 403)
-            self.assertEqual(len(self.api.calls), 1)
+            self.assertEqual(len(self.api.calls), 2)
             request = Request(origin + '/api/brain/import', data=payload,
                               headers={'Content-Type':'application/json','X-Atelier-Token':'brain-fixture'})
             with urlopen(request) as response:

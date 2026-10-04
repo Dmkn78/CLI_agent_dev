@@ -34,6 +34,20 @@ def open_desktop(root, port, mode):
 
 
 def pick_directory():
+    if sys.platform == 'darwin':
+        # The browser has no Electron preload. Use the macOS chooser there too.
+        script = 'POSIX path of (choose folder with prompt "Choisir un dossier pour Atelier")'
+        try:
+            result = subprocess.run(['/usr/bin/osascript', '-e', script],
+                                    capture_output=True, text=True, timeout=180)
+        except subprocess.TimeoutExpired:
+            raise ValueError('Sélection de dossier expirée ; relance Parcourir.') from None
+        if result.returncode:
+            if '(-128)' in result.stderr:  # macOS user cancellation
+                return {'path': None}
+            raise ValueError('macOS n’a pas pu ouvrir le sélecteur de dossier.')
+        chosen = result.stdout.strip()
+        return {'path': (chosen.rstrip('/') or '/') if chosen else None}
     if os.name != 'nt':
         raise ValueError('Utilise le bouton Parcourir dans le shell desktop pour cet ordinateur.')
     script = "Add-Type -AssemblyName System.Windows.Forms; $d=New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description='Choisir le dossier du projet Atelier'; if ($d.ShowDialog() -eq 'OK') { $d.SelectedPath }; $d.Dispose()"

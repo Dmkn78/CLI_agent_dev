@@ -67,10 +67,14 @@ function mountWorkbench() {
 function quotaWorkbenchView() {
   const codex=provider(), limits=codex.limits || {};
   const buckets=limits.rateLimitsByLimitId || (limits.rateLimits ? {[limits.rateLimits.limitId || 'codex']:limits.rateLimits} : {});
-  return `<section class="account-quotas work-band"><div class="panel-heading"><h2>Abonnement Codex · compte ChatGPT</h2>${btn('refresh-limits','Actualiser','plug','quiet')}</div>${Object.entries(buckets).map(([id,bucket]) => `<div class="quota-bucket"><strong>${esc(bucket.limitName || id)}</strong><div class="quota-windows">${['primary','secondary'].filter(key => bucket[key]).map(key => {
+  const interval=codex.limitsRefreshIntervalSeconds;
+  const automatic=Number.isFinite(interval) && interval > 0 ? `<small class="quota-refresh">Actualisation automatique toutes les ${esc(interval/60)} minutes tant qu’Atelier est ouvert.${codex.connected ? '' : ' Connexion Codex requise.'}</small>` : '';
+  const measured=codex.limitsUpdatedAt ? `<small>Dernière mesure : <time datetime="${esc(codex.limitsUpdatedAt)}">${esc(new Date(codex.limitsUpdatedAt).toLocaleString('fr-FR'))}</time>.</small>` : '<small>Aucune mesure reçue.</small>';
+  const error=codex.limitsError ? `<div class="inline-error" role="status"><strong>Actualisation des quotas impossible${Object.keys(buckets).length ? ' · dernière mesure conservée' : ''}</strong><p>${esc(codex.limitsError)}</p></div>` : '';
+  return `<section class="account-quotas work-band"><div class="panel-heading"><h2>Abonnement Codex · compte ChatGPT</h2>${btn('refresh-limits','Actualiser','plug','quiet')}</div>${automatic}${measured}${error}${Object.entries(buckets).map(([id,bucket]) => `<div class="quota-bucket"><strong>${esc(bucket.limitName || id)}</strong><div class="quota-windows">${['primary','secondary'].filter(key => bucket[key]).map(key => {
     const window=bucket[key], used=typeof window.usedPercent === 'number' ? Math.max(0,Math.min(100,window.usedPercent)) : null;
     return `<div><span>${window.windowDurationMins ? window.windowDurationMins/60+' h' : key}</span><strong>${used == null ? 'Non disponible' : used+' % consommés · '+(100-used)+' % restants'}</strong><progress max="100" value="${used ?? 0}" ${used == null ? 'class="unknown"' : ''}></progress><small>Réinitialisation : ${window.resetsAt ? new Date(window.resetsAt*1000).toLocaleString('fr-FR') : 'Non communiquée'}</small></div>`;
-  }).join('')}</div></div>`).join('') || `<p class="muted">${esc(codex.limitsError || (codex.connected ? 'Quotas non communiqués par le CLI.' : 'Compte non connecté.'))}</p>`}<small>Quotas partagés par le compte, tous projets et clients confondus. Pas des tokens de cette session.${codex.limitsUpdatedAt ? ' Actualisés à '+stamp(codex.limitsUpdatedAt)+'.' : ''}</small></section>`;
+  }).join('')}</div></div>`).join('') || `<p class="muted">${esc(codex.connected ? 'Quotas non communiqués par le CLI.' : 'Compte non connecté.')}</p>`}<small>Quotas partagés par le compte, tous projets et clients confondus. Pas des tokens de cette session.</small></section>`;
 }
 
 function requestTariff(request, workspaceId) {

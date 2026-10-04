@@ -39,11 +39,29 @@ function duplicaView() {
     <div class="duplica-discussion-links">${btn('duplica-memory','Mémoire du projet','folder','quiet')}${btn('duplica-telegram',data.telegram.running ? 'Ouvrir Telegram' : 'Connecter Telegram','external','quiet')}</div></section></div>`;
 }
 
-function duplicaWorkModal() {
+function duplicaWorkModal(runId='') {
+  const previous=(duplicaData().runs || []).find(run=>run.id === runId && run.projectId === projectId);
   const conversation=duplicaConversation(), agents=objects('sessions').filter(session => session.executionMode !== 'chat' && !session.parentId && !['closed','failed'].includes(session.status));
-  const goal=[...(conversation?.messages || [])].reverse().find(message => message.role === 'user')?.text || '';
-  modal('Travailler pour moi',project().name,`<form data-form="duplica-work"><div class="modal-body">${area('Résultat attendu','goal',goal,3,'required placeholder="Le résultat concret que Duplica doit faire avancer"')}${select('Agent','sessionId',[['','Créer un agent de travail'],...agents.map(agent => [agent.id,agent.name])],'')}
-    <details class="form-advanced"><summary>Modèle et permissions du nouvel agent</summary>${select('Modèle','model',(provider().models || []).map(model => [model.model,model.displayName]),conversation?.model || provider().models?.find(model => model.isDefault)?.model)}${select('Permissions','sandbox',[['read-only','Diagnostic et plan · lecture seule'],['workspace-write','Implémentation · écriture dans ce projet']],'read-only')}</details><p class="muted small">Duplica supervise ce projet. Le travail attendra des critères de test avant d’être déclaré vérifié. Vous pouvez reprendre la main à tout moment.</p></div>${formFooter('Démarrer')}</form>`);
+  const goal=previous?.goal || [...(conversation?.messages || [])].reverse().find(message => message.role === 'user')?.text || '';
+  const models=provider().models || [], model=models.find(entry=>entry.model === (previous?.model || conversation?.model)) || models.find(entry=>entry.isDefault) || models[0];
+  modal('Travailler pour moi',project().name,`<form data-form="duplica-work"><div class="modal-body">${area('Résultat attendu','goal',goal,3,'placeholder="Objectif concret ; vide pour prendre les TODO compatibles"')}${select('Équipe ou agent existant','sessionId',[['','Créer une équipe Duplica'],...agents.map(agent => [agent.id,agent.name])],'')}
+    ${previous ? `<input type="hidden" name="resumeRunId" value="${esc(previous.id)}"><p class="panel-description">Reprise de la mission conservée : modèle, effort et périmètre restent ceux du lancement. La recette ci-dessous peut être complétée.</p>` : ''}
+    <fieldset data-model-config=""><legend>Modèle de l’équipe</legend><input type="hidden" name="runtime" value="codex"><div class="form-grid">${select('Modèle','model',models.map(entry=>[entry.model,entry.displayName]),model?.model)}${select('Raisonnement','effort',(model?.supportedReasoningEfforts || []).map(entry=>[entry.reasoningEffort,entry.reasoningEffort]),previous?.effort || conversation?.effort || model?.defaultReasoningEffort)}</div></fieldset>
+    ${select('Permissions','sandbox',[['read-only','Diagnostic et plan · lecture seule'],['workspace-write','Implémentation · écriture dans ce projet']],'read-only')}
+    <div class="form-grid">${field('Sous-agents maximum en parallèle','maxParallel',4,'number','min="1" max="8" required')}${field('Mini-tâches par objectif','maxTasks',12,'number','min="1" max="20" required')}</div>
+    <label class="check-option"><input type="checkbox" name="continuous" checked><span>Continuer avec les TODO compatibles et attendre les suivants</span></label>
+    <p class="muted small">Duplica découpe, lance les tâches indépendantes, puis vérifie. Les fichiers partagés et les dépendances imposent un ordre. La validation du plan suit vos permissions Duplica.</p>
+    <details class="form-advanced" ${previous ? 'open' : ''}><summary>Recette indépendante et corrections</summary>${area('Critères, tests et parcours interface — objet JSON','recipe',JSON.stringify(previous?.recipe || {},null,2),6,'placeholder=\'{"requirements":[{"path":"index.html"}],"tests":["npm","test"],"buildNotApplicable":true,"gui":[{"kind":"hover","label":"Architecture"},{"kind":"expect","text":"Architecture"}]}\'')}${field('Corrections maximum par objectif','maxContinuations',3,'number','min="0" max="10"')}</details>
+    <p class="muted small">Sans recette, la fin technique reste « Preuves manquantes ». Les TODO restent En revue pour votre validation. Pause et Reprendre la main interrompent l’équipe.</p></div>${formFooter(previous ? 'Reprendre cette mission' : 'Démarrer l’équipe')}</form>`,true);
+  if (previous) {
+    const form=$('#modal form');
+    for (const name of ['goal','sessionId','model','effort','sandbox','maxParallel','maxTasks','maxContinuations','continuous']) {
+      const control=form.elements[name];
+      if (name === 'continuous') control.checked=previous.continuous;
+      else if (name in previous) control.value=previous[name];
+      control.disabled=true;
+    }
+  }
 }
 
 function duplicaMemoryModal() {
@@ -76,7 +94,10 @@ async function handleDuplicaChatSubmit(form, fields) {
     await loadDuplicaCommands();
     $('#modal').close();
   } else if (form.dataset.form === 'duplica-work') {
-    await api('duplica/work',{...fields,projectId});
+    let recipe;
+    try {recipe=JSON.parse(fields.recipe || '{}');} catch {throw new Error('La recette doit être un objet JSON valide.');}
+    await api('duplica/work',{...fields,projectId,recipe,continuous:form.elements.continuous.checked,
+      maxParallel:Number(fields.maxParallel),maxTasks:Number(fields.maxTasks),maxContinuations:Number(fields.maxContinuations)});
     $('#modal').close();
     duplicaPanel='suivi';
   }
@@ -94,7 +115,8 @@ Object.assign(duplicaActions,{
   'duplica-delete-command':async element=>{await api('commands/remove',{projectId,id:element.dataset.id});await duplicaCommandsModal();},
   'duplica-use-command':element=>{const draft=$('#duplica-message');draft.value='/'+element.dataset.name+' ';rememberDuplicaDraft(draft.value);draft.focus();renderSlashMenu();},
   'duplica-panel':element => {duplicaPanel=element.dataset.panel;render();},
-  'duplica-work':duplicaWorkModal,
+  'duplica-work':()=>duplicaWorkModal(),
+  'duplica-run-resume':element=>duplicaWorkModal(element.dataset.id),
   'duplica-memory':duplicaMemoryModal,
 });
 

@@ -1,5 +1,14 @@
 # Atelier
 
+## Application Android
+
+**Atelier mobile** dispose d’un APK local dans `build/mobile/Atelier-mobile.apk`.
+Il connecte plusieurs PC via Tailscale, permet de parcourir les projets, envoyer
+des prompts et piloter les sessions/équipes du backend, avec leurs permissions.
+L’application détecte les versions de l’APK proposées par le PC connecté.
+Installation, appairage et commandes : [guide Android](docs/MOBILE.md).
+Les exécutions et les comptes IA restent sur les PC.
+
 ## Télécharger l’application
 
 **Atelier `0.3.0-beta.1` est disponible**, publié le 3 octobre 2026 dans la

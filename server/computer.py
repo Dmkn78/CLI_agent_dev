@@ -112,7 +112,7 @@ class ComputerController:
             snapshot = self.snapshots.pop(snapshot_id, None)
             if not snapshot or time.monotonic() - snapshot['clock'] > 20:
                 raise ValueError('Observation périmée. Observe la fenêtre avant cette action.')
-            if action.get('kind') not in ('click', 'double_click', 'type_text', 'press_key', 'scroll', 'scroll_to', 'open_url'):
+            if action.get('kind') not in ('click', 'double_click', 'hover', 'type_text', 'press_key', 'scroll', 'scroll_to', 'open_url'):
                 raise ValueError('Action PC inconnue.')
             result = self.adapter.request('act', snapshot['target'], {'observation': snapshot['native'], 'action': action})
             observation = self._remember(result.get('target', snapshot['target']), result)

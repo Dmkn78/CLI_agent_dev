@@ -5,8 +5,12 @@ import re
 import threading
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Protocol
 
+from .channel_archive import ChannelArchive
+from .channel_context import public_context
+from .channel_instructions import instruction_metadata, instruction_selection, load_channel_instructions
 from .store import Store, now, redact, uid
 
 
@@ -27,6 +31,7 @@ class ChannelApplication(Protocol):
 @dataclass
 class _ChannelRun:
     id: str
+    instructions: dict[str, list[dict]] = field(default_factory=dict)
     cancelled: threading.Event = field(default_factory=threading.Event)
     thread: threading.Thread | None = None
     reply_workers: set[threading.Thread] = field(default_factory=set)
@@ -39,20 +44,15 @@ class _DiscussionStopped(Exception):
 
 MAX_CHANNELS = 100
 MAX_PARTICIPANTS = 8
-MAX_DISCUSSION_ROUNDS = 6
-MAX_AUTOMATIC_ROUNDS = 50
 DEFAULT_AUTOMATIC_ROUNDS = 24
 READY_MARKER = '[[ATELIER:READY]]'
 CONTINUE_MARKER = '[[ATELIER:CONTINUE]]'
 MAX_MESSAGE_CHARACTERS = 16000
-MAX_HISTORY_MESSAGES = 512
-MAX_HISTORY_CHARACTERS = 240000
 MAX_CONTEXT_CHARACTERS = 32000
-MAX_RECORDED_ROUNDS = 140
 REPLY_TIMEOUT_SECONDS = 240
 REPLY_POLL_SECONDS = 0.05
 SHUTDOWN_JOIN_SECONDS = 2
-PARTICIPANT_ROLES = frozenset(('agent', 'consultant', 'orchestrator', 'duplica'))
+PARTICIPANT_ROLES = frozenset(('agent', 'consultant', 'critic', 'orchestrator', 'duplica'))
 CONFIGURATION_FIELDS = frozenset(('runtime', 'provider', 'model', 'effort', 'connectionId', 'protocol'))
 PUBLIC_MESSAGE_FIELDS = ('id', 'channelId', 'participantId', 'author', 'role', 'text', 'createdAt', 'roundId', 'sequence', 'readyToPlan')
 PRIVATE_TEXT = re.compile(
@@ -62,11 +62,13 @@ PRIVATE_TEXT = re.compile(
     r'|["\'](?:role|channel)["\']\s*:\s*["\'](?:analysis|tool|function)["\']',
     re.IGNORECASE,
 )
+LEGACY_CAPACITY_ERROR = 'Historique public rempli ; crée un nouveau canal pour continuer.'
 
 
 class ChannelHub:
     def __init__(self, app: ChannelApplication) -> None:
         self.app, self.store = app, app.store
+        self.archive = ChannelArchive(self.store)
         self.lock = threading.RLock()
         self.workers: set[threading.Thread] = set()
         self._runs: dict[str, _ChannelRun] = {}
@@ -82,7 +84,12 @@ class ChannelHub:
                             round_record.update(status='interrupted', completedAt=now(),
                                                 error=channel['error'])
                     self._interrupt_rounds(channel, 'interrupted')
-                    self._save(channel)
+                # Older versions embedded all history. Import every record before
+                # replacing that object with its bounded recent cache.
+                recovered = self._recover_capacity_replies(channel)
+                self._save(channel)
+                if recovered:
+                    self._event('channel.public_replies_recovered', channel, **recovered)
 
     def snapshot(self) -> dict:
         with self.lock:
@@ -94,8 +101,7 @@ class ChannelHub:
                     or sessions.get(request.get('sessionId'), {}).get('channelId') == channel['id']]
                 # Native/API request counters include failed and interrupted calls. A reply
                 # fallback supports adapters that return usage without a request projection.
-                channel['usage'] = _usage_summary(channel_requests or [message for message in channel['messages']
-                    if message['role'] != 'user'])
+                channel['usage'] = _usage_summary(channel_requests) if channel_requests else self.archive.usage(channel['id'])
                 for participant in channel['participants']:
                     activity = participant.get('activity', {})
                     session = sessions.get(activity.get('sessionId'), {})
@@ -109,6 +115,82 @@ class ChannelHub:
                 'rounds': [round_record for channel in channels for round_record in channel['rounds']],
             }
             return snapshot
+
+    def history(self, channel_id: str, before: int | None = None, limit: int = 50, after: int | None = None) -> dict:
+        with self.lock:
+            channel_id = _identifier(channel_id, 'Canal')
+            self.store.get('channel', channel_id)
+            return self.archive.page(channel_id, before, limit, after)
+
+    def round_history(self, channel_id: str, before: int | None = None, limit: int = 50) -> dict:
+        with self.lock:
+            channel_id = _identifier(channel_id, 'Canal')
+            self.store.get('channel', channel_id)
+            return self.archive.round_page(channel_id, before, limit)
+
+    def _recover_capacity_replies(self, channel: dict) -> dict | None:
+        """Recover only the old capacity bug's uniquely attributable native replies."""
+        if channel.get('status') != 'failed' or channel.get('error') != LEGACY_CAPACITY_ERROR:
+            return None
+        published = {message.get('sessionId') for message in channel.get('messages', [])}
+        participants = {participant['id']: participant for participant in channel.get('participants', [])}
+        sessions = self.store.all('session')
+        recovered_rounds, recovered_sessions = [], []
+        for record in channel.get('rounds', []):
+            if (record.get('status') != 'failed' or record.get('purpose') != 'discussion'
+                    or record.get('error') != LEGACY_CAPACITY_ERROR or record.get('messageIds') != []
+                    or not record.get('participantIds')):
+                continue
+            try:
+                started, completed = datetime.fromisoformat(record['startedAt']), datetime.fromisoformat(record['completedAt'])
+                if not started.tzinfo or not completed.tzinfo or completed < started:
+                    continue
+                replies = []
+                for participant_id in record['participantIds']:
+                    participant = participants[participant_id]
+                    if participant['configuration']['runtime'] not in ('codex', 'omp'):
+                        raise ValueError('Une réponse API ancienne ne peut pas être reconstituée.')
+                    candidates = []
+                    for session in sessions:
+                        if (session.get('discussionOnly') is not True or session.get('lastTurnStatus') != 'completed'
+                                or session.get('channelId') != channel['id']
+                                or session.get('channelParticipantId') != participant_id):
+                            continue
+                        created = datetime.fromisoformat(session['createdAt'])
+                        if created.tzinfo and started <= created <= completed:
+                            candidates.append(session)
+                    if len(candidates) != 1:
+                        raise ValueError('Attribution ambiguë de la réponse ancienne.')
+                    session = candidates[0]
+                    if session['id'] in published or self.archive.has_session(channel['id'], session['id']):
+                        raise ValueError('La session a déjà une réponse publique.')
+                    text = '\n\n'.join(message['text'] for message in session['messages'] if message['role'] == 'assistant')
+                    reply = _public_reply({'text': text, 'sessionId': session['id'],
+                                          'usage': (session.get('usage') or {}).get('last')}, participant.get('sourceSessionId'))
+                    replies.append((participant, reply))
+            except (KeyError, TypeError, ValueError):
+                # Any uncertainty keeps the original failure and its source sessions.
+                continue
+            for participant, reply in replies:
+                text, ready = _contribution_text(reply['text'], channel.get('roundMode') == 'auto')
+                message = self._message(channel, text, participant, record['id'])
+                message.update(sessionId=reply['sessionId'], recoveredFromSession=reply['sessionId'], recoveryReason='history_capacity')
+                if 'usage' in reply:
+                    message['usage'] = reply['usage']
+                if channel.get('roundMode') == 'auto':
+                    message['readyToPlan'] = ready
+                channel['messages'].append(message)
+                record['messageIds'].append(message['id'])
+                published.add(reply['sessionId'])
+                recovered_sessions.append(reply['sessionId'])
+            record.update(status='completed', error=None, previousStatus='failed', previousError=LEGACY_CAPACITY_ERROR,
+                          recoveredAt=now(), recoveryReason='history_capacity')
+            recovered_rounds.append(record['id'])
+        if recovered_rounds:
+            channel.update(error='Anciennes réponses publiques récupérées ; reprise explicite nécessaire.',
+                           recovery={'reason': 'history_capacity', 'roundIds': recovered_rounds, 'sessionIds': recovered_sessions, 'recoveredAt': now()})
+            return {'roundIds': recovered_rounds, 'sessionIds': recovered_sessions}
+        return None
 
     def participant_activity(self, participant: dict, status: str, **details) -> None:
         """Publish transport lifecycle facts, never provider reasoning or partial text."""
@@ -134,14 +216,13 @@ class ChannelHub:
         name = _public_text(submitted.get('name', 'Discussion d’agents'), 100, 'Nom')
         topic = _public_text(submitted.get('topic'), MAX_MESSAGE_CHARACTERS, 'Sujet')
         max_rounds = submitted.get('maxRounds', 2)
-        if type(max_rounds) is not int or not 1 <= max_rounds <= MAX_DISCUSSION_ROUNDS:
-            raise ValueError('Choisis entre 1 et 6 tours de discussion.')
+        if type(max_rounds) is not int or max_rounds < 1:
+            raise ValueError('Choisis un nombre positif de tours de discussion.')
         round_mode = submitted.get('roundMode', 'fixed')
         if round_mode not in ('fixed', 'auto'):
             raise ValueError('Mode de discussion invalide.')
         automatic_limit = submitted.get('autoRoundLimit', DEFAULT_AUTOMATIC_ROUNDS)
-        if type(automatic_limit) is not int or not 1 <= automatic_limit <= MAX_AUTOMATIC_ROUNDS:
-            raise ValueError('Limite de sécurité : 1 à 50 tours.')
+        _validate_automatic_limit(automatic_limit)
         execution = self._execution_configuration(submitted.get('execution'))
         with self.lock:
             self._require_open()
@@ -160,7 +241,8 @@ class ChannelHub:
             return self._summary(channel)
 
     def add_participant(self, channel_id: str, submitted: dict) -> dict:
-        _check_fields(submitted, {'name', 'role', 'sessionId', 'configuration', 'sandbox', 'memory', 'workEnabled'}
+        _check_fields(submitted, {'name', 'role', 'sessionId', 'configuration', 'sandbox', 'memory', 'workEnabled',
+                                 'skills', 'instructionCommands'}
                       | CONFIGURATION_FIELDS)
         with self.lock:
             channel = self._editable(channel_id)
@@ -177,13 +259,18 @@ class ChannelHub:
             configuration, source = self._configuration(channel, submitted)
             if configuration.get('protocol') == 'systemone' and role != 'consultant':
                 raise ValueError('Un modèle SystemOne peut uniquement être consultant.')
+            skills, instruction_commands = instruction_selection(submitted)
+            if configuration.get('protocol') == 'systemone' and (skills or instruction_commands):
+                raise ValueError('SystemOne ne reçoit pas de consignes textuelles ; choisis un participant LLM pour ces skills.')
             default_name = source.get('name') if source else role.capitalize()
             participant = {
                 'id': uid('participant'), 'channelId': channel_id, 'projectId': channel['projectId'],
                 'name': _public_text(submitted.get('name', default_name), 100, 'Nom'),
                 'role': role, 'configuration': configuration, 'sandbox': 'read-only',
                 'memory': False, 'workEnabled': False, 'createdAt': now(),
+                'skills': skills, 'instructionCommands': instruction_commands,
             }
+            participant['instructionSources'] = instruction_metadata(load_channel_instructions(self.app, participant))
             if source:
                 participant['sourceSessionId'] = source['id']
             channel['participants'].append(participant)
@@ -199,10 +286,9 @@ class ChannelHub:
             mode = submitted.get('roundMode', channel.get('roundMode', 'fixed'))
             maximum = submitted.get('maxRounds', channel['maxRounds'])
             automatic_limit = submitted.get('autoRoundLimit', channel.get('autoRoundLimit', DEFAULT_AUTOMATIC_ROUNDS))
-            if mode not in ('fixed', 'auto') or type(maximum) is not int or not 1 <= maximum <= MAX_DISCUSSION_ROUNDS:
+            if mode not in ('fixed', 'auto') or type(maximum) is not int or maximum < 1:
                 raise ValueError('Mode ou nombre de tours invalide.')
-            if type(automatic_limit) is not int or not 1 <= automatic_limit <= MAX_AUTOMATIC_ROUNDS:
-                raise ValueError('Limite de sécurité : 1 à 50 tours.')
+            _validate_automatic_limit(automatic_limit)
             execution = self._execution_configuration(submitted['execution']) if 'execution' in submitted else channel.get('execution')
             name = _public_text(submitted.get('name', channel['name']), 100, 'Nom')
             topic = _public_text(submitted.get('topic', channel['topic']), MAX_MESSAGE_CHARACTERS, 'Sujet')
@@ -230,7 +316,6 @@ class ChannelHub:
         text = _public_text(submitted.get('text'), MAX_MESSAGE_CHARACTERS, 'Message public')
         with self.lock:
             channel = self._editable(channel_id)
-            _check_history_capacity(channel, [text])
             message = self._message(channel, text)
             channel['messages'].append(message)
             channel.update(status='draft', plan=None, planParticipantId=None, preparedTaskId=None, error=None)
@@ -272,12 +357,15 @@ class ChannelHub:
             planner = _select_planner(channel['participants'])
             if not planner:
                 raise ValueError('Ajoute un agent, un orchestrateur ou Duplica pour construire le plan.')
-            discussion_limit = self._discussion_limit(channel)
-            required_rounds = discussion_limit + 1
-            if len(channel['rounds']) + required_rounds > MAX_RECORDED_ROUNDS:
-                raise ValueError('Historique des tours rempli ; crée un nouveau canal.')
-            _check_history_capacity(channel, [''] * (len(channel['participants']) * discussion_limit + 1))
-            run = _ChannelRun(uid('channel_run'))
+            # Read once before any provider starts: a source edit cannot alter later
+            # rounds, and missing/changed-to-symlink resources fail explicitly.
+            selected_instructions = {participant['id']: load_channel_instructions(self.app, participant)
+                                     for participant in channel['participants']}
+            for participant in channel['participants']:
+                if participant['configuration'].get('protocol') == 'systemone' and selected_instructions[participant['id']]:
+                    raise ValueError('SystemOne ne reçoit pas de consignes textuelles.')
+                participant['instructionSources'] = instruction_metadata(selected_instructions[participant['id']])
+            run = _ChannelRun(uid('channel_run'), instructions=selected_instructions)
             channel.update(status='running', runId=run.id, runCount=channel['runCount'] + 1,
                            plan=None, planParticipantId=planner['id'], preparedTaskId=None,
                            error=None, cancellationError=None, startedAt=now())
@@ -354,19 +442,20 @@ class ChannelHub:
                 max_rounds = self._discussion_limit(channel)
                 automatic = channel.get('roundMode') == 'auto'
                 planner = _select_planner(participants)
-            for number in range(1, max_rounds + 1):
+            number, ready = 0, False
+            while max_rounds is None or number < max_rounds:
+                number += 1
                 ready = self._round(channel_id, run, participants, number, 'discussion')
                 if automatic and ready:
                     break
-            else:
-                if automatic:
-                    with self.lock:
-                        channel = self._active_channel(channel_id, run)
-                        channel.update(status='needs_more_discussion', runId=None, stopReason='safety_limit',
-                                       error='Limite de sécurité atteinte sans accord. Aucun travail lancé ; reprends explicitement la discussion.', completedAt=now())
-                        self._save(channel)
-                        self._event('channel.limit_reached', channel)
-                    return
+            if automatic and not ready:
+                with self.lock:
+                    channel = self._active_channel(channel_id, run)
+                    channel.update(status='needs_more_discussion', runId=None, stopReason='round_limit',
+                                   error='Limite de tours choisie atteinte sans accord. Aucun travail lancé ; reprends explicitement la discussion.', completedAt=now())
+                    self._save(channel)
+                    self._event('channel.limit_reached', channel, roundLimit=max_rounds)
+                return
             self._round(channel_id, run, [planner], number + 1, 'plan')
             self._dispatch_execution(channel_id, run)
         except _DiscussionStopped:
@@ -395,34 +484,35 @@ class ChannelHub:
                purpose: str) -> bool:
         with self.lock:
             channel = self._active_channel(channel_id, run)
-            public_messages = _public_messages(channel['messages'])
+            public_messages, context_projection = self.archive.context(channel_id, MAX_CONTEXT_CHARACTERS,
+                [participant['id'] for participant in channel['participants']])
             round_record = {
                 'id': uid('channel_round'), 'channelId': channel_id, 'runId': run.id,
                 'number': number, 'purpose': purpose, 'status': 'running', 'startedAt': now(),
                 'participantIds': [participant['id'] for participant in participants],
                 'snapshotSequence': channel['sequence'],
                 'contextMessageIds': [message['id'] for message in public_messages],
+                'contextProjection': context_projection,
+                'instructionSources': {participant['id']: instruction_metadata(run.instructions.get(participant['id'], []))
+                                       for participant in participants},
                 'messageIds': [], 'error': None,
             }
             channel['rounds'].append(round_record)
             for participant in channel['participants']:
                 if participant['id'] in round_record['participantIds']:
                     participant['activity'] = {'status': 'connecting', 'purpose': purpose,
-                        'roundId': round_record['id'], 'roundNumber': number, 'updatedAt': now()}
+                        'roundId': round_record['id'], 'roundNumber': number, 'updatedAt': now(),
+                        'contextProjection': context_projection}
+            channel['contextProjection'] = context_projection
             self._save(channel)
             topic = channel['topic']
-        replies = self._collect_replies(channel_id, run, participants, public_messages, topic, purpose)
+        replies = self._collect_replies(channel_id, run, participants, public_messages, topic, purpose,
+                                       context_projection, number)
         with self.lock:
             channel = self._active_channel(channel_id, run)
-            _check_history_capacity(channel, [reply['text'] for reply in replies])
             round_record = next(record for record in channel['rounds'] if record['id'] == round_record['id'])
             for participant, reply in zip(participants, replies):
-                text = reply['text']
-                ready = text.splitlines()[-1].strip() == READY_MARKER
-                if text.splitlines()[-1].strip() in (READY_MARKER, CONTINUE_MARKER):
-                    text = text.rsplit('\n', 1)[0].strip() if '\n' in text else 'Décision publique du participant.'
-                if purpose == 'discussion' and channel.get('roundMode') == 'auto':
-                    text += '\n\nDécision publique : ' + ('prêt à conclure.' if ready else 'poursuivre la discussion.')
+                text, ready = _contribution_text(reply['text'], purpose == 'discussion' and channel.get('roundMode') == 'auto')
                 message = self._message(channel, text, participant, round_record['id'])
                 if purpose == 'discussion' and channel.get('roundMode') == 'auto':
                     message['readyToPlan'] = ready
@@ -442,7 +532,8 @@ class ChannelHub:
             return all(reply['text'].splitlines()[-1].strip() == READY_MARKER for reply in replies)
 
     def _collect_replies(self, channel_id: str, run: _ChannelRun, participants: list[dict],
-                         public_messages: list[dict], topic: str, purpose: str) -> list[dict]:
+                         public_messages: list[dict], topic: str, purpose: str,
+                         context_projection: dict, number: int) -> list[dict]:
         condition = threading.Condition()
         results: dict[str, tuple[dict | None, str | None]] = {}
 
@@ -454,7 +545,9 @@ class ChannelHub:
                 # Each provider gets a separate copy; callback mutations cannot reach peers.
                 public_participant = {key: copy.deepcopy(value) for key, value in participant.items()
                                       if key != 'sourceSessionId'}
-                public_participant.update(topic=topic, runId=run.id, roundMode=channel.get('roundMode', 'fixed'))
+                public_participant['_instructionContext'] = copy.deepcopy(run.instructions.get(participant['id'], []))
+                public_participant.update(topic=topic, runId=run.id, roundMode=channel.get('roundMode', 'fixed'),
+                    roundNumber=number, contextProjection=copy.deepcopy(context_projection))
                 response = self.app.channel_reply(public_participant, copy.deepcopy(public_messages), purpose)
                 reply = _public_reply(response, participant.get('sourceSessionId'))
                 self.participant_activity(public_participant, 'completed')
@@ -537,7 +630,7 @@ class ChannelHub:
             raise ValueError('Une configuration native ne possède pas de connexion API.')
         return public_configuration, source
 
-    def _discussion_limit(self, channel: dict) -> int:
+    def _discussion_limit(self, channel: dict) -> int | None:
         return channel.get('autoRoundLimit', DEFAULT_AUTOMATIC_ROUNDS) if channel.get('roundMode') == 'auto' else channel['maxRounds']
 
     def _execution_configuration(self, submitted: object) -> dict | None:
@@ -634,6 +727,10 @@ class ChannelHub:
                     self._save(channel)
 
     def _interrupt_rounds(self, channel: dict, status: str) -> None:
+        cached_ids = {record['id'] for record in channel['rounds']}
+        for record in self.archive.running_rounds(channel['id']):
+            if record['id'] not in cached_ids:
+                channel['rounds'].append(record)
         for round_record in channel['rounds']:
             if round_record['status'] == 'running':
                 round_record.update(status=status, error=channel['error'], completedAt=now())
@@ -643,7 +740,7 @@ class ChannelHub:
 
     def _save(self, channel: dict) -> None:
         channel['updatedAt'] = now()
-        self.store.put('channel', channel)
+        self.archive.save(channel)
 
     def _event(self, event_type: str, channel: dict, **details) -> None:
         self.store.event(event_type, {'channelId': channel['id'], **details}, project_id=channel['projectId'])
@@ -680,7 +777,7 @@ def _usage_summary(calls: list[dict]) -> dict:
 
 def _select_planner(participants: list[dict]) -> dict | None:
     candidates = [participant for participant in participants
-                  if participant['role'] != 'consultant' and participant['configuration'].get('protocol') != 'systemone']
+                  if participant['role'] not in ('consultant', 'critic') and participant['configuration'].get('protocol') != 'systemone']
     return next((participant for participant in candidates if participant['role'] in ('orchestrator', 'duplica')),
                 candidates[0] if candidates else None)
 
@@ -706,20 +803,22 @@ def _identifier(identifier: object, label: str, limit: int = 200) -> str:
     return identifier.strip()
 
 
-def _check_history_capacity(channel: dict, texts: list[str]) -> None:
-    size = sum(len(message['text']) for message in channel['messages']) + sum(len(text) for text in texts)
-    if len(channel['messages']) + len(texts) > MAX_HISTORY_MESSAGES or size > MAX_HISTORY_CHARACTERS:
-        raise ValueError('Historique public rempli ; crée un nouveau canal pour continuer.')
+def _validate_automatic_limit(limit: object) -> None:
+    if limit is not None and (type(limit) is not int or limit < 1):
+        raise ValueError('Choisis une limite positive de tours, ou aucune limite.')
+
+
+def _contribution_text(text: str, automatic: bool) -> tuple[str, bool]:
+    ready = text.splitlines()[-1].strip() == READY_MARKER
+    if text.splitlines()[-1].strip() in (READY_MARKER, CONTINUE_MARKER):
+        text = text.rsplit('\n', 1)[0].strip() if '\n' in text else 'Décision publique du participant.'
+    if automatic:
+        text += '\n\nDécision publique : ' + ('prêt à conclure.' if ready else 'poursuivre la discussion.')
+    return text, ready
 
 
 def _public_messages(messages: list[dict]) -> list[dict]:
-    selected, size = [], 0
-    for message in reversed(messages):
-        if size + len(message['text']) > MAX_CONTEXT_CHARACTERS:
-            break
-        selected.append({key: copy.deepcopy(message[key]) for key in PUBLIC_MESSAGE_FIELDS if key in message})
-        size += len(message['text'])
-    return list(reversed(selected))
+    return public_context(messages, MAX_CONTEXT_CHARACTERS)[0]
 
 
 def _public_reply(response: object, source_session_id: str | None) -> dict:

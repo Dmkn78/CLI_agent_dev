@@ -33,10 +33,12 @@ async function main() {
     await modal.getByLabel('URL de base du LLM',{exact:true}).fill(fixture.apiUrl+'/v1');
     await modal.getByRole('button',{name:'Lire le catalogue',exact:true}).click();
     await modal.getByLabel('Modèle local',{exact:true}).selectOption('fixture-brain-local');
-    await modal.getByLabel('Chemin du coffre Obsidian my_brain',{exact:true}).fill(fixture.vaultPath);
+    await modal.locator('.brain-folder-field').filter({has:page.getByLabel('Chemin du coffre Obsidian my_brain',{exact:true})}).getByRole('button',{name:'Choisir',exact:true}).click();
+    await page.waitForFunction(vault => document.querySelector('[name="vaultPath"]').value === vault,fixture.vaultPath);
     await modal.getByLabel('Dossier d’arrivée des audio et .txt',{exact:true}).fill(fixture.inputPath);
     await modal.getByLabel('URL complète de transcription audio',{exact:true}).fill(fixture.apiUrl+'/v1/audio/transcriptions');
     await modal.getByLabel('Identifiant ASR attendu par votre serveur',{exact:true}).fill('fixture-asr-local');
+    await modal.getByText('Ajouter des repères personnalisés (facultatif)',{exact:true}).click();
     await modal.getByLabel('Glossaire de noms et termes',{exact:true}).fill('Obsidian, my_brain');
     assert.equal(await modal.getByLabel('Modèle local',{exact:true}).inputValue(),'fixture-brain-local');
     await modal.getByRole('button',{name:'Enregistrer le workflow',exact:true}).click();
@@ -46,14 +48,15 @@ async function main() {
     await page.getByRole('button',{name:'Traiter la dictée',exact:true}).click();
     await page.locator('.brain-preview-header .brain-status.review').waitFor();
     await page.waitForFunction(() => Boolean(brainDetail?.result));
-    assert.ok((await page.locator('.brain-note-body').innerText()).includes('Mon Obsidian'));
+    assert.ok((await page.locator('.brain-note-body').innerText()).includes('Mon obsidienne'));
+    assert.ok(await page.getByText('Contexte retrouvé automatiquement · 1 note(s)',{exact:true}).isVisible());
     assert.equal(await page.evaluate(() => window.brainInjected),undefined);
     assert.equal(await page.getByRole('button',{name:'Créer dans Obsidian',exact:true}).isDisabled(),true);
-    await page.getByRole('button',{name:'Original',exact:true}).click();
+    await page.getByRole('button',{name:'Texte brut',exact:true}).click();
     assert.equal(await page.locator('.brain-note-body').innerText(),original);
-    await page.getByRole('button',{name:'Markdown + YAML',exact:true}).click();
-    assert.ok((await page.locator('.brain-yaml').innerText()).includes('topics: ["mémoire", "Obsidian"]'));
-    assert.ok((await page.locator('.brain-yaml').innerText()).includes('status: "to-review"'));
+    await page.getByRole('button',{name:'Note + YAML',exact:true}).click();
+    assert.ok((await page.locator('.brain-yaml').innerText()).includes("topics:\n  - 'mémoire'\n  - 'Obsidian'"));
+    assert.ok((await page.locator('.brain-yaml').innerText()).includes('## Transcription originale'));
     await page.screenshot({path:path.join(evidence,'02-yaml.png'),fullPage:true});
     assert.deepEqual(fs.readdirSync(fixture.vaultPath),['projet.md']);
     await page.getByRole('button',{name:'Configurer',exact:true}).click();
@@ -67,7 +70,7 @@ async function main() {
     await page.getByRole('button',{name:'Traiter la dictée',exact:true}).click();
     await page.waitForFunction(() => state.brain.jobs.filter(job => job.status === 'exported').length === 2);
     await page.waitForFunction(() => brainDetail?.sourceType === 'audio' && brainDetail.status === 'exported');
-    await page.getByRole('button',{name:'Texte corrigé',exact:true}).click();
+    await page.getByRole('button',{name:'Proposition IA',exact:true}).click();
     await page.screenshot({path:path.join(evidence,'03-voice-note.png'),fullPage:true});
     assert.equal(fs.readdirSync(path.join(fixture.vaultPath,'Inbox','Voix')).length,2);
     await page.getByRole('button',{name:'Activer la surveillance',exact:true}).click();
@@ -89,6 +92,29 @@ async function main() {
     await page.screenshot({path:path.join(evidence,'05-retrieval.png'),fullPage:true});
     await page.locator('.brain-search-result').first().click();
     await page.locator('.brain-found-note').waitFor();
+    await page.getByRole('button',{name:'Configurer',exact:true}).click();
+    await modal.getByRole('button',{name:'Détecter mes outils',exact:true}).click();
+    await page.waitForFunction(() => document.querySelector('[name="inputSource"]')?.value === 'fluidvoice');
+    assert.equal(await modal.getByLabel('Transcrire les fichiers audio déposés',{exact:true}).inputValue(),'fluidvoice');
+    assert.equal(await modal.getByLabel('Modèle local',{exact:true}).inputValue(),'fixture-brain-local');
+    await modal.getByRole('button',{name:'Enregistrer le workflow',exact:true}).click();
+    await modal.waitFor({state:'hidden'});
+    await page.getByRole('button',{name:'Boîte vocale',exact:true}).click();
+    await page.getByRole('button',{name:'Activer la surveillance',exact:true}).click();
+    await page.getByText('Nouvelles dictées Fluid Voice suivies',{exact:true}).waitFor();
+    fs.writeFileSync(fixture.fluidHistoryPath,JSON.stringify([{id:'fixture-fluid-voice-1',timestamp:Date.now()/1000,
+      text:'Une mémoire de plus, dictée dans obsidienne depuis Fluid Voice.'}]));
+    await page.waitForFunction(() => state.brain.jobs.filter(job => job.status === 'exported').length === 4);
+    await page.getByRole('button',{name:'Mettre en pause',exact:true}).click();
+    await page.locator('[data-action="brain-select"]').first().click();
+    await page.waitForFunction(() => brainDetail?.sourceEntryId === 'fixture-fluid-voice-1');
+    assert.equal(await page.evaluate(() => brainDetail.original),'Une mémoire de plus, dictée dans obsidienne depuis Fluid Voice.');
+    assert.equal(await page.evaluate(() => brainDetail.sourceApplication),'Fluid Voice');
+    await page.getByRole('button',{name:'Note + YAML',exact:true}).click();
+    assert.ok((await page.locator('.brain-yaml').innerText()).includes('source_application: "Fluid Voice"'));
+    await page.locator('#brain-file').setInputFiles({name:'fluid.wav',mimeType:'audio/wav',buffer:Buffer.from('FLUID_NATIVE_AUDIO_FIXTURE')});
+    await page.getByRole('button',{name:'Traiter la dictée',exact:true}).click();
+    await page.waitForFunction(() => state.brain.jobs.filter(job => job.status === 'exported').length === 5);
     for (const width of [1500,900,390,300]) {
       if (application) {
         await application.evaluate(({BrowserWindow},width) => BrowserWindow.getAllWindows()[0].setSize(width,1000),width);
@@ -107,11 +133,12 @@ async function main() {
     }
     await page.reload();
     await page.getByRole('heading',{name:'My Brain',exact:true}).waitFor();
-    await page.waitForFunction(() => state.brain.jobs.filter(job => job.status === 'exported').length === 3);
+    await page.waitForFunction(() => state.brain.jobs.filter(job => job.status === 'exported').length === 5);
     assert.deepEqual(errors,[]);
     assert.deepEqual(failures,[]);
     fs.writeFileSync(path.join(evidence,'result.json'),JSON.stringify({passed:true,fixture:true,
       text:true,audio:true,original:true,yaml:true,permissions:true,watcher:true,retrieval:true,persistence:true,
+      browserFolderPicker:true,fluidDetection:true,fluidDictations:true,fluidNativeAudio:true,automaticContext:true,
       widths:[1500,900,390,300],errors,failures},null,2));
     console.log('My Brain browser recipe passed: local pipeline, original, YAML, permissions, watcher, retrieval and 4 widths.');
   } catch (error) {
